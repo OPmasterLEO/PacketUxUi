@@ -2,7 +2,7 @@
 
 Modern packet API for Minecraft menus and other UX/UI components.
 
-> Repository: https://github.com/OceJlot/PacketUxUi
+> Repository: https://github.com/OPmasterLEO/PacketUxUi
 
 ## Overview
 
