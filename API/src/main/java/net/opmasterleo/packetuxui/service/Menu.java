@@ -17,13 +17,24 @@ public class Menu {
     private final InventoryType type;
     private final ConcurrentMap<Integer, Button> buttons;
     private final CooldownComponent cooldown;
+    private final MenuMode mode;
     private volatile List<UxItem> items;
 
     public Menu(Component name, InventoryType type, Map<Integer, Button> buttons) {
-        this(name, type, buttons, new CooldownComponent());
+        this(name, type, buttons, new CooldownComponent(), MenuMode.READ_ONLY);
     }
 
     public Menu(Component name, InventoryType type, Map<Integer, Button> buttons, CooldownComponent cooldown) {
+        this(name, type, buttons, cooldown, MenuMode.READ_ONLY);
+    }
+
+    public Menu(
+            Component name,
+            InventoryType type,
+            Map<Integer, Button> buttons,
+            CooldownComponent cooldown,
+            MenuMode mode
+    ) {
         if (buttons.size() > type.size()) {
             throw new IllegalArgumentException("Too many items in menu");
         }
@@ -31,6 +42,7 @@ public class Menu {
         this.type = type;
         this.buttons = new ConcurrentHashMap<>(buttons);
         this.cooldown = cooldown;
+        this.mode = mode == null ? MenuMode.READ_ONLY : mode;
         List<UxItem> built = new ArrayList<>(type.size());
         for (int index = 0; index < type.size(); index++) {
             Button button = this.buttons.get(index);
@@ -55,6 +67,14 @@ public class Menu {
         return cooldown;
     }
 
+    public MenuMode mode() {
+        return mode;
+    }
+
+    public boolean isReadOnly() {
+        return mode == MenuMode.READ_ONLY;
+    }
+
     public List<UxItem> items() {
         return items;
     }
@@ -64,6 +84,6 @@ public class Menu {
     }
 
     public Menu copy() {
-        return new Menu(name, type, buttons, cooldown);
+        return new Menu(name, type, buttons, cooldown, mode);
     }
 }
