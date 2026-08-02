@@ -1,109 +1,86 @@
 # PacketUxUi
 
-Modern packet API for Minecraft menus and other UX/UI components.
+Virtual packet menus for Paper / Spigot / Folia (**Minecraft 1.8 → 26.x**).  
+No Bukkit `Inventory` open — Netty click handling, dirty-slot updates, Folia entity hops.
 
-> Repository: https://github.com/OPmasterLEO/PacketUxUi
+**Coords:** `net.opmasterleo:packetuxui:1.0.0` (fat jar with all NMS adapters)
 
-## Overview
+## Use as a dependency
 
-`PacketUxUi` is a Kotlin-based multi-module Gradle project focused on packet-driven UX/UI systems for Minecraft servers.
+### Gradle
 
-It currently contains:
+```kotlin
+repositories {
+    mavenLocal() // after publishToMavenLocal
+    // or your private Maven
+}
 
-- **API** — the reusable packet/UI API module
-- **TestMenu** — a Paper test plugin that depends on and demonstrates the API module
+dependencies {
+    implementation("net.opmasterleo:packetuxui:1.0.0")
+}
+
+tasks.shadowJar {
+    // Recommended when embedding into your plugin:
+    // relocate("net.opmasterleo.packetuxui", "your.plugin.lib.packetuxui")
+}
+```
+
+### Init in your plugin
+
+```java
+@Override
+public void onEnable() {
+    PacketUxUiAPI.init(this);
+}
+
+@Override
+public void onDisable() {
+    PacketUxUiAPI.terminate(this);
+}
+```
+
+### Open a read-only menu
+
+```java
+PacketMenus.menu("<gold>Leaderboard", InventoryType.GENERIC9X6)
+    .readOnly()
+    .button(13, b -> b
+        .item(UxItem.builder("minecraft:emerald")
+            .name(Component.text("Refresh"))
+            .build())
+        .click(ctx -> ctx.player().sendMessage("clicked")))
+    .open(player);
+```
+
+**Menu modes**
+- `READ_ONLY` (default) — leaderboards / stats / worth browse; no real inventory mutation
+- `EDITABLE_PLAYER_INVENTORY` — bottom bar injects into the player inventory (keep Bukkit GUIs for sell/order ownership)
 
 ## Modules
 
-### `API`
-Core module intended for integration into plugins/projects.
+| Module | Artifact | Purpose |
+|--------|----------|---------|
+| `packetuxui` | `net.opmasterleo:packetuxui` | **Publish this** — API + nms-api + all adapters shaded |
+| `API` | `net.opmasterleo:packetuxui-api` | Thin compile API (no adapters) |
+| `nms-api` | — | Bridges / `UxItem` / `AdapterLoader` |
+| `nms:*` | — | Per-version adapters (1.8–26.2) |
+| `TestMenu` | — | Demo Paper plugin |
 
-- Kotlin JVM (`2.0.20`)
-- Java toolchain: **21**
-- Publishes with `maven-publish`
-- Uses Shadow plugin for packaging
-- Key compile-time dependencies:
-  - `paper-api`
-  - `packetevents-spigot`
+## Build / publish locally
 
-### `TestMenu`
-A Paper plugin module used to run and test UX/UI behavior in-game.
-
-- Kotlin JVM (`2.0.20`)
-- Java toolchain: **21**
-- Depends on `:API`
-- Includes run task support via `xyz.jpenilla.run-paper`
-- Uses Shadow JAR during build
-- Additional dependencies include:
-  - `kotlinx-coroutines-core`
-  - `cloud-paper`
-  - `packetevents-spigot`
-
-## Tech Stack
-
-- **Language:** Kotlin
-- **Build System:** Gradle (Kotlin DSL)
-- **Platform:** Paper / Spigot ecosystem
-- **Minecraft Target (run config):** 1.21.1
-- **Java Version:** 21
-
-## Project Structure
-
-```text
-PacketUxUi/
-├─ API/
-│  ├─ build.gradle.kts
-│  └─ src/
-├─ TestMenu/
-│  ├─ build.gradle.kts
-│  └─ src/
-├─ build.gradle.kts
-└─ settings.gradle.kts
+```bash
+./gradlew.bat :packetuxui:publishToMavenLocal
+./gradlew.bat :TestMenu:shadowJar
 ```
+
+## Design notes (DonutSMPCore-style)
+
+- Never blanket `player.updateInventory()` on clicks — dirty `Set Slot` only
+- Per-player virtual window id pool (`100–126`) + state ids
+- Folia-safe: Netty → `PlatformScheduler.runForPlayer`
+- Prefer PacketUxUi for **read-only** high-viewer menus; keep Bukkit EditableGui for item ownership
 
 ## Requirements
 
-- **JDK 21**
-- **Gradle** (or use the Gradle wrapper if added)
-- Internet access for Maven dependencies
-
-## Build
-
-From the repository root:
-
-```bash
-gradle build
-```
-
-This builds both modules, including the shaded artifacts where configured.
-
-## Run Test Server (TestMenu)
-
-To run the Paper development server (from the repository root):
-
-```bash
-gradle :TestMenu:runServer
-```
-
-This uses the configured run-paper setup in `TestMenu`.
-
-## Publishing (API)
-
-The `API` module is configured with `maven-publish`.
-
-To publish to your local Maven repository:
-
-```bash
-gradle :API:publishToMavenLocal
-```
-
-## Notes
-
-- Root project name: `PacketUxUi`
-- Included modules: `API`, `TestMenu`
-- Group: `net.craftoriya`
-
-## License
-
-No license file is currently present in the repository.  
-If you plan to distribute this project, consider adding a `LICENSE` file.
+- JDK **21**
+- Paper/Folia recommended for modern versions (Mojang-mapped adapters 1.20.5+)

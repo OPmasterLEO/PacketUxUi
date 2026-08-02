@@ -1,18 +1,5 @@
-pluginManagement {
-    repositories {
-        gradlePluginPortal()
-        maven("https://repo.papermc.io/repository/maven-public/")
-    }
-}
-
-rootProject.name = "PacketUxUi"
-
-include("nms-api")
-include("API")
-include("packetuxui")
-include("TestMenu")
-
-val nmsBuckets = listOf(
+// Shared NMS adapter bucket list for TestMenu / packetuxui fat jar.
+extra["nmsBuckets"] = listOf(
     "v1_8_R1", "v1_8_R2", "v1_8_R3",
     "v1_9_R1", "v1_9_R2",
     "v1_10_R1",
@@ -29,8 +16,3 @@ val nmsBuckets = listOf(
     "v1_21_R1", "v1_21_R2", "v1_21_R3", "v1_21_R4", "v1_21_R5", "v1_21_R6", "v1_21_R7",
     "v26_1", "v26_2"
 )
-
-nmsBuckets.forEach { bucket ->
-    include("nms:$bucket")
-    project(":nms:$bucket").projectDir = file("nms/$bucket")
-}

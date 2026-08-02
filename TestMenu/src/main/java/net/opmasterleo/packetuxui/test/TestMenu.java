@@ -18,6 +18,6 @@ public final class TestMenu extends JavaPlugin {
 
     @Override
     public void onDisable() {
-        PacketUxUiAPI.terminate();
+        PacketUxUiAPI.terminate(this);
     }
 }

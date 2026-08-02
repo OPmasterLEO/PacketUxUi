@@ -1,10 +1,11 @@
 plugins {
     `java-library`
-    id("com.gradleup.shadow")
     `maven-publish`
 }
 
 java {
+    withSourcesJar()
+    withJavadocJar()
     toolchain {
         languageVersion.set(JavaLanguageVersion.of(21))
     }
@@ -17,11 +18,37 @@ dependencies {
     compileOnly("io.netty:netty-handler:4.1.115.Final")
 }
 
-tasks.shadowJar {
-    archiveClassifier.set("")
-    mergeServiceFiles()
-}
-
 tasks.compileJava {
     options.release.set(21)
+}
+
+tasks.named<Javadoc>("javadoc") {
+    options {
+        (this as StandardJavadocDocletOptions).apply {
+            encoding = "UTF-8"
+            addBooleanOption("Xdoclint:none", true)
+        }
+    }
+    isFailOnError = false
+}
+
+publishing {
+    publications {
+        create<MavenPublication>("maven") {
+            groupId = "net.opmasterleo"
+            artifactId = "packetuxui-api"
+            version = project.version.toString()
+            from(components["java"])
+            pom {
+                name.set("PacketUxUi API")
+                description.set(
+                    "Compile-only API for PacketUxUi. For runtime, depend on net.opmasterleo:packetuxui (shaded NMS)."
+                )
+                url.set("https://github.com/OPmasterLEO/PacketUxUi")
+            }
+        }
+    }
+    repositories {
+        mavenLocal()
+    }
 }

@@ -85,6 +85,18 @@ public final class UxItem {
         return amount <= 0 || materialKey.endsWith(":air") || materialKey.equals("air");
     }
 
+    public static UxItemBuilder builder() {
+        return new UxItemBuilder();
+    }
+
+    public static UxItemBuilder builder(String materialKey) {
+        return new UxItemBuilder().material(materialKey);
+    }
+
+    public static UxHeadItemBuilder skull() {
+        return new UxHeadItemBuilder();
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) {

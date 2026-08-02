@@ -18,6 +18,10 @@ public final class Button {
         this.cooldown = cooldown;
     }
 
+    public static IButtonBuilder builder() {
+        return new ButtonBuilder();
+    }
+
     public UxItem item() {
         return item;
     }

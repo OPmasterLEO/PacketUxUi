@@ -19,6 +19,11 @@ public class UxItemBuilder {
     protected Integer customModelData;
     protected String headTextureBase64;
 
+    @SuppressWarnings("unchecked")
+    protected final <T extends UxItemBuilder> T self() {
+        return (T) this;
+    }
+
     public UxItemBuilder material(String materialKey) {
         this.materialKey = materialKey;
         return this;
