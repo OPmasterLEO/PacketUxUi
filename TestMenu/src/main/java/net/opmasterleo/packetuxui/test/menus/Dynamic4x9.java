@@ -5,11 +5,12 @@ import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 
 import org.bukkit.Bukkit;
-import org.bukkit.plugin.java.JavaPlugin;
 
+import net.opmasterleo.packetuxui.PacketUxUiAPI;
 import net.opmasterleo.packetuxui.common.StringUtils;
 import net.opmasterleo.packetuxui.nms.item.UxItem;
 import net.opmasterleo.packetuxui.nms.item.UxItemBuilder;
+import net.opmasterleo.packetuxui.scheduler.PlatformScheduler;
 import net.opmasterleo.packetuxui.service.Button;
 import net.opmasterleo.packetuxui.service.ButtonBuilder;
 import net.opmasterleo.packetuxui.service.Menu;
@@ -20,9 +21,10 @@ public final class Dynamic4x9 {
 
     private final Menu menu;
 
-    public Dynamic4x9(JavaPlugin plugin, MenuService service) {
+    public Dynamic4x9(MenuService service) {
         UxItem stone = new UxItemBuilder().material("minecraft:stone").build();
         UxItem air = UxItem.EMPTY;
+        PlatformScheduler scheduler = PacketUxUiAPI.getScheduler();
 
         Map<Integer, Button> buttons = new HashMap<>();
         for (int slot = 0; slot < 27; slot++) {
@@ -44,26 +46,28 @@ public final class Dynamic4x9 {
                 buttons
         );
 
-        Bukkit.getScheduler().runTaskTimer(plugin, () -> {
+        scheduler.runRepeatingGlobal(() -> {
             for (var player : Bukkit.getOnlinePlayers()) {
-                Menu open = service.getMenu(player);
-                if (open == null || !open.name().equals(menu.name())) {
-                    continue;
-                }
-                for (int i = 0; i < 27; i++) {
-                    if (chance(10)) {
-                        if (chance(50)) {
-                            Button button = menu.buttons().get(i);
-                            if (button != null) {
-                                service.updateItem(player, button.item(), i);
+                scheduler.runForPlayer(player, () -> {
+                    Menu open = service.getMenu(player);
+                    if (open == null || !open.name().equals(menu.name())) {
+                        return;
+                    }
+                    for (int i = 0; i < 27; i++) {
+                        if (chance(10)) {
+                            if (chance(50)) {
+                                Button button = menu.buttons().get(i);
+                                if (button != null) {
+                                    service.updateItem(player, button.item(), i);
+                                }
+                            } else {
+                                service.updateItem(player, air, i);
                             }
-                        } else {
-                            service.updateItem(player, air, i);
                         }
                     }
-                }
+                });
             }
-        }, 4L, 4L);
+        }, 4L);
     }
 
     public Menu menu() {

@@ -22,10 +22,10 @@ public final class CommandListener {
 
     public CommandListener(JavaPlugin plugin, MenuService service) {
         Static3x9 static3x9 = new Static3x9();
-        Dynamic4x9 dynamic4x9 = new Dynamic4x9(plugin, service);
+        Dynamic4x9 dynamic4x9 = new Dynamic4x9(service);
         ButtonDetector buttonDetector = new ButtonDetector();
         CooldownTest cooldownTest = new CooldownTest();
-        AllInOne allInOne = new AllInOne(plugin, service);
+        AllInOne allInOne = new AllInOne(service);
 
         PaperCommandManager<Source> commandManager = PaperCommandManager
                 .builder(PaperSimpleSenderMapper.simpleSenderMapper())

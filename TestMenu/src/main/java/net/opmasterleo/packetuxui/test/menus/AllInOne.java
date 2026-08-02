@@ -6,12 +6,13 @@ import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 
 import org.bukkit.Bukkit;
-import org.bukkit.plugin.java.JavaPlugin;
 
+import net.opmasterleo.packetuxui.PacketUxUiAPI;
 import net.opmasterleo.packetuxui.common.StringUtils;
 import net.opmasterleo.packetuxui.dto.CooldownComponent;
 import net.opmasterleo.packetuxui.nms.item.UxItem;
 import net.opmasterleo.packetuxui.nms.item.UxItemBuilder;
+import net.opmasterleo.packetuxui.scheduler.PlatformScheduler;
 import net.opmasterleo.packetuxui.service.Button;
 import net.opmasterleo.packetuxui.service.ButtonBuilder;
 import net.opmasterleo.packetuxui.service.Menu;
@@ -24,9 +25,10 @@ public final class AllInOne {
 
     private final Menu menu;
 
-    public AllInOne(JavaPlugin plugin, MenuService service) {
+    public AllInOne(MenuService service) {
         UxItem stone = new UxItemBuilder().material("minecraft:stone").build();
         UxItem air = UxItem.EMPTY;
+        PlatformScheduler scheduler = PacketUxUiAPI.getScheduler();
 
         var glowingItem = new UxItemBuilder()
                 .material("minecraft:glowstone")
@@ -121,19 +123,21 @@ public final class AllInOne {
                 )
         );
 
-        Bukkit.getScheduler().runTaskTimer(plugin, () -> {
+        scheduler.runRepeatingGlobal(() -> {
             for (var player : Bukkit.getOnlinePlayers()) {
-                Menu open = service.getMenu(player);
-                if (open == null || !open.name().equals(menu.name())) {
-                    continue;
-                }
-                for (int slot : UPDATE_BUTTONS) {
-                    if (chance(20)) {
-                        service.updateItem(player, chance(50) ? stone : air, slot);
+                scheduler.runForPlayer(player, () -> {
+                    Menu open = service.getMenu(player);
+                    if (open == null || !open.name().equals(menu.name())) {
+                        return;
                     }
-                }
+                    for (int slot : UPDATE_BUTTONS) {
+                        if (chance(20)) {
+                            service.updateItem(player, chance(50) ? stone : air, slot);
+                        }
+                    }
+                });
             }
-        }, 4L, 4L);
+        }, 4L);
     }
 
     public Menu menu() {

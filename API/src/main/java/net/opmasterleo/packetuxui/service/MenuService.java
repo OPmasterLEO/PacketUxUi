@@ -13,7 +13,6 @@ import net.opmasterleo.packetuxui.dto.AccumulatedDrag;
 import net.opmasterleo.packetuxui.dto.CooldownComponent;
 import net.opmasterleo.packetuxui.nms.ClickPacket;
 import net.opmasterleo.packetuxui.nms.NmsAdapter;
-import net.opmasterleo.packetuxui.nms.WindowClickType;
 import net.opmasterleo.packetuxui.nms.item.UxItem;
 import net.opmasterleo.packetuxui.scheduler.PlatformScheduler;
 import net.opmasterleo.packetuxui.types.ButtonType;
@@ -105,75 +104,83 @@ public final class MenuService {
     }
 
     public void updateItem(Player player, UxItem item, int slot) {
-        Menu menu = getMenu(player);
-        if (menu == null) {
-            return;
-        }
-        if (slot > menu.type().lastIndex()) {
-            throw new IllegalArgumentException("Slot out of range.");
-        }
-        List<UxItem> items = new ArrayList<>(menu.items());
-        items.set(slot, item);
-        menu.setItems(items);
-        adapter.packets().sendSetSlot(player, WINDOW_ID, 0, slot, item);
+        scheduler.runForPlayer(player, () -> {
+            Menu menu = getMenu(player);
+            if (menu == null) {
+                return;
+            }
+            if (slot > menu.type().lastIndex()) {
+                throw new IllegalArgumentException("Slot out of range.");
+            }
+            List<UxItem> items = new ArrayList<>(menu.items());
+            items.set(slot, item);
+            menu.setItems(items);
+            adapter.packets().sendSetSlot(player, WINDOW_ID, 0, slot, item);
+        });
     }
 
     public void updateItems(Player player, Map<Integer, UxItem> newItems) {
-        Menu menu = getMenu(player);
-        if (menu == null) {
-            return;
-        }
-        for (Integer slot : newItems.keySet()) {
-            if (slot > menu.type().lastIndex()) {
-                throw new IllegalArgumentException("Slot out of range.");
+        scheduler.runForPlayer(player, () -> {
+            Menu menu = getMenu(player);
+            if (menu == null) {
+                return;
             }
-        }
-        List<UxItem> items = new ArrayList<>(menu.items());
-        for (Map.Entry<Integer, UxItem> entry : newItems.entrySet()) {
-            items.set(entry.getKey(), entry.getValue());
-        }
-        menu.setItems(items);
-        for (Map.Entry<Integer, UxItem> entry : newItems.entrySet()) {
-            adapter.packets().sendSetSlot(player, WINDOW_ID, 0, entry.getKey(), entry.getValue());
-        }
+            for (Integer slot : newItems.keySet()) {
+                if (slot > menu.type().lastIndex()) {
+                    throw new IllegalArgumentException("Slot out of range.");
+                }
+            }
+            List<UxItem> items = new ArrayList<>(menu.items());
+            for (Map.Entry<Integer, UxItem> entry : newItems.entrySet()) {
+                items.set(entry.getKey(), entry.getValue());
+            }
+            menu.setItems(items);
+            for (Map.Entry<Integer, UxItem> entry : newItems.entrySet()) {
+                adapter.packets().sendSetSlot(player, WINDOW_ID, 0, entry.getKey(), entry.getValue());
+            }
+        });
     }
 
     public void updateButton(Player player, Button newButton, int slot) {
-        Menu menu = getMenu(player);
-        if (menu == null) {
-            return;
-        }
-        if (slot > menu.type().lastIndex()) {
-            throw new IllegalArgumentException("Slot out of range.");
-        }
-        menu.buttons().put(slot, newButton);
-        List<UxItem> items = new ArrayList<>(menu.items());
-        items.set(slot, newButton.item());
-        menu.setItems(items);
-        adapter.packets().sendSetSlot(player, WINDOW_ID, 0, slot, newButton.item());
-    }
-
-    public void updateButtons(Player player, Map<Integer, Button> newButtons) {
-        Menu menu = getMenu(player);
-        if (menu == null) {
-            return;
-        }
-        for (Integer slot : newButtons.keySet()) {
+        scheduler.runForPlayer(player, () -> {
+            Menu menu = getMenu(player);
+            if (menu == null) {
+                return;
+            }
             if (slot > menu.type().lastIndex()) {
                 throw new IllegalArgumentException("Slot out of range.");
             }
-        }
-        menu.buttons().clear();
-        menu.buttons().putAll(newButtons);
-        List<UxItem> items = new ArrayList<>(menu.type().size());
-        for (int index = 0; index < menu.type().size(); index++) {
-            Button button = newButtons.get(index);
-            items.add(button != null ? button.item() : UxItem.EMPTY);
-        }
-        menu.setItems(items);
-        for (Map.Entry<Integer, Button> entry : newButtons.entrySet()) {
-            adapter.packets().sendSetSlot(player, WINDOW_ID, 0, entry.getKey(), entry.getValue().item());
-        }
+            menu.buttons().put(slot, newButton);
+            List<UxItem> items = new ArrayList<>(menu.items());
+            items.set(slot, newButton.item());
+            menu.setItems(items);
+            adapter.packets().sendSetSlot(player, WINDOW_ID, 0, slot, newButton.item());
+        });
+    }
+
+    public void updateButtons(Player player, Map<Integer, Button> newButtons) {
+        scheduler.runForPlayer(player, () -> {
+            Menu menu = getMenu(player);
+            if (menu == null) {
+                return;
+            }
+            for (Integer slot : newButtons.keySet()) {
+                if (slot > menu.type().lastIndex()) {
+                    throw new IllegalArgumentException("Slot out of range.");
+                }
+            }
+            menu.buttons().clear();
+            menu.buttons().putAll(newButtons);
+            List<UxItem> items = new ArrayList<>(menu.type().size());
+            for (int index = 0; index < menu.type().size(); index++) {
+                Button button = newButtons.get(index);
+                items.add(button != null ? button.item() : UxItem.EMPTY);
+            }
+            menu.setItems(items);
+            for (Map.Entry<Integer, Button> entry : newButtons.entrySet()) {
+                adapter.packets().sendSetSlot(player, WINDOW_ID, 0, entry.getKey(), entry.getValue().item());
+            }
+        });
     }
 
     public Menu getMenu(Player player) {
