@@ -1,4 +1,4 @@
-import io.papermc.paperweight.userdev.ReobfArtifactConfiguration
+﻿import io.papermc.paperweight.userdev.ReobfArtifactConfiguration
 
 plugins {
     java
@@ -11,6 +11,9 @@ dependencies {
     compileOnly(project(":nms-api"))
     compileOnly("it.unimi.dsi:fastutil:8.5.15")
     paperweight.paperDevBundle("1.21.8-R0.1-SNAPSHOT")
+    compileOnly("io.papermc.paper:paper-api:1.21.8-R0.1-SNAPSHOT")
+    compileOnly("io.netty:netty-transport:4.1.118.Final")
+    compileOnly("io.netty:netty-handler:4.1.118.Final")
 }
 
 paperweight.reobfArtifactConfiguration = ReobfArtifactConfiguration.MOJANG_PRODUCTION

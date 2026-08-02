@@ -18,7 +18,15 @@ allprojects {
 }
 
 subprojects {
+    apply(plugin = "java")
+
     tasks.withType<JavaCompile>().configureEach {
         options.encoding = "UTF-8"
+    }
+
+    extensions.configure<JavaPluginExtension>("java") {
+        toolchain {
+            languageVersion.set(JavaLanguageVersion.of(21))
+        }
     }
 }

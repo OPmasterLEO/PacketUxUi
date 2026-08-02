@@ -2,12 +2,12 @@ plugins {
     java
 }
 
-extra["nmsEra"] = "legacy"
+extra["nmsEra"] = "legacy13"
 extra["nmsVersion"] = "v1_13_R1"
 
 dependencies {
     compileOnly(project(":nms-api"))
-    compileOnly("org.spigotmc:spigot:1.13.1-R0.1-SNAPSHOT")
+    compileOnly("org.spigotmc:spigot:1.13-R0.1-SNAPSHOT")
     compileOnly("io.netty:netty-all:4.1.68.Final")
     compileOnly("net.kyori:adventure-api:4.17.0")
     compileOnly("net.kyori:adventure-text-serializer-gson:4.17.0")

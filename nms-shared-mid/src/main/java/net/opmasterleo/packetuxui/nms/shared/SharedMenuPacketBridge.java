@@ -3,12 +3,12 @@ package net.opmasterleo.packetuxui.nms.shared;
 import java.util.List;
 import java.util.Map;
 
-import org.bukkit.craftbukkit.entity.CraftPlayer;
+import org.bukkit.craftbukkit.NMS.entity.CraftPlayer;
 import org.bukkit.entity.Player;
 
-import io.papermc.paper.adventure.PaperAdventure;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.serializer.gson.GsonComponentSerializer;
 import net.minecraft.core.NonNullList;
 import net.minecraft.network.protocol.game.ClientboundContainerSetContentPacket;
 import net.minecraft.network.protocol.game.ClientboundContainerSetSlotPacket;
@@ -40,7 +40,9 @@ public final class SharedMenuPacketBridge implements MenuPacketBridge {
         sp.connection.send(new ClientboundOpenScreenPacket(
                 windowId,
                 menuType(typeId),
-                PaperAdventure.asVanilla(title)
+                net.minecraft.network.chat.Component.Serializer.fromJson(
+                        GsonComponentSerializer.gson().serialize(title)
+                )
         ));
     }
 
@@ -84,9 +86,9 @@ public final class SharedMenuPacketBridge implements MenuPacketBridge {
         }
         ServerboundContainerClickPacket packet = new ServerboundContainerClickPacket(
                 click.windowId(),
-                click.stateId(),
                 click.slot(),
                 click.button(),
+                click.stateId(),
                 toNmsClickType(click.clickType()),
                 items.toMinecraft(click.carried()),
                 changed

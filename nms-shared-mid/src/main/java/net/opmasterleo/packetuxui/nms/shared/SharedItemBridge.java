@@ -1,21 +1,18 @@
 package net.opmasterleo.packetuxui.nms.shared;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
-import org.bukkit.Bukkit;
 import org.bukkit.Material;
-import org.bukkit.NamespacedKey;
-import org.bukkit.craftbukkit.inventory.CraftItemStack;
+import org.bukkit.craftbukkit.NMS.inventory.CraftItemStack;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.meta.ItemMeta;
-import org.bukkit.inventory.meta.SkullMeta;
-import org.bukkit.profile.PlayerProfile;
-import org.bukkit.profile.PlayerTextures;
 
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import net.minecraft.world.item.ItemStack;
 import net.opmasterleo.packetuxui.nms.ItemBridge;
 import net.opmasterleo.packetuxui.nms.item.UxItem;
@@ -49,8 +46,7 @@ public final class SharedItemBridge implements ItemBridge {
         if (item == null || item.isEmpty()) {
             return ItemStack.EMPTY;
         }
-        org.bukkit.inventory.ItemStack bukkit = toBukkit(item);
-        return CraftItemStack.asNMSCopy(bukkit);
+        return CraftItemStack.asNMSCopy(toBukkit(item));
     }
 
     public UxItem fromMinecraft(ItemStack stack) {
@@ -71,10 +67,14 @@ public final class SharedItemBridge implements ItemBridge {
             return stack;
         }
         if (item.name() != null) {
-            meta.displayName(item.name());
+            meta.setDisplayName(LegacyComponentSerializer.legacySection().serialize(item.name()));
         }
         if (!item.lore().isEmpty()) {
-            meta.lore(item.lore());
+            ArrayList<String> lore = new ArrayList<>();
+            for (Component line : item.lore()) {
+                lore.add(LegacyComponentSerializer.legacySection().serialize(line));
+            }
+            meta.setLore(lore);
         }
         for (Map.Entry<String, Integer> entry : item.enchantments().entrySet()) {
             Enchantment enchantment = resolveEnchant(entry.getKey());
@@ -85,49 +85,52 @@ public final class SharedItemBridge implements ItemBridge {
         if (item.hideEnchantments()) {
             meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
         }
-        if (item.customModelData() != null) {
-            meta.setCustomModelData(item.customModelData());
-        }
-        if (item.headTextureBase64() != null && !item.headTextureBase64().isEmpty() && meta instanceof SkullMeta skull) {
-            try {
-                PlayerProfile profile = Bukkit.createProfile(UUID.randomUUID(), "packetuxui");
-                PlayerTextures textures = profile.getTextures();
-                // base64 profiles are applied via existing CraftBukkit path when available
-                skull.setOwnerProfile(profile);
-            } catch (Throwable ignored) {
-            }
-        }
         stack.setItemMeta(meta);
         return stack;
     }
 
     public UxItem fromBukkit(org.bukkit.inventory.ItemStack stack) {
-        if (stack == null || stack.getType().isAir() || stack.getAmount() <= 0) {
+        if (stack == null || stack.getType() == Material.AIR || stack.getAmount() <= 0) {
             return UxItem.EMPTY;
         }
-        NamespacedKey key = stack.getType().getKey();
+        String key = "minecraft:" + stack.getType().name().toLowerCase();
         ItemMeta meta = stack.getItemMeta();
-        Component name = meta != null ? meta.displayName() : null;
-        List<Component> lore = meta != null && meta.lore() != null ? meta.lore() : List.of();
-        java.util.HashMap<String, Integer> enchants = new java.util.HashMap<>();
+        Component name = null;
+        List<Component> lore = List.of();
+        Map<String, Integer> enchants = new HashMap<>();
         if (meta != null) {
+            if (meta.hasDisplayName()) {
+                name = LegacyComponentSerializer.legacySection().deserialize(meta.getDisplayName());
+            }
+            if (meta.hasLore() && meta.getLore() != null) {
+                ArrayList<Component> lines = new ArrayList<>();
+                for (String line : meta.getLore()) {
+                    lines.add(LegacyComponentSerializer.legacySection().deserialize(line));
+                }
+                lore = lines;
+            }
             for (Map.Entry<Enchantment, Integer> entry : meta.getEnchants().entrySet()) {
-                enchants.put(entry.getKey().getKey().toString(), entry.getValue());
+                enchants.put(entry.getKey().getName().toLowerCase(), entry.getValue());
             }
         }
-        Integer cmd = meta != null && meta.hasCustomModelData() ? meta.getCustomModelData() : null;
-        return new UxItem(key.toString(), stack.getAmount(), name, lore, enchants, true, cmd, null);
+        return new UxItem(key, stack.getAmount(), name, lore, enchants, true, null, null);
     }
 
     private static Material resolveMaterial(String key) {
         String normalized = key.contains(":") ? key.substring(key.indexOf(':') + 1) : key;
         Material material = Material.matchMaterial(normalized);
-        return material == null ? Material.AIR : material;
+        if (material != null) {
+            return material;
+        }
+        try {
+            return Material.valueOf(normalized.toUpperCase());
+        } catch (IllegalArgumentException ignored) {
+            return Material.AIR;
+        }
     }
 
     private static Enchantment resolveEnchant(String key) {
         String normalized = key.contains(":") ? key.substring(key.indexOf(':') + 1) : key;
-        NamespacedKey namespacedKey = NamespacedKey.minecraft(normalized);
-        return Enchantment.getByKey(namespacedKey);
+        return Enchantment.getByName(normalized.toUpperCase());
     }
 }

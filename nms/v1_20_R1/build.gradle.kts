@@ -1,8 +1,5 @@
-import io.papermc.paperweight.userdev.ReobfArtifactConfiguration
-
 plugins {
     java
-    id("io.papermc.paperweight.userdev")
 }
 
 extra["nmsEra"] = "mid"
@@ -10,10 +7,13 @@ extra["nmsEra"] = "mid"
 dependencies {
     compileOnly(project(":nms-api"))
     compileOnly("it.unimi.dsi:fastutil:8.5.15")
-    paperweight.paperDevBundle("1.20.1-R0.1-SNAPSHOT")
+    compileOnly("org.spigotmc:spigot:1.20.1-R0.1-SNAPSHOT:remapped-mojang")
+    compileOnly("net.kyori:adventure-api:4.17.0")
+    compileOnly("net.kyori:adventure-text-serializer-gson:4.17.0")
+    compileOnly("net.kyori:adventure-text-serializer-legacy:4.17.0")
+    compileOnly("io.netty:netty-transport:4.1.118.Final")
+    compileOnly("io.netty:netty-handler:4.1.118.Final")
 }
-
-paperweight.reobfArtifactConfiguration = ReobfArtifactConfiguration.REOBF_PRODUCTION
 
 apply(from = rootProject.file("nms/shared-sources.gradle.kts"))
 

@@ -2,7 +2,7 @@ plugins {
     java
 }
 
-extra["nmsEra"] = "legacy"
+extra["nmsEra"] = "legacy9"
 extra["nmsVersion"] = "v1_9_R2"
 
 dependencies {

@@ -7,11 +7,13 @@ import org.bukkit.craftbukkit.NMS.entity.CraftPlayer;
 import org.bukkit.craftbukkit.NMS.inventory.CraftItemStack;
 import org.bukkit.entity.Player;
 
+import io.netty.buffer.Unpooled;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.gson.GsonComponentSerializer;
 import net.minecraft.server.NMS.EntityPlayer;
 import net.minecraft.server.NMS.IChatBaseComponent;
 import net.minecraft.server.NMS.ItemStack;
+import net.minecraft.server.NMS.PacketDataSerializer;
 import net.minecraft.server.NMS.PacketPlayInWindowClick;
 import net.minecraft.server.NMS.PacketPlayOutOpenWindow;
 import net.minecraft.server.NMS.PacketPlayOutSetSlot;
@@ -64,14 +66,19 @@ public final class SharedMenuPacketBridge implements MenuPacketBridge {
     public void injectClick(Player player, ClickPacket click) {
         EntityPlayer handle = ((CraftPlayer) player).getHandle();
         PlayerConnection connection = handle.playerConnection;
-        PacketPlayInWindowClick packet = new PacketPlayInWindowClick(
-                click.windowId(),
-                click.slot(),
-                click.button(),
-                click.clickType().ordinal(),
-                CraftItemStack.asNMSCopy(items.toBukkit(click.carried())),
-                (short) click.actionNumber()
-        );
+        PacketDataSerializer buf = new PacketDataSerializer(Unpooled.buffer());
+        buf.writeByte(click.windowId());
+        buf.writeShort(click.slot());
+        buf.writeByte(click.button());
+        buf.writeShort(click.actionNumber());
+        buf.writeByte(click.clickType().ordinal());
+        buf.a(CraftItemStack.asNMSCopy(items.toBukkit(click.carried())));
+        PacketPlayInWindowClick packet = new PacketPlayInWindowClick();
+        try {
+            packet.a(buf);
+        } catch (Exception error) {
+            throw new IllegalStateException("Failed to decode window click", error);
+        }
         connection.a(packet);
     }
 

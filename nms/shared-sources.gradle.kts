@@ -7,8 +7,18 @@ val era = project.findProperty("nmsEra")?.toString() ?: "modern"
 val nmsVersion = project.findProperty("nmsVersion")?.toString() ?: project.name
 val sharedRootName = when (era) {
     "legacy" -> "nms-shared-legacy"
+    "legacy8" -> "nms-shared-legacy8"
+    "legacy82" -> "nms-shared-legacy82"
+    "legacy9" -> "nms-shared-legacy9"
+    "legacy11" -> "nms-shared-legacy11"
+    "legacy13" -> "nms-shared-legacy13"
+    "legacy14" -> "nms-shared-legacy14"
+    "legacy15" -> "nms-shared-legacy15"
+    "legacy16" -> "nms-shared-legacy16"
     "mid" -> "nms-shared-mid"
+    "mid17" -> "nms-shared-mid17"
     "modern21_5" -> "nms-shared-modern21_5"
+    "modern26" -> "nms-shared-modern26"
     else -> "nms-shared-modern"
 }
 
@@ -39,10 +49,15 @@ val prepareSharedSources = tasks.register("prepareSharedSources") {
                     "import net.opmasterleo.packetuxui.nms.shared.",
                     "import $versionSharedPackage."
                 )
-            if (era == "legacy") {
+            if (era.startsWith("legacy")) {
                 text = text
                     .replace("net.minecraft.server.NMS", "net.minecraft.server.$nmsVersion")
                     .replace("org.bukkit.craftbukkit.NMS", "org.bukkit.craftbukkit.$nmsVersion")
+            } else if (era.startsWith("mid")) {
+                text = text.replace(
+                    "org.bukkit.craftbukkit.NMS",
+                    "org.bukkit.craftbukkit.$nmsVersion"
+                )
             }
             dest.writeText(text)
         }
