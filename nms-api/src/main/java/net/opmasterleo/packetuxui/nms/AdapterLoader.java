@@ -6,17 +6,9 @@ import java.util.Map;
 
 import org.bukkit.Bukkit;
 
-/**
- * Resolves and loads the NMS adapter for the running server.
- * <p>
- * Pattern follows SignGUI's {@code VersionMatcher}: prefer the relocated CraftBukkit
- * package revision when present; on Paper 1.20.5+ (unversioned {@code org.bukkit.craftbukkit})
- * map {@link Bukkit#getBukkitVersion()} to an NMS bucket, then {@code Class.forName} that
- * adapter only.
- */
 public final class AdapterLoader {
 
-    private static final String ADAPTER_PREFIX = "net.opmasterleo.packetuxui.nms.";
+    private static final String ADAPTER_PACKAGE = NmsAdapter.class.getPackageName();
     private static final String ADAPTER_SUFFIX = ".Adapter";
 
     private static final Map<String, String> MINECRAFT_TO_BUCKET;
@@ -101,21 +93,23 @@ public final class AdapterLoader {
 
     public static NmsAdapter load() {
         String bucket = resolveBucket();
-        String className = ADAPTER_PREFIX + bucket + ADAPTER_SUFFIX;
+        String className = ADAPTER_PACKAGE + "." + bucket + ADAPTER_SUFFIX;
         try {
             Class<?> clazz = Class.forName(className);
             Object instance = clazz.getDeclaredConstructor().newInstance();
             if (instance instanceof NmsAdapter adapter) {
                 return adapter;
             }
-            throw new UnsupportedOperationException(className + " does not implement NmsAdapter");
+            throw new NmsUnsupportedException(className + " does not implement NmsAdapter");
         } catch (ClassNotFoundException error) {
-            throw new UnsupportedOperationException(
+            throw new NmsUnsupportedException(
                     "No NMS adapter for bucket " + bucket + " (server " + describeServer() + ")",
                     error
             );
+        } catch (NmsUnsupportedException error) {
+            throw error;
         } catch (ReflectiveOperationException | LinkageError | RuntimeException error) {
-            throw new UnsupportedOperationException(
+            throw new NmsUnsupportedException(
                     "Failed to initialize NMS adapter " + bucket + " (server " + describeServer() + ")",
                     error
             );
@@ -137,7 +131,7 @@ public final class AdapterLoader {
             return mapped;
         }
 
-        throw new UnsupportedOperationException(
+        throw new NmsUnsupportedException(
                 "Unsupported Minecraft version \"" + minecraftVersion
                         + "\" (craftbukkit package " + craftBukkitPackage + ")"
         );

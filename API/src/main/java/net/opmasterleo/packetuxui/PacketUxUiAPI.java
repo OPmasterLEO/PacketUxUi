@@ -142,7 +142,7 @@ public final class PacketUxUiAPI {
     }
 
     public static void close(Player player) {
-        getService().onCloseMenu(player);
+        getService().closeMenu(player);
     }
 
     public static MenuBuilder menu(Component title, net.opmasterleo.packetuxui.types.InventoryType type) {
@@ -156,7 +156,7 @@ public final class PacketUxUiAPI {
     private static void shutdown() {
         for (Player player : Bukkit.getOnlinePlayers()) {
             try {
-                service.onCloseMenu(player);
+                service.closeMenu(player);
             } catch (Throwable ignored) {
             }
             try {

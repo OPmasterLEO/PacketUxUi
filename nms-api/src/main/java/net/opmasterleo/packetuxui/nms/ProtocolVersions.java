@@ -136,9 +136,10 @@ public final class ProtocolVersions {
 
     public static void requireInRange(int protocol, int minInclusive, int maxInclusive, String bucket) {
         if (protocol < minInclusive || protocol > maxInclusive) {
-            throw new UnsupportedClassVersionError(
+            throw new NmsUnsupportedException(
                     "Adapter " + bucket + " refuses protocol=" + protocol
-                            + " (supported " + minInclusive + ".." + maxInclusive + ")");
+                            + " (supported " + minInclusive + ".." + maxInclusive + ")"
+            );
         }
     }
 }

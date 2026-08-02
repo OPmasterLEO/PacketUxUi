@@ -39,7 +39,7 @@ public final class ProtocolProbe {
             }
         } catch (Throwable ignored) {
         }
-        throw new UnsupportedClassVersionError("Cannot probe protocol version");
+        throw new NmsUnsupportedException("Cannot probe protocol version");
     }
 
     private static Integer mapLegacyPackage(String nms) {

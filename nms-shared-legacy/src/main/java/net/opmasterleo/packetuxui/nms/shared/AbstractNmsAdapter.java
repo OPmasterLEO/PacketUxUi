@@ -5,6 +5,7 @@ import org.bukkit.Bukkit;
 import net.opmasterleo.packetuxui.nms.ItemBridge;
 import net.opmasterleo.packetuxui.nms.MenuPacketBridge;
 import net.opmasterleo.packetuxui.nms.NmsAdapter;
+import net.opmasterleo.packetuxui.nms.NmsUnsupportedException;
 import net.opmasterleo.packetuxui.nms.PacketClassifier;
 import net.opmasterleo.packetuxui.nms.PipelineBridge;
 import net.opmasterleo.packetuxui.nms.ProtocolVersions;
@@ -22,7 +23,7 @@ public abstract class AbstractNmsAdapter implements NmsAdapter {
     protected AbstractNmsAdapter(String bucketId, String nmsPackage, int minProtocol, int maxProtocol) {
         String serverPackage = Bukkit.getServer().getClass().getPackage().getName();
         if (!serverPackage.endsWith("." + nmsPackage)) {
-            throw new UnsupportedClassVersionError(
+            throw new NmsUnsupportedException(
                     "Adapter " + bucketId + " refuses server package " + serverPackage
                             + " (expected *." + nmsPackage + ")");
         }

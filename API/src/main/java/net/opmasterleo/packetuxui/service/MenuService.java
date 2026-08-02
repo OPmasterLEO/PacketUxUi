@@ -42,7 +42,7 @@ public final class MenuService {
 
     public void openMenu(Player player, Menu menu) {
         scheduler.runForPlayer(player, () -> {
-            onCloseMenu(player);
+            closeCurrent(player, true);
             Menu copy = menu.copy();
             int windowId = windowIds.allocate(player);
             MenuSession session = new MenuSession(copy, windowId);
@@ -54,6 +54,18 @@ public final class MenuService {
     }
 
     public void onCloseMenu(Player player) {
+        closeCurrent(player, false);
+    }
+
+    public void closeMenu(Player player) {
+        scheduler.runForPlayer(player, () -> closeCurrent(player, true));
+    }
+
+    private void closeCurrent(Player player, boolean sendClosePacket) {
+        MenuSession session = sessions.get(player);
+        if (session != null && sendClosePacket) {
+            adapter.packets().sendCloseWindow(player, session.windowId());
+        }
         sessions.remove(player);
         windowIds.release(player);
         carriedItem.remove(player);
@@ -78,7 +90,6 @@ public final class MenuService {
             handleClickInventory(player, session, packet);
             return;
         }
-        // READ_ONLY: swallow bottom-inv / outside clicks; revert prediction only.
         resyncDirtySlots(player, session, packet, UxItem.EMPTY);
     }
 
@@ -360,7 +371,6 @@ public final class MenuService {
             UxItem item = slot < items.size() ? items.get(slot) : UxItem.EMPTY;
             adapter.packets().sendSetSlot(player, windowId, stateId, slot, item);
         }
-        // Cursor slot — clear client-predicted carried item for read-only menus.
         adapter.packets().sendSetSlot(player, windowId, stateId, -1, carried == null ? UxItem.EMPTY : carried);
     }
 

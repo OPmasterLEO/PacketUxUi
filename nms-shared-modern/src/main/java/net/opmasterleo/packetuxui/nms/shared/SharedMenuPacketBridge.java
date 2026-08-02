@@ -10,6 +10,7 @@ import io.papermc.paper.adventure.PaperAdventure;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
 import net.kyori.adventure.text.Component;
 import net.minecraft.core.NonNullList;
+import net.minecraft.network.protocol.game.ClientboundContainerClosePacket;
 import net.minecraft.network.protocol.game.ClientboundContainerSetContentPacket;
 import net.minecraft.network.protocol.game.ClientboundContainerSetSlotPacket;
 import net.minecraft.network.protocol.game.ClientboundOpenScreenPacket;
@@ -42,6 +43,15 @@ public final class SharedMenuPacketBridge implements MenuPacketBridge {
                 menuType(typeId),
                 PaperAdventure.asVanilla(title)
         ));
+    }
+
+    @Override
+    public void sendCloseWindow(Player player, int windowId) {
+        ServerPlayer sp = nms(player);
+        if (sp == null) {
+            return;
+        }
+        sp.connection.send(new ClientboundContainerClosePacket(windowId));
     }
 
     @Override

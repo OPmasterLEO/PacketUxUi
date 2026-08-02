@@ -5,7 +5,7 @@ import java.util.concurrent.TimeUnit;
 
 import org.bukkit.Bukkit;
 
-final class AsyncTasks {
+public final class AsyncTasks {
 
     private final SchedulerEnvironment env;
 
@@ -13,7 +13,7 @@ final class AsyncTasks {
         this.env = env;
     }
 
-    void run(Runnable task) {
+    public void run(Runnable task) {
         Objects.requireNonNull(task, "task");
         if (env.hasPaperSchedulers()) {
             Bukkit.getAsyncScheduler().runNow(env.plugin(), st -> task.run());
@@ -22,7 +22,7 @@ final class AsyncTasks {
         Bukkit.getScheduler().runTaskAsynchronously(env.plugin(), task);
     }
 
-    TaskHandle runLater(Runnable task, long delay, TimeUnit unit) {
+    public TaskHandle runLater(Runnable task, long delay, TimeUnit unit) {
         Objects.requireNonNull(task, "task");
         Objects.requireNonNull(unit, "unit");
         long safeDelay = Math.max(1L, delay);
@@ -35,11 +35,11 @@ final class AsyncTasks {
         return TaskHandles.of(Bukkit.getScheduler().runTaskLaterAsynchronously(env.plugin(), task, ticks));
     }
 
-    TaskHandle runLaterTicks(Runnable task, long delayTicks) {
+    public TaskHandle runLaterTicks(Runnable task, long delayTicks) {
         return runLater(task, SchedulerEnvironment.ticks(delayTicks) * 50L, TimeUnit.MILLISECONDS);
     }
 
-    TaskHandle runRepeating(Runnable task, long initialDelay, long period, TimeUnit unit) {
+    public TaskHandle runRepeating(Runnable task, long initialDelay, long period, TimeUnit unit) {
         Objects.requireNonNull(task, "task");
         Objects.requireNonNull(unit, "unit");
         long delay = Math.max(1L, initialDelay);
@@ -57,7 +57,7 @@ final class AsyncTasks {
         );
     }
 
-    TaskHandle runRepeatingTicks(Runnable task, long initialDelayTicks, long periodTicks) {
+    public TaskHandle runRepeatingTicks(Runnable task, long initialDelayTicks, long periodTicks) {
         return runRepeating(
                 task,
                 SchedulerEnvironment.ticks(initialDelayTicks) * 50L,

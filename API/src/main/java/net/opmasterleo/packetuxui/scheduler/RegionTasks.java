@@ -7,7 +7,7 @@ import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 
-final class RegionTasks {
+public final class RegionTasks {
 
     private final SchedulerEnvironment env;
     private final GlobalTasks global;
@@ -17,7 +17,7 @@ final class RegionTasks {
         this.global = global;
     }
 
-    void runAt(Location location, Runnable task) {
+    public void runAt(Location location, Runnable task) {
         Objects.requireNonNull(location, "location");
         Objects.requireNonNull(task, "task");
         if (env.hasPaperSchedulers()) {
@@ -31,7 +31,7 @@ final class RegionTasks {
         global.run(task);
     }
 
-    void runAt(World world, int chunkX, int chunkZ, Runnable task) {
+    public void runAt(World world, int chunkX, int chunkZ, Runnable task) {
         Objects.requireNonNull(world, "world");
         Objects.requireNonNull(task, "task");
         if (env.hasPaperSchedulers()) {
@@ -45,12 +45,12 @@ final class RegionTasks {
         global.run(task);
     }
 
-    void runAt(Block block, Runnable task) {
+    public void runAt(Block block, Runnable task) {
         Objects.requireNonNull(block, "block");
         runAt(block.getLocation(), task);
     }
 
-    TaskHandle runAtNextTick(Location location, Runnable task) {
+    public TaskHandle runAtNextTick(Location location, Runnable task) {
         Objects.requireNonNull(location, "location");
         Objects.requireNonNull(task, "task");
         if (env.hasPaperSchedulers()) {
@@ -59,7 +59,7 @@ final class RegionTasks {
         return global.runNextTick(task);
     }
 
-    TaskHandle runAtLater(Location location, Runnable task, long delayTicks) {
+    public TaskHandle runAtLater(Location location, Runnable task, long delayTicks) {
         Objects.requireNonNull(location, "location");
         Objects.requireNonNull(task, "task");
         long delay = SchedulerEnvironment.ticks(delayTicks);
@@ -71,7 +71,7 @@ final class RegionTasks {
         return global.runLater(task, delay);
     }
 
-    TaskHandle runAtLater(World world, int chunkX, int chunkZ, Runnable task, long delayTicks) {
+    public TaskHandle runAtLater(World world, int chunkX, int chunkZ, Runnable task, long delayTicks) {
         Objects.requireNonNull(world, "world");
         Objects.requireNonNull(task, "task");
         long delay = SchedulerEnvironment.ticks(delayTicks);
@@ -83,7 +83,7 @@ final class RegionTasks {
         return global.runLater(task, delay);
     }
 
-    TaskHandle runAtRepeating(Location location, Runnable task, long initialDelayTicks, long periodTicks) {
+    public TaskHandle runAtRepeating(Location location, Runnable task, long initialDelayTicks, long periodTicks) {
         Objects.requireNonNull(location, "location");
         Objects.requireNonNull(task, "task");
         long delay = SchedulerEnvironment.ticks(initialDelayTicks);
@@ -96,7 +96,7 @@ final class RegionTasks {
         return global.runRepeating(task, delay, period);
     }
 
-    TaskHandle runAtRepeating(
+    public TaskHandle runAtRepeating(
             World world,
             int chunkX,
             int chunkZ,

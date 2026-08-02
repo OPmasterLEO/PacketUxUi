@@ -12,6 +12,7 @@ import net.kyori.adventure.text.serializer.gson.GsonComponentSerializer;
 import net.minecraft.core.NonNullList;
 import net.minecraft.network.protocol.game.ClientboundContainerSetContentPacket;
 import net.minecraft.network.protocol.game.ClientboundContainerSetSlotPacket;
+import net.minecraft.network.protocol.game.ClientboundContainerClosePacket;
 import net.minecraft.network.protocol.game.ClientboundOpenScreenPacket;
 import net.minecraft.network.protocol.game.ServerboundContainerClickPacket;
 import net.minecraft.server.level.ServerPlayer;
@@ -44,6 +45,15 @@ public final class SharedMenuPacketBridge implements MenuPacketBridge {
                         GsonComponentSerializer.gson().serialize(title)
                 )
         ));
+    }
+
+    @Override
+    public void sendCloseWindow(Player player, int windowId) {
+        ServerPlayer sp = nms(player);
+        if (sp == null) {
+            return;
+        }
+        sp.connection.send(new ClientboundContainerClosePacket(windowId));
     }
 
     @Override

@@ -63,6 +63,22 @@ public final class PlatformScheduler {
         return env.isOwnedByCurrentRegion(world, chunkX, chunkZ);
     }
 
+    public GlobalTasks global() {
+        return global;
+    }
+
+    public EntityTasks entity() {
+        return entity;
+    }
+
+    public RegionTasks region() {
+        return region;
+    }
+
+    public AsyncTasks async() {
+        return async;
+    }
+
     public void runSync(Runnable task) {
         global.run(task);
     }

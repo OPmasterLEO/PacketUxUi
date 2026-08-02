@@ -11,6 +11,8 @@ public interface MenuPacketBridge {
 
     void sendOpenWindow(Player player, int windowId, int typeId, Component title);
 
+    void sendCloseWindow(Player player, int windowId);
+
     void sendWindowItems(Player player, int windowId, int stateId, List<UxItem> items, UxItem carried);
 
     void sendSetSlot(Player player, int windowId, int stateId, int slot, UxItem item);

@@ -9,7 +9,7 @@ import org.bukkit.entity.Player;
 
 import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 
-final class EntityTasks {
+public final class EntityTasks {
 
     private final SchedulerEnvironment env;
 
@@ -17,7 +17,7 @@ final class EntityTasks {
         this.env = env;
     }
 
-    void run(Entity entity, Runnable task, Runnable retired) {
+    public void run(Entity entity, Runnable task, Runnable retired) {
         Objects.requireNonNull(task, "task");
         if (entity == null || !entity.isValid()) {
             if (retired != null) {
@@ -40,7 +40,7 @@ final class EntityTasks {
         }
     }
 
-    TaskHandle runLater(Entity entity, Runnable task, Runnable retired, long delayTicks) {
+    public TaskHandle runLater(Entity entity, Runnable task, Runnable retired, long delayTicks) {
         Objects.requireNonNull(task, "task");
         if (entity == null || !entity.isValid()) {
             if (retired != null) {
@@ -56,7 +56,7 @@ final class EntityTasks {
         return TaskHandles.of(Bukkit.getScheduler().runTaskLater(env.plugin(), task, delay));
     }
 
-    TaskHandle runRepeating(
+    public TaskHandle runRepeating(
             Entity entity,
             Consumer<? super Entity> task,
             Runnable retired,
@@ -89,7 +89,7 @@ final class EntityTasks {
         }, delay, period), true);
     }
 
-    TaskHandle runLaterForPlayer(Player player, Consumer<Player> task, long delayTicks) {
+    public TaskHandle runLaterForPlayer(Player player, Consumer<Player> task, long delayTicks) {
         Objects.requireNonNull(task, "task");
         return runLater(player, () -> {
             if (player != null && player.isOnline()) {
@@ -98,7 +98,7 @@ final class EntityTasks {
         }, null, delayTicks);
     }
 
-    TaskHandle runRepeatingForPlayer(
+    public TaskHandle runRepeatingForPlayer(
             Player player,
             Consumer<Player> task,
             long initialDelayTicks,

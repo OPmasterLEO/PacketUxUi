@@ -15,6 +15,7 @@ import net.minecraft.server.NMS.IChatBaseComponent;
 import net.minecraft.server.NMS.ItemStack;
 import net.minecraft.server.NMS.PacketDataSerializer;
 import net.minecraft.server.NMS.PacketPlayInWindowClick;
+import net.minecraft.server.NMS.PacketPlayOutCloseWindow;
 import net.minecraft.server.NMS.PacketPlayOutOpenWindow;
 import net.minecraft.server.NMS.PacketPlayOutSetSlot;
 import net.minecraft.server.NMS.PacketPlayOutWindowItems;
@@ -43,6 +44,12 @@ public final class SharedMenuPacketBridge implements MenuPacketBridge {
                 chat,
                 slotCount(typeId)
         ));
+    }
+
+    @Override
+    public void sendCloseWindow(Player player, int windowId) {
+        EntityPlayer handle = ((CraftPlayer) player).getHandle();
+        handle.playerConnection.sendPacket(new PacketPlayOutCloseWindow(windowId));
     }
 
     @Override

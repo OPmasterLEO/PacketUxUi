@@ -20,8 +20,12 @@ dependencies {
 }
 
 tasks.shadowJar {
-    // Recommended when embedding into your plugin:
     // relocate("net.opmasterleo.packetuxui", "your.plugin.lib.packetuxui")
+    // If you use minimize(), keep the library tree:
+    // minimize {
+    //     exclude(dependency("net.opmasterleo:packetuxui:.*"))
+    // }
+    // or include("net/opmasterleo/packetuxui/**")
 }
 ```
 
