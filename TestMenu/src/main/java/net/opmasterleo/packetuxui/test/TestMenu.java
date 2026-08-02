@@ -1,6 +1,7 @@
 package net.opmasterleo.packetuxui.test;
 
 import net.opmasterleo.packetuxui.PacketUxUiAPI;
+import net.opmasterleo.packetuxui.nms.AdapterLoader;
 import net.opmasterleo.packetuxui.test.commands.CommandListener;
 import org.bukkit.plugin.java.JavaPlugin;
 

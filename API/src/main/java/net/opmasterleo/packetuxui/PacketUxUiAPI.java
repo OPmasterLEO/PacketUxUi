@@ -6,6 +6,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 import net.opmasterleo.packetuxui.controller.BukkitListener;
 import net.opmasterleo.packetuxui.network.PipelineManager;
+import net.opmasterleo.packetuxui.nms.AdapterLoader;
 import net.opmasterleo.packetuxui.nms.NmsAdapter;
 import net.opmasterleo.packetuxui.scheduler.PlatformScheduler;
 import net.opmasterleo.packetuxui.service.MenuService;
@@ -38,6 +39,10 @@ public final class PacketUxUiAPI {
     public static PlatformScheduler getScheduler() {
         checkInitialized();
         return scheduler;
+    }
+
+    public static void init(JavaPlugin plugin) {
+        init(plugin, AdapterLoader.load());
     }
 
     public static void init(JavaPlugin plugin, NmsAdapter nmsAdapter) {
