@@ -1,94 +1,153 @@
 package net.opmasterleo.packetuxui.scheduler;
 
+import java.util.Objects;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
-import org.bukkit.Bukkit;
+import org.bukkit.Location;
+import org.bukkit.World;
+import org.bukkit.block.Block;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
-import org.bukkit.scheduler.BukkitTask;
-
-import io.papermc.paper.ServerBuildInfo;
-import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
-import net.kyori.adventure.key.Key;
 
 public final class PlatformScheduler {
 
-    private static final Key FOLIA_BRAND = Key.key("papermc", "folia");
-
-    private final JavaPlugin plugin;
-    private final boolean folia;
+    private final SchedulerEnvironment env;
+    private final GlobalTasks global;
+    private final EntityTasks entity;
+    private final RegionTasks region;
+    private final AsyncTasks async;
 
     public PlatformScheduler(JavaPlugin plugin) {
-        this.plugin = plugin;
-        this.folia = detectFolia();
+        this.env = new SchedulerEnvironment(Objects.requireNonNull(plugin, "plugin"));
+        this.global = new GlobalTasks(env);
+        this.entity = new EntityTasks(env);
+        this.region = new RegionTasks(env, global);
+        this.async = new AsyncTasks(env);
+    }
+
+    public JavaPlugin plugin() {
+        return env.plugin();
     }
 
     public boolean isFolia() {
-        return folia;
+        return env.isFolia();
     }
 
-    public void runForPlayer(Player player, Runnable task) {
-        if (player == null || !player.isOnline()) {
-            return;
-        }
-        if (folia) {
-            if (isOwnedByCurrentRegion(player)) {
-                task.run();
-                return;
-            }
-            player.getScheduler().execute(plugin, task, null, 0L);
-            return;
-        }
-        if (Bukkit.isPrimaryThread()) {
-            task.run();
-        } else {
-            Bukkit.getScheduler().runTask(plugin, task);
-        }
+    public boolean hasPaperSchedulers() {
+        return env.hasPaperSchedulers();
+    }
+
+    public boolean isPrimaryThread() {
+        return env.isPrimaryThread();
+    }
+
+    public boolean isGlobalTickThread() {
+        return env.isGlobalTickThread();
+    }
+
+    public boolean isOwnedByCurrentRegion(Entity entity) {
+        return env.isOwnedByCurrentRegion(entity);
+    }
+
+    public boolean isOwnedByCurrentRegion(Location location) {
+        return env.isOwnedByCurrentRegion(location);
+    }
+
+    public boolean isOwnedByCurrentRegion(Block block) {
+        return env.isOwnedByCurrentRegion(block);
+    }
+
+    public boolean isOwnedByCurrentRegion(World world, int chunkX, int chunkZ) {
+        return env.isOwnedByCurrentRegion(world, chunkX, chunkZ);
+    }
+
+    public void runSync(Runnable task) {
+        global.run(task);
+    }
+
+    public TaskHandle runSyncLater(Runnable task, long delayTicks) {
+        return global.runLater(task, delayTicks);
+    }
+
+    public TaskHandle runSyncRepeating(Runnable task, long delayTicks, long periodTicks) {
+        return global.runRepeating(task, delayTicks, periodTicks);
     }
 
     public void runGlobal(Runnable task) {
-        if (folia) {
-            if (Bukkit.getServer().isGlobalTickThread()) {
-                task.run();
-                return;
-            }
-            Bukkit.getGlobalRegionScheduler().execute(plugin, task);
-            return;
-        }
-        if (Bukkit.isPrimaryThread()) {
-            task.run();
-        } else {
-            Bukkit.getScheduler().runTask(plugin, task);
-        }
+        global.run(task);
     }
 
-    public void runAsync(Runnable task) {
-        if (folia) {
-            Bukkit.getAsyncScheduler().runNow(plugin, scheduled -> task.run());
-            return;
-        }
-        Bukkit.getScheduler().runTaskAsynchronously(plugin, task);
+    public TaskHandle runGlobalNextTick(Runnable task) {
+        return global.runNextTick(task);
+    }
+
+    public TaskHandle runGlobalLater(Runnable task, long delayTicks) {
+        return global.runLater(task, delayTicks);
     }
 
     public TaskHandle runRepeatingGlobal(Runnable task, long periodTicks) {
-        return runRepeatingGlobal(task, periodTicks, periodTicks);
+        return global.runRepeating(task, periodTicks, periodTicks);
     }
 
     public TaskHandle runRepeatingGlobal(Runnable task, long initialDelayTicks, long periodTicks) {
-        long delay = Math.max(1L, initialDelayTicks);
-        long period = Math.max(1L, periodTicks);
-        if (folia) {
-            ScheduledTask scheduled = Bukkit.getGlobalRegionScheduler()
-                    .runAtFixedRate(plugin, st -> task.run(), delay, period);
-            return new FoliaTaskHandle(scheduled);
-        }
-        BukkitTask bukkitTask = Bukkit.getScheduler().runTaskTimer(plugin, task, delay, period);
-        return new BukkitTaskHandle(bukkitTask);
+        return global.runRepeating(task, initialDelayTicks, periodTicks);
+    }
+
+    public void runForPlayer(Player player, Runnable task) {
+        entity.run(player, task, null);
+    }
+
+    public void runForPlayer(Player player, Runnable task, Runnable retired) {
+        entity.run(player, task, retired);
+    }
+
+    public void run(Entity target, Runnable task) {
+        entity.run(target, task, null);
+    }
+
+    public void run(Entity target, Runnable task, Runnable retired) {
+        entity.run(target, task, retired);
+    }
+
+    public TaskHandle runNextTick(Entity target, Runnable task) {
+        return entity.runLater(target, task, null, 1L);
+    }
+
+    public TaskHandle runLater(Entity target, Runnable task, long delayTicks) {
+        return entity.runLater(target, task, null, delayTicks);
+    }
+
+    public TaskHandle runLater(Entity target, Runnable task, Runnable retired, long delayTicks) {
+        return entity.runLater(target, task, retired, delayTicks);
+    }
+
+    public TaskHandle runRepeating(Entity target, Consumer<? super Entity> task, long periodTicks) {
+        return entity.runRepeating(target, task, null, periodTicks, periodTicks);
+    }
+
+    public TaskHandle runRepeating(
+            Entity target,
+            Consumer<? super Entity> task,
+            long initialDelayTicks,
+            long periodTicks
+    ) {
+        return entity.runRepeating(target, task, null, initialDelayTicks, periodTicks);
+    }
+
+    public TaskHandle runRepeating(
+            Entity target,
+            Consumer<? super Entity> task,
+            Runnable retired,
+            long initialDelayTicks,
+            long periodTicks
+    ) {
+        return entity.runRepeating(target, task, retired, initialDelayTicks, periodTicks);
     }
 
     public TaskHandle runRepeatingForPlayer(Player player, Consumer<Player> task, long periodTicks) {
-        return runRepeatingForPlayer(player, task, periodTicks, periodTicks);
+        return entity.runRepeatingForPlayer(player, task, periodTicks, periodTicks);
     }
 
     public TaskHandle runRepeatingForPlayer(
@@ -97,82 +156,77 @@ public final class PlatformScheduler {
             long initialDelayTicks,
             long periodTicks
     ) {
-        long delay = Math.max(1L, initialDelayTicks);
-        long period = Math.max(1L, periodTicks);
-        if (folia) {
-            ScheduledTask scheduled = player.getScheduler().runAtFixedRate(
-                    plugin,
-                    st -> task.accept(player),
-                    null,
-                    delay,
-                    period
-            );
-            return scheduled == null ? TaskHandle.NOOP : new FoliaTaskHandle(scheduled);
-        }
-        BukkitTask bukkitTask = Bukkit.getScheduler().runTaskTimer(
-                plugin,
-                () -> {
-                    if (player.isOnline()) {
-                        task.accept(player);
-                    }
-                },
-                delay,
-                period
-        );
-        return new BukkitTaskHandle(bukkitTask);
+        return entity.runRepeatingForPlayer(player, task, initialDelayTicks, periodTicks);
     }
 
-    private static boolean detectFolia() {
-        try {
-            return ServerBuildInfo.buildInfo().isBrandCompatible(FOLIA_BRAND);
-        } catch (Throwable ignored) {
-            try {
-                Class.forName("io.papermc.paper.threadedregions.RegionizedServer");
-                return true;
-            } catch (ClassNotFoundException error) {
-                return false;
-            }
-        }
+    public TaskHandle runLaterForPlayer(Player player, Consumer<Player> task, long delayTicks) {
+        return entity.runLaterForPlayer(player, task, delayTicks);
     }
 
-    private static boolean isOwnedByCurrentRegion(Entity entity) {
-        try {
-            return Bukkit.isOwnedByCurrentRegion(entity);
-        } catch (Throwable ignored) {
-            return false;
-        }
+    public void runAt(Location location, Runnable task) {
+        region.runAt(location, task);
     }
 
-    public interface TaskHandle {
-        TaskHandle NOOP = () -> {
-        };
-
-        void cancel();
+    public void runAt(World world, int chunkX, int chunkZ, Runnable task) {
+        region.runAt(world, chunkX, chunkZ, task);
     }
 
-    private static final class FoliaTaskHandle implements TaskHandle {
-        private final ScheduledTask task;
-
-        private FoliaTaskHandle(ScheduledTask task) {
-            this.task = task;
-        }
-
-        @Override
-        public void cancel() {
-            task.cancel();
-        }
+    public void runAt(Block block, Runnable task) {
+        region.runAt(block, task);
     }
 
-    private static final class BukkitTaskHandle implements TaskHandle {
-        private final BukkitTask task;
+    public TaskHandle runAtNextTick(Location location, Runnable task) {
+        return region.runAtNextTick(location, task);
+    }
 
-        private BukkitTaskHandle(BukkitTask task) {
-            this.task = task;
-        }
+    public TaskHandle runAtLater(Location location, Runnable task, long delayTicks) {
+        return region.runAtLater(location, task, delayTicks);
+    }
 
-        @Override
-        public void cancel() {
-            task.cancel();
-        }
+    public TaskHandle runAtLater(World world, int chunkX, int chunkZ, Runnable task, long delayTicks) {
+        return region.runAtLater(world, chunkX, chunkZ, task, delayTicks);
+    }
+
+    public TaskHandle runAtRepeating(Location location, Runnable task, long periodTicks) {
+        return region.runAtRepeating(location, task, periodTicks, periodTicks);
+    }
+
+    public TaskHandle runAtRepeating(Location location, Runnable task, long initialDelayTicks, long periodTicks) {
+        return region.runAtRepeating(location, task, initialDelayTicks, periodTicks);
+    }
+
+    public TaskHandle runAtRepeating(
+            World world,
+            int chunkX,
+            int chunkZ,
+            Runnable task,
+            long initialDelayTicks,
+            long periodTicks
+    ) {
+        return region.runAtRepeating(world, chunkX, chunkZ, task, initialDelayTicks, periodTicks);
+    }
+
+    public void runAsync(Runnable task) {
+        async.run(task);
+    }
+
+    public TaskHandle runAsyncLater(Runnable task, long delay, TimeUnit unit) {
+        return async.runLater(task, delay, unit);
+    }
+
+    public TaskHandle runAsyncLaterTicks(Runnable task, long delayTicks) {
+        return async.runLaterTicks(task, delayTicks);
+    }
+
+    public TaskHandle runAsyncRepeating(Runnable task, long initialDelay, long period, TimeUnit unit) {
+        return async.runRepeating(task, initialDelay, period, unit);
+    }
+
+    public TaskHandle runAsyncRepeatingTicks(Runnable task, long initialDelayTicks, long periodTicks) {
+        return async.runRepeatingTicks(task, initialDelayTicks, periodTicks);
+    }
+
+    public void cancelAll() {
+        env.cancelAll();
     }
 }
