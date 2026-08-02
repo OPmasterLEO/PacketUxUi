@@ -1,0 +1,19 @@
+package net.opmasterleo.packetuxui.nms;
+
+import java.util.List;
+
+import org.bukkit.entity.Player;
+
+import net.kyori.adventure.text.Component;
+import net.opmasterleo.packetuxui.nms.item.UxItem;
+
+public interface MenuPacketBridge {
+
+    void sendOpenWindow(Player player, int windowId, int typeId, Component title);
+
+    void sendWindowItems(Player player, int windowId, int stateId, List<UxItem> items, UxItem carried);
+
+    void sendSetSlot(Player player, int windowId, int stateId, int slot, UxItem item);
+
+    void injectClick(Player player, ClickPacket click);
+}

@@ -1,0 +1,5 @@
+name: TestMenu
+version: '${version}'
+main: net.opmasterleo.packetuxui.test.TestMenu
+api-version: '1.13'
+folia-supported: true

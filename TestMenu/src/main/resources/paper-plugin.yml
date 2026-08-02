@@ -1,10 +1,5 @@
 name: TestMenu
-version: '1.0-SNAPSHOT'
-main: net.craftoriya.TestMenu
+version: '${version}'
+main: net.opmasterleo.packetuxui.test.TestMenu
 api-version: '1.21'
-dependencies:
-  server:
-    packetevents:
-      load: BEFORE
-      required: true
-      join-classpath: true
+folia-supported: true
