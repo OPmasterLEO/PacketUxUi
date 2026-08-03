@@ -322,13 +322,12 @@ public final class MenuService {
     }
 
     private void settleReadOnlyOutside(Player player, MenuSession session, ClickPacket packet) {
-        UxItem packetCursor = packet.carried();
-        boolean emptyCursor = packetCursor == null || adapter.items().isEmpty(packetCursor);
+        boolean emptyCursor = packet.carriedEmpty();
         Menu menu = session.menu();
         int last = menu.type().lastIndex();
         boolean touchesTop = (packet.slot() >= 0 && packet.slot() <= last)
                 || touchesTopSlots(packet, last);
-        if (!touchesTop && emptyCursor && packet.changedSlots().isEmpty()) {
+        if (!touchesTop && emptyCursor && packet.changedSlotIds().isEmpty()) {
             int stateId = session.nextStateId();
             adapter.packets().sendSetSlot(player, session.windowId(), stateId, -1, UxItem.EMPTY);
             carriedItem.remove(id(player));
@@ -349,19 +348,18 @@ public final class MenuService {
         List<UxItem> bottom = snapshotBottom(player);
         int windowId = session.windowId();
         int stateId = session.nextStateId();
-        Set<Integer> dirty = new HashSet<>();
         if (packet.slot() > last) {
-            dirty.add(packet.slot());
-        }
-        for (Integer slot : packet.changedSlots().keySet()) {
-            if (slot != null && slot > last) {
-                dirty.add(slot);
+            int idx = packet.slot() - topSize;
+            if (idx >= 0 && idx < bottom.size()) {
+                adapter.packets().sendSetSlot(player, windowId, stateId, packet.slot(), bottom.get(idx));
             }
         }
-        for (Integer slot : dirty) {
-            int idx = slot - topSize;
-            if (idx >= 0 && idx < bottom.size()) {
-                adapter.packets().sendSetSlot(player, windowId, stateId, slot, bottom.get(idx));
+        for (Integer slot : packet.changedSlotIds()) {
+            if (slot != null && slot > last) {
+                int idx = slot - topSize;
+                if (idx >= 0 && idx < bottom.size()) {
+                    adapter.packets().sendSetSlot(player, windowId, stateId, slot, bottom.get(idx));
+                }
             }
         }
         adapter.packets().sendSetSlot(player, windowId, stateId, -1, UxItem.EMPTY);
@@ -491,7 +489,7 @@ public final class MenuService {
         if (packet.slot() >= topSize) {
             dirty.add(packet.slot());
         }
-        for (Integer slot : packet.changedSlots().keySet()) {
+        for (Integer slot : packet.changedSlotIds()) {
             if (slot != null && slot >= topSize) {
                 dirty.add(slot);
             }
@@ -549,7 +547,7 @@ public final class MenuService {
                 }
             }
         }
-        for (Integer slot : packet.changedSlots().keySet()) {
+        for (Integer slot : packet.changedSlotIds()) {
             if (slot != null) {
                 slots.add(slot);
             }
@@ -960,12 +958,10 @@ public final class MenuService {
     public ClickData getClickType(ClickPacket packet) {
         return switch (packet.clickType()) {
             case PICKUP -> {
-                UxItem carried = packet.carried();
-                boolean isCarried = carried != null && !adapter.items().isEmpty(carried);
                 if (packet.button() == 0) {
-                    yield isCarried ? ClickData.LEFT_PICKUP : ClickData.LEFT_PLACE;
+                    yield packet.carriedEmpty() ? ClickData.LEFT_PLACE : ClickData.LEFT_PICKUP;
                 }
-                yield isCarried ? ClickData.RIGHT_PLACE : ClickData.RIGHT_PICKUP;
+                yield packet.carriedEmpty() ? ClickData.RIGHT_PICKUP : ClickData.RIGHT_PLACE;
             }
             case QUICK_MOVE -> packet.button() == 0 ? ClickData.SHIFT_LEFT : ClickData.SHIFT_RIGHT;
             case SWAP -> {
@@ -1023,7 +1019,7 @@ public final class MenuService {
     }
 
     private static boolean touchesTopSlots(ClickPacket packet, int last) {
-        for (Integer slot : packet.changedSlots().keySet()) {
+        for (Integer slot : packet.changedSlotIds()) {
             if (slot != null && slot >= 0 && slot <= last) {
                 return true;
             }
@@ -1036,19 +1032,17 @@ public final class MenuService {
         int last = menu.type().lastIndex();
         int windowId = session.windowId();
         int stateId = session.nextStateId();
-        Set<Integer> dirty = new HashSet<>();
         if (packet.slot() >= 0 && packet.slot() <= last) {
-            dirty.add(packet.slot());
-        }
-        for (Integer slot : packet.changedSlots().keySet()) {
-            if (slot != null && slot >= 0 && slot <= last) {
-                dirty.add(slot);
-            }
+            List<UxItem> items = menu.items();
+            UxItem item = packet.slot() < items.size() ? items.get(packet.slot()) : UxItem.EMPTY;
+            adapter.packets().sendSetSlot(player, windowId, stateId, packet.slot(), item);
         }
         List<UxItem> items = menu.items();
-        for (Integer slot : dirty) {
-            UxItem item = slot < items.size() ? items.get(slot) : UxItem.EMPTY;
-            adapter.packets().sendSetSlot(player, windowId, stateId, slot, item);
+        for (Integer slot : packet.changedSlotIds()) {
+            if (slot != null && slot >= 0 && slot <= last) {
+                UxItem item = slot < items.size() ? items.get(slot) : UxItem.EMPTY;
+                adapter.packets().sendSetSlot(player, windowId, stateId, slot, item);
+            }
         }
         adapter.packets().sendSetSlot(player, windowId, stateId, -1, carried == null ? UxItem.EMPTY : carried);
     }

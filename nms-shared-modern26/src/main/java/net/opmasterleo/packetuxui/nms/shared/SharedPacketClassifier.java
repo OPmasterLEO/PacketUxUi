@@ -1,16 +1,10 @@
 package net.opmasterleo.packetuxui.nms.shared;
 
-import java.util.HashMap;
 import java.util.Map;
 
-import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
-import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
-import net.minecraft.network.HashedPatchMap;
-import net.minecraft.network.HashedStack;
 import net.minecraft.network.protocol.game.ServerboundContainerClickPacket;
 import net.minecraft.network.protocol.game.ServerboundContainerClosePacket;
 import net.minecraft.world.inventory.ContainerInput;
-import net.minecraft.world.item.ItemStack;
 import net.opmasterleo.packetuxui.nms.ClickPacket;
 import net.opmasterleo.packetuxui.nms.PacketClassifier;
 import net.opmasterleo.packetuxui.nms.WindowClickType;
@@ -33,6 +27,14 @@ public final class SharedPacketClassifier implements PacketClassifier {
             return Kind.CLOSE;
         }
         return Kind.OTHER;
+    }
+
+    @Override
+    public int clickWindowId(Object packet) {
+        if (packet instanceof ServerboundContainerClickPacket click) {
+            return click.containerId();
+        }
+        return -1;
     }
 
     @Override

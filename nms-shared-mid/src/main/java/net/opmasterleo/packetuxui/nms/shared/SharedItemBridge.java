@@ -19,6 +19,10 @@ import net.opmasterleo.packetuxui.nms.item.UxItem;
 
 public final class SharedItemBridge implements ItemBridge {
 
+    private static final int NMS_CACHE_LIMIT = 256;
+    private final java.util.concurrent.ConcurrentHashMap<UxItem, ItemStack> nmsCache =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
     @Override
     public Object toNms(UxItem item) {
         return toMinecraft(item);
@@ -46,7 +50,16 @@ public final class SharedItemBridge implements ItemBridge {
         if (item == null || item.isEmpty()) {
             return ItemStack.EMPTY;
         }
-        return CraftItemStack.asNMSCopy(toBukkit(item));
+        ItemStack cached = nmsCache.get(item);
+        if (cached != null) {
+            return cached.copy();
+        }
+        ItemStack nms = CraftItemStack.asNMSCopy(toBukkit(item));
+        if (nmsCache.size() >= NMS_CACHE_LIMIT) {
+            nmsCache.clear();
+        }
+        nmsCache.put(item, nms.copy());
+        return nms;
     }
 
     public UxItem fromMinecraft(ItemStack stack) {

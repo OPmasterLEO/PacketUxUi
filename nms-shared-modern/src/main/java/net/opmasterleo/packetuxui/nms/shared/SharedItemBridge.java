@@ -3,6 +3,7 @@ package net.opmasterleo.packetuxui.nms.shared;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
@@ -21,6 +22,9 @@ import net.opmasterleo.packetuxui.nms.ItemBridge;
 import net.opmasterleo.packetuxui.nms.item.UxItem;
 
 public final class SharedItemBridge implements ItemBridge {
+
+    private static final int NMS_CACHE_LIMIT = 256;
+    private final ConcurrentHashMap<UxItem, ItemStack> nmsCache = new ConcurrentHashMap<>();
 
     @Override
     public Object toNms(UxItem item) {
@@ -49,8 +53,17 @@ public final class SharedItemBridge implements ItemBridge {
         if (item == null || item.isEmpty()) {
             return ItemStack.EMPTY;
         }
+        ItemStack cached = nmsCache.get(item);
+        if (cached != null) {
+            return cached.copy();
+        }
         org.bukkit.inventory.ItemStack bukkit = toBukkit(item);
-        return CraftItemStack.asNMSCopy(bukkit);
+        ItemStack nms = CraftItemStack.asNMSCopy(bukkit);
+        if (nmsCache.size() >= NMS_CACHE_LIMIT) {
+            nmsCache.clear();
+        }
+        nmsCache.put(item, nms.copy());
+        return nms;
     }
 
     public UxItem fromMinecraft(ItemStack stack) {

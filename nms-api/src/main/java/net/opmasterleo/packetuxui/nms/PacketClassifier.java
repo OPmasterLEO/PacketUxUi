@@ -13,4 +13,9 @@ public interface PacketClassifier {
     ClickPacket readClick(Object packet);
 
     boolean isClose(Object packet);
+
+    default int clickWindowId(Object packet) {
+        ClickPacket click = readClick(packet);
+        return click == null ? -1 : click.windowId();
+    }
 }

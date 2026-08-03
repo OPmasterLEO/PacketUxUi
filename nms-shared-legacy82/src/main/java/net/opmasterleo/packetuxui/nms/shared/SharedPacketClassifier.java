@@ -29,6 +29,14 @@ public final class SharedPacketClassifier implements PacketClassifier {
     }
 
     @Override
+    public int clickWindowId(Object packet) {
+        if (packet instanceof PacketPlayInWindowClick click) {
+            return click.a();
+        }
+        return -1;
+    }
+
+    @Override
     public ClickPacket readClick(Object packet) {
         if (!(packet instanceof PacketPlayInWindowClick click)) {
             return null;

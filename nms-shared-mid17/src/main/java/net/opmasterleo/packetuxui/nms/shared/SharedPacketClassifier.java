@@ -1,7 +1,9 @@
 package net.opmasterleo.packetuxui.nms.shared;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 
 import org.bukkit.craftbukkit.libs.it.unimi.dsi.fastutil.ints.Int2ObjectMap;
 import net.minecraft.network.protocol.game.ServerboundContainerClickPacket;
@@ -33,30 +35,53 @@ public final class SharedPacketClassifier implements PacketClassifier {
     }
 
     @Override
+    public int clickWindowId(Object packet) {
+        if (packet instanceof ServerboundContainerClickPacket click) {
+            return click.getContainerId();
+        }
+        return -1;
+    }
+
+    @Override
     public ClickPacket readClick(Object packet) {
         if (!(packet instanceof ServerboundContainerClickPacket click)) {
             return null;
         }
-        Map<Integer, UxItem> changed;
         Int2ObjectMap<ItemStack> slots = click.f();
+        Set<Integer> ids;
         if (slots == null || slots.isEmpty()) {
-            changed = Map.of();
+            ids = Set.of();
         } else {
-            changed = new HashMap<>(slots.size());
+            ids = new HashSet<>(slots.size());
             for (Int2ObjectMap.Entry<ItemStack> entry : slots.int2ObjectEntrySet()) {
-                changed.put(entry.getIntKey(), items.fromMinecraft(entry.getValue()));
+                ids.add(entry.getIntKey());
             }
         }
-        return new ClickPacket(
+        ItemStack carriedNms = click.getCarriedItem();
+        boolean carriedEmpty = carriedNms == null || carriedNms.isEmpty();
+        return ClickPacket.lazy(
                 click.getContainerId(),
                 click.getStateId(),
                 click.getSlotNum(),
                 click.getButtonNum(),
                 0,
                 fromNms(click.getClickType()),
-                changed,
-                items.fromMinecraft(click.getCarriedItem())
+                ids,
+                carriedEmpty,
+                () -> decodeChanged(slots),
+                () -> carriedEmpty ? UxItem.EMPTY : items.fromMinecraft(carriedNms)
         );
+    }
+
+    private Map<Integer, UxItem> decodeChanged(Int2ObjectMap<ItemStack> slots) {
+        if (slots == null || slots.isEmpty()) {
+            return Map.of();
+        }
+        Map<Integer, UxItem> changed = new HashMap<>(slots.size());
+        for (Int2ObjectMap.Entry<ItemStack> entry : slots.int2ObjectEntrySet()) {
+            changed.put(entry.getIntKey(), items.fromMinecraft(entry.getValue()));
+        }
+        return changed;
     }
 
     @Override

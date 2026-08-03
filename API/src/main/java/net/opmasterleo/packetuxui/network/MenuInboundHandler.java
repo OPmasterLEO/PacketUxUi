@@ -31,15 +31,21 @@ public final class MenuInboundHandler extends ChannelInboundHandlerAdapter {
 
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) {
-        PacketClassifier.Kind kind = adapter.classifier().kindOf(msg);
+        PacketClassifier classifier = adapter.classifier();
+        PacketClassifier.Kind kind = classifier.kindOf(msg);
         switch (kind) {
             case CLOSE -> {
                 scheduler.runForPlayer(player, () -> menuService.onCloseMenu(player));
                 ctx.fireChannelRead(msg);
             }
             case CLICK -> {
-                ClickPacket click = adapter.classifier().readClick(msg);
-                if (click == null || menuService.shouldIgnore(click.windowId(), player)) {
+                int windowId = classifier.clickWindowId(msg);
+                if (windowId < 0 || menuService.shouldIgnore(windowId, player)) {
+                    ctx.fireChannelRead(msg);
+                    return;
+                }
+                ClickPacket click = classifier.readClick(msg);
+                if (click == null) {
                     ctx.fireChannelRead(msg);
                     return;
                 }
