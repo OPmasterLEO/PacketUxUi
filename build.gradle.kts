@@ -14,6 +14,8 @@ allprojects {
         mavenLocal()
         maven("https://repo.papermc.io/repository/maven-public/")
         maven("https://hub.spigotmc.org/nexus/content/repositories/snapshots/")
+        // CodeMC NMS (docs use .io; some envs only resolve one hostname)
+        maven("https://repo.codemc.io/repository/nms/")
         maven("https://repo.codemc.org/repository/nms/")
     }
 }
