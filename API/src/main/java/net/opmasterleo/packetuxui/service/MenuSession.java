@@ -74,7 +74,7 @@ public final class MenuSession {
     }
 
     public int topSlotCount() {
-        return menu.type().size();
+        return menu.type().protocolTopSize();
     }
 
     public InventoryType type() {
@@ -82,7 +82,7 @@ public final class MenuSession {
     }
 
     public SlotKind slotKind(int slot) {
-        if (slot < 0 || slot > menu.type().lastIndex()) {
+        if (slot < 0 || slot > menu.type().protocolLastIndex()) {
             return SlotKind.DECORATIVE;
         }
         Button button = menu.buttons().get(slot);

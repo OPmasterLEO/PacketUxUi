@@ -43,8 +43,19 @@ public enum InventoryType {
         return size;
     }
 
+    public int protocolTopSize() {
+        return switch (this) {
+            case CUSTOM9x7, CUSTOM9x8, CUSTOM9x9, CUSTOM9x10 -> 54;
+            default -> size;
+        };
+    }
+
     public int lastIndex() {
         return size - 1;
+    }
+
+    public int protocolLastIndex() {
+        return protocolTopSize() - 1;
     }
 
     public int id() {

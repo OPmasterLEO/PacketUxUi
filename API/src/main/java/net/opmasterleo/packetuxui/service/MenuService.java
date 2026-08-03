@@ -128,7 +128,7 @@ public final class MenuService {
     }
 
     public void openMenuSync(Player player, Menu menu) {
-        closeCurrent(player, true, false);
+        closeCurrent(player, true, true);
         Menu copy = menu.copy();
         int windowId;
         try {
@@ -149,7 +149,8 @@ public final class MenuService {
         fireScope(player, true, session.topSlotCount());
         int stateId = session.nextStateId();
         adapter.packets().sendOpenWindow(player, windowId, copy.type().id(), copy.name());
-        adapter.packets().sendWindowItems(player, windowId, stateId, contentsForOpen(player, copy), null);
+        adapter.packets().sendWindowItems(player, windowId, stateId, fullContents(player, copy), null);
+        adapter.packets().sendCursorItem(player, UxItem.EMPTY);
         session.setPhase(SessionPhase.OPEN);
     }
 
@@ -219,7 +220,7 @@ public final class MenuService {
             } catch (Throwable ignored) {
             }
         }
-        if (reclaim && reclaimCursorOnClose && session.menu().isEditable()) {
+        if (reclaim && reclaimCursorOnClose && cursor != null && !cursor.isEmpty()) {
             CursorReclaim.reclaim(player, adapter.items(), cursor);
         }
         if (sendClosePacket) {
@@ -288,7 +289,15 @@ public final class MenuService {
 
     public void handleIncomingClick(Player player, ClickPacket packet) {
         MenuSession session = sessions.get(id(player));
-        if (session == null || session.phase() != SessionPhase.OPEN) {
+        if (session == null) {
+            return;
+        }
+        if (!isValidClickSlot(session, packet)) {
+            resyncFull(player, session);
+            return;
+        }
+        if (session.phase() != SessionPhase.OPEN) {
+            resyncFull(player, session);
             return;
         }
         long now = System.nanoTime();
@@ -296,6 +305,8 @@ public final class MenuService {
                 && now - session.lastClickNanos() < clickDebounceNanos) {
             if (session.menu().mode() == MenuMode.EDITABLE) {
                 rejectEditable(player, session, packet);
+            } else {
+                resyncFull(player, session);
             }
             return;
         }
@@ -321,17 +332,20 @@ public final class MenuService {
         settleReadOnlyOutside(player, session, packet);
     }
 
+    private boolean isValidClickSlot(MenuSession session, ClickPacket packet) {
+        int slot = packet.slot();
+        if (slot == -999 || slot == -1) {
+            return true;
+        }
+        int max = session.menu().type().protocolTopSize() + 36;
+        return slot >= 0 && slot < max;
+    }
+
     private void settleReadOnlyOutside(Player player, MenuSession session, ClickPacket packet) {
-        boolean emptyCursor = packet.carriedEmpty();
         Menu menu = session.menu();
-        int last = menu.type().lastIndex();
+        int last = menu.type().protocolLastIndex();
         boolean touchesTop = (packet.slot() >= 0 && packet.slot() <= last)
                 || touchesTopSlots(packet, last);
-        if (!touchesTop && emptyCursor && packet.changedSlotIds().isEmpty()) {
-            adapter.packets().sendCursorItem(player, UxItem.EMPTY);
-            carriedItem.remove(id(player));
-            return;
-        }
         if (!touchesTop) {
             settleBottomSlots(player, session, packet);
             return;
@@ -342,23 +356,25 @@ public final class MenuService {
 
     private void settleBottomSlots(Player player, MenuSession session, ClickPacket packet) {
         Menu menu = session.menu();
-        int topSize = menu.type().size();
-        int last = menu.type().lastIndex();
+        int topSize = menu.type().protocolTopSize();
+        int last = menu.type().protocolLastIndex();
+        int maxSlot = topSize + 36;
         List<UxItem> bottom = snapshotBottom(player);
         int windowId = session.windowId();
         int stateId = session.nextStateId();
-        if (packet.slot() > last) {
-            int idx = packet.slot() - topSize;
-            if (idx >= 0 && idx < bottom.size()) {
-                adapter.packets().sendSetSlot(player, windowId, stateId, packet.slot(), bottom.get(idx));
-            }
+        Set<Integer> dirty = new HashSet<>();
+        if (packet.slot() > last && packet.slot() < maxSlot) {
+            dirty.add(packet.slot());
         }
         for (Integer slot : packet.changedSlotIds()) {
-            if (slot != null && slot > last) {
-                int idx = slot - topSize;
-                if (idx >= 0 && idx < bottom.size()) {
-                    adapter.packets().sendSetSlot(player, windowId, stateId, slot, bottom.get(idx));
-                }
+            if (slot != null && slot > last && slot < maxSlot) {
+                dirty.add(slot);
+            }
+        }
+        for (Integer slot : dirty) {
+            int idx = slot - topSize;
+            if (idx >= 0 && idx < bottom.size()) {
+                adapter.packets().sendSetSlot(player, windowId, stateId, slot, bottom.get(idx));
             }
         }
         adapter.packets().sendCursorItem(player, UxItem.EMPTY);
@@ -367,7 +383,7 @@ public final class MenuService {
 
     private void handleEditableClick(Player player, MenuSession session, ClickData clickData, ClickPacket packet) {
         Menu menu = session.menu();
-        int last = menu.type().lastIndex();
+        int last = menu.type().protocolLastIndex();
         WindowClickType type = packet.clickType();
 
         if (type == WindowClickType.SWAP || type == WindowClickType.THROW || type == WindowClickType.CLONE) {
@@ -442,7 +458,7 @@ public final class MenuService {
 
     private void handleShiftFromBottom(Player player, MenuSession session, ClickPacket packet) {
         Menu menu = session.menu();
-        int topSize = menu.type().size();
+        int topSize = menu.type().protocolTopSize();
         int bottomIndex = packet.slot() - topSize;
         List<UxItem> bottom = snapshotBottom(player);
         if (bottomIndex < 0 || bottomIndex >= bottom.size()) {
@@ -477,16 +493,17 @@ public final class MenuService {
     }
 
     private void settleEditableBottom(Player player, MenuSession session, ClickPacket packet) {
-        int topSize = session.menu().type().size();
+        int topSize = session.menu().type().protocolTopSize();
+        int maxSlot = topSize + 36;
         int windowId = session.windowId();
         int stateId = session.nextStateId();
         List<UxItem> bottom = snapshotBottom(player);
         Set<Integer> dirty = new HashSet<>();
-        if (packet.slot() >= topSize) {
+        if (packet.slot() >= topSize && packet.slot() < maxSlot) {
             dirty.add(packet.slot());
         }
         for (Integer slot : packet.changedSlotIds()) {
-            if (slot != null && slot >= topSize) {
+            if (slot != null && slot >= topSize && slot < maxSlot) {
                 dirty.add(slot);
             }
         }
@@ -559,7 +576,7 @@ public final class MenuService {
             if (slot == null) {
                 continue;
             }
-            if (slot < 0 || slot > menu.type().lastIndex() || !session.isEditableSlot(slot)) {
+            if (slot < 0 || slot > menu.type().protocolLastIndex() || !session.isEditableSlot(slot)) {
                 allEditable = false;
                 break;
             }
@@ -567,7 +584,7 @@ public final class MenuService {
         if (!allEditable && unique.size() > 1) {
             rejectEditable(player, session, packet);
             for (Integer slot : unique) {
-                if (slot != null && slot >= 0 && slot <= menu.type().lastIndex()) {
+                if (slot != null && slot >= 0 && slot <= menu.type().protocolLastIndex()) {
                     adapter.packets().sendSetSlot(
                             player,
                             session.windowId(),
@@ -661,7 +678,7 @@ public final class MenuService {
 
     private void rejectEditable(Player player, MenuSession session, ClickPacket packet) {
         Menu menu = session.menu();
-        int last = menu.type().lastIndex();
+        int last = menu.type().protocolLastIndex();
         int windowId = session.windowId();
         int stateId = session.nextStateId();
         UxItem cursor = carriedItem.getOrDefault(id(player), UxItem.EMPTY);
@@ -685,15 +702,16 @@ public final class MenuService {
     }
 
     private List<UxItem> contentsForOpen(Player player, Menu menu) {
-        if (menu.mode() == MenuMode.EDITABLE) {
-            return fullContents(player, menu);
-        }
-        return menu.items();
+        return fullContents(player, menu);
     }
 
     private List<UxItem> fullContents(Player player, Menu menu) {
-        List<UxItem> contents = new ArrayList<>(menu.type().size() + 36);
-        contents.addAll(menu.items());
+        int top = menu.type().protocolTopSize();
+        List<UxItem> contents = new ArrayList<>(top + 36);
+        List<UxItem> items = menu.items();
+        for (int i = 0; i < top; i++) {
+            contents.add(i < items.size() ? items.get(i) : UxItem.EMPTY);
+        }
         contents.addAll(snapshotBottom(player));
         return contents;
     }
@@ -724,12 +742,25 @@ public final class MenuService {
 
     private void handleClickInventory(Player player, MenuSession session, ClickPacket packet) {
         Menu menu = session.menu();
+        if (!canInjectPlayerInventoryClick(packet, menu)) {
+            settleEditableBottom(player, session, packet);
+            return;
+        }
         ClickData clickData = getClickType(packet);
         updateCarriedItem(player, packet.carried(), clickData.clickType());
         if (clickData.clickType() == ClickType.DRAG_END) {
             handleDragEnd(player, menu);
         }
         adapter.packets().injectClick(player, createAdjustedClickPacket(packet, menu));
+    }
+
+    private boolean canInjectPlayerInventoryClick(ClickPacket packet, Menu menu) {
+        int slot = packet.slot();
+        if (slot == -999) {
+            return true;
+        }
+        int remapped = slot - menu.type().protocolTopSize() + 9;
+        return remapped >= 0 && remapped <= 45;
     }
 
     public void handleClickMenu(Player player, ClickData clickData, int slot) {
@@ -745,6 +776,7 @@ public final class MenuService {
         int slot = packet.slot();
         Button button = slot >= 0 ? menu.buttons().get(slot) : null;
         resyncDirtySlots(player, session, packet, UxItem.EMPTY);
+        settleBottomSlots(player, session, packet);
         carriedItem.remove(id(player));
         if (button == null) {
             return;
@@ -772,17 +804,23 @@ public final class MenuService {
             if (session == null) {
                 return;
             }
-            int stateId = session.nextStateId();
-            List<UxItem> contents = session.menu().mode() == MenuMode.EDITABLE
-                    ? fullContents(player, session.menu())
-                    : session.menu().items();
+            boolean editable = session.menu().mode() == MenuMode.EDITABLE;
+            if (!editable) {
+                carriedItem.remove(id(player));
+            }
+            UxItem cursor = editable
+                    ? carriedItem.getOrDefault(id(player), UxItem.EMPTY)
+                    : UxItem.EMPTY;
             adapter.packets().sendWindowItems(
                     player,
                     session.windowId(),
-                    stateId,
-                    contents,
-                    carriedItem.get(id(player))
+                    session.nextStateId(),
+                    fullContents(player, session.menu()),
+                    cursor.isEmpty() ? null : cursor
             );
+            if (!editable) {
+                adapter.packets().sendCursorItem(player, UxItem.EMPTY);
+            }
         });
     }
 
@@ -793,7 +831,7 @@ public final class MenuService {
                 return;
             }
             Menu menu = session.menu();
-            if (slot > menu.type().lastIndex()) {
+            if (slot < 0 || slot > menu.type().lastIndex()) {
                 throw new IllegalArgumentException("Slot out of range.");
             }
             UxItem next = item == null ? UxItem.EMPTY : item;
@@ -817,7 +855,7 @@ public final class MenuService {
             }
             Menu menu = session.menu();
             for (Integer slot : newItems.keySet()) {
-                if (slot > menu.type().lastIndex()) {
+                if (slot == null || slot < 0 || slot > menu.type().lastIndex()) {
                     throw new IllegalArgumentException("Slot out of range.");
                 }
             }
@@ -856,7 +894,7 @@ public final class MenuService {
                 return;
             }
             Menu menu = session.menu();
-            if (slot > menu.type().lastIndex()) {
+            if (slot < 0 || slot > menu.type().lastIndex()) {
                 throw new IllegalArgumentException("Slot out of range.");
             }
             menu.buttons().put(slot, newButton);
@@ -881,7 +919,7 @@ public final class MenuService {
             }
             Menu menu = session.menu();
             for (Integer slot : newButtons.keySet()) {
-                if (slot > menu.type().lastIndex()) {
+                if (slot == null || slot < 0 || slot > menu.type().lastIndex()) {
                     throw new IllegalArgumentException("Slot out of range.");
                 }
             }
@@ -941,13 +979,12 @@ public final class MenuService {
 
     public boolean isMenuClick(ClickPacket packet, ClickType clickType, Player player) {
         Menu menu = requireMenu(player);
-        int last = menu.type().lastIndex();
+        int last = menu.type().protocolLastIndex();
+        boolean topSlot = packet.slot() >= 0 && packet.slot() <= last;
         return switch (clickType) {
-            case SHIFT_CLICK -> true;
-            case PICKUP, PLACE -> packet.slot() >= 0 && packet.slot() <= last;
-            case DRAG_END, PICKUP_ALL -> (packet.slot() >= 0 && packet.slot() <= last)
-                    || touchesTopSlots(packet, last);
-            default -> false;
+            case SHIFT_CLICK, PICKUP, PLACE -> topSlot;
+            case DRAG_END, PICKUP_ALL -> topSlot || touchesTopSlots(packet, last);
+            default -> topSlot;
         };
     }
 
@@ -999,7 +1036,7 @@ public final class MenuService {
             for (AccumulatedDrag drag : drags) {
                 ClickPacket packet = drag.type() == ClickType.DRAG_START
                         ? createDragPacket(drag.packet(), 0)
-                        : createDragPacket(drag.packet(), -menu.type().size() + 9);
+                        : createDragPacket(drag.packet(), -menu.type().protocolTopSize() + 9);
                 adapter.packets().injectClick(player, packet);
             }
         }
@@ -1025,12 +1062,12 @@ public final class MenuService {
 
     private void resyncDirtySlots(Player player, MenuSession session, ClickPacket packet, UxItem carried) {
         Menu menu = session.menu();
-        int last = menu.type().lastIndex();
+        int last = menu.type().protocolLastIndex();
         int windowId = session.windowId();
         int stateId = session.nextStateId();
         if (packet.slot() >= 0 && packet.slot() <= last) {
             List<UxItem> items = menu.items();
-            UxItem item = packet.slot() < items.size() ? items.get(packet.slot()) : UxItem.EMPTY;
+            UxItem item = packet.slot() < items.size() ? menu.items().get(packet.slot()) : UxItem.EMPTY;
             adapter.packets().sendSetSlot(player, windowId, stateId, packet.slot(), item);
         }
         List<UxItem> items = menu.items();
@@ -1057,15 +1094,22 @@ public final class MenuService {
     }
 
     private ClickPacket createAdjustedClickPacket(ClickPacket packet, Menu menu) {
-        int slotOffset = packet.slot() != -999 ? packet.slot() - menu.type().size() + 9 : -999;
+        if (packet.slot() == -999) {
+            return packet.withWindowAndSlot(0, -999, Map.of());
+        }
+        int offset = -menu.type().protocolTopSize() + 9;
+        int slotOffset = packet.slot() + offset;
         Map<Integer, UxItem> changed = packet.changedSlots();
         if (changed.isEmpty()) {
             return packet.withWindowAndSlot(0, slotOffset, Map.of());
         }
         Map<Integer, UxItem> adjustedSlots = new HashMap<>(changed.size());
-        int offset = -menu.type().size() + 9;
         for (Map.Entry<Integer, UxItem> entry : changed.entrySet()) {
-            adjustedSlots.put(entry.getKey() + offset, entry.getValue());
+            int adjusted = entry.getKey() + offset;
+            if (adjusted < 0 || adjusted > 45) {
+                continue;
+            }
+            adjustedSlots.put(adjusted, entry.getValue());
         }
         return packet.withWindowAndSlot(0, slotOffset, adjustedSlots);
     }

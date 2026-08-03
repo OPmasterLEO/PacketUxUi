@@ -1,7 +1,11 @@
 package net.opmasterleo.packetuxui.nms.shared;
 
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 
+import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
+import net.minecraft.network.HashedStack;
 import net.minecraft.network.protocol.game.ServerboundContainerClickPacket;
 import net.minecraft.network.protocol.game.ServerboundContainerClosePacket;
 import net.minecraft.world.inventory.ContainerInput;
@@ -42,21 +46,39 @@ public final class SharedPacketClassifier implements PacketClassifier {
         if (!(packet instanceof ServerboundContainerClickPacket click)) {
             return null;
         }
-        return new ClickPacket(
+        Int2ObjectMap<HashedStack> slots = click.changedSlots();
+        Set<Integer> ids;
+        if (slots == null || slots.isEmpty()) {
+            ids = Set.of();
+        } else {
+            ids = new HashSet<>(slots.size());
+            for (Int2ObjectMap.Entry<HashedStack> entry : slots.int2ObjectEntrySet()) {
+                ids.add(entry.getIntKey());
+            }
+        }
+        HashedStack carried = click.carriedItem();
+        boolean carriedEmpty = isHashedEmpty(carried);
+        return ClickPacket.lazy(
                 click.containerId(),
                 click.stateId(),
                 click.slotNum(),
                 click.buttonNum(),
                 0,
                 fromNms(click.containerInput()),
-                Map.of(),
-                UxItem.EMPTY
+                ids,
+                carriedEmpty,
+                () -> Map.of(),
+                () -> UxItem.EMPTY
         );
     }
 
     @Override
     public boolean isClose(Object packet) {
         return packet instanceof ServerboundContainerClosePacket;
+    }
+
+    private static boolean isHashedEmpty(HashedStack stack) {
+        return stack == null || stack == HashedStack.EMPTY || stack.equals(HashedStack.EMPTY);
     }
 
     private static WindowClickType fromNms(ContainerInput type) {
