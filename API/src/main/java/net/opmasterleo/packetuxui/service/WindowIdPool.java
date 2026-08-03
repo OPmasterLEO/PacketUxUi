@@ -1,6 +1,7 @@
 package net.opmasterleo.packetuxui.service;
 
 import java.util.BitSet;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
@@ -13,42 +14,49 @@ public final class WindowIdPool {
     @Deprecated
     public static final int LEGACY_FIXED_ID = 126;
 
-    private final ConcurrentMap<Player, Integer> assigned = new ConcurrentHashMap<>();
+    private final ConcurrentMap<UUID, Integer> assigned = new ConcurrentHashMap<>();
     private final BitSet inUse = new BitSet(MAX_ID + 1);
-    private int cursor = MIN_ID;
 
     public synchronized int allocate(Player player) {
-        Integer existing = assigned.get(player);
+        return allocate(player.getUniqueId());
+    }
+
+    public synchronized int allocate(UUID playerId) {
+        Integer existing = assigned.get(playerId);
         if (existing != null) {
             return existing;
         }
         int id = nextFree();
         inUse.set(id);
-        assigned.put(player, id);
+        assigned.put(playerId, id);
         return id;
     }
 
     public int windowId(Player player) {
-        Integer id = assigned.get(player);
+        return windowId(player.getUniqueId());
+    }
+
+    public int windowId(UUID playerId) {
+        Integer id = assigned.get(playerId);
         return id != null ? id : -1;
     }
 
     public synchronized void release(Player player) {
-        Integer id = assigned.remove(player);
+        release(player.getUniqueId());
+    }
+
+    public synchronized void release(UUID playerId) {
+        Integer id = assigned.remove(playerId);
         if (id != null) {
             inUse.clear(id);
         }
     }
 
     private int nextFree() {
-        int span = MAX_ID - MIN_ID + 1;
-        for (int i = 0; i < span; i++) {
-            int candidate = cursor;
-            cursor = candidate >= MAX_ID ? MIN_ID : candidate + 1;
-            if (!inUse.get(candidate)) {
-                return candidate;
-            }
+        int id = inUse.nextClearBit(MIN_ID);
+        if (id > MAX_ID) {
+            throw new IllegalStateException("Virtual window id pool exhausted (" + MIN_ID + ".." + MAX_ID + ")");
         }
-        throw new IllegalStateException("Virtual window id pool exhausted (" + MIN_ID + ".." + MAX_ID + ")");
+        return id;
     }
 }

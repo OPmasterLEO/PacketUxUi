@@ -2,8 +2,8 @@
 
 [![JitPack](https://jitpack.io/v/OPmasterLEO/PacketUxUi.svg)](https://jitpack.io/#OPmasterLEO/PacketUxUi)
 
-Virtual packet menus for Paper / Spigot / Folia (**Minecraft 1.8 → 26.x**).  
-No Bukkit `Inventory` open — Netty click handling, dirty-slot updates, Folia entity hops.
+Virtual packet menus for Paper / Spigot / Folia (**Minecraft 1.8 → 26.2**).  
+Direct NMS (no PacketEvents) — Netty click handling, dirty-slot Set Slot updates, Folia entity hops.
 
 ## How to
 
@@ -132,23 +132,18 @@ public void onDisable() {
 }
 ```
 
-### Open a read-only menu
+### Patch a single slot (Set Slot, not full Window Items)
 
 ```java
-PacketMenus.menu("<gold>Leaderboard", InventoryType.GENERIC9X6)
-    .readOnly()
-    .button(13, b -> b
-        .item(UxItem.builder("minecraft:emerald")
-            .name(Component.text("Refresh"))
-            .build())
-        .click(ctx -> ctx.player().sendMessage("clicked")))
-    .open(player);
+PacketMenus.patchSlot(player, 13, UxItem.builder("minecraft:diamond").build());
+// unchanged items are skipped (equals check)
+PacketMenus.refresh(player); // full Window Items only when you need a full rebuild
 ```
 
 **Menu modes**
-- `READ_ONLY` (default) — leaderboards / stats / worth browse; clicks reverted
+- `READ_ONLY` (default) — buttons only; clicks cancelled + dirty Set Slot; never mutates real inventory
 - `EDITABLE` — packet-based top-slot movement; bottom strip mirrored read-only; cursor discarded on close unless you handle `onClose`
-- `EDITABLE_PLAYER_INVENTORY` (deprecated) — injects bottom clicks into real inventory; prefer `EDITABLE`
+- `EDITABLE_PLAYER_INVENTORY` (deprecated) — injects bottom clicks into real inventory; prefer `EDITABLE` or Bukkit GUIs for ownership
 
 ## Modules
 
@@ -167,14 +162,36 @@ PacketMenus.menu("<gold>Leaderboard", InventoryType.GENERIC9X6)
 ./gradlew.bat :TestMenu:shadowJar
 ```
 
-## Design notes (DonutSMPCore-style)
+## Packet updates
 
-- Never blanket `player.updateInventory()` on clicks — dirty `Set Slot` only
-- Per-player virtual window id pool (`100–126`) + state ids
-- Folia-safe: Netty → `PlatformScheduler.runForPlayer`
-- Prefer PacketUxUi for **read-only** high-viewer menus; keep Bukkit EditableGui for item ownership
+| When | Packet |
+|------|--------|
+| Open menu | Open Window + Window Items |
+| Click settle / patch 1–N slots | Set Slot (dirty only) |
+| `refresh()` / EDITABLE bottom resync | Window Items |
+| Close (API) | Close Window |
+
+Never uses Bukkit `Player#updateInventory()` on the default click path.
+
+## Window ids
+
+Per-player virtual ids from a pool **100–126**. Released on close/quit. Sessions and caches are keyed by `UUID`, not `Player`.
+
+## Folia / Paper
+
+- Player-bound work (open, click, patch, pipeline inject) hops via `PlatformScheduler.runForPlayer` (entity scheduler on Folia, main thread on Spigot).
+- Global repeating tasks use the global region scheduler when available.
+- No PacketEvents dependency — direct NMS adapters for **1.8 → 26.2**.
+
+## Design notes
+
+- Prefer `READ_ONLY` for high-viewer leaderboards/stats
+- `EDITABLE` for virtual rearrange UIs; commit via `onClose` yourself — library does not write real inventory
+- Keep Bukkit EditableGui for sell/order ownership flows if you need true item transfer
 
 ## Requirements
 
-- JDK **21**
-- Paper/Folia recommended for modern versions (Mojang-mapped adapters 1.20.5+)
+- JDK **21** (build / modern runtimes); older Spigot servers still work via versioned NMS adapters
+- Supported servers: **Minecraft 1.8 → 26.2** (Spigot / Paper / Folia where available)
+  - **1.8–1.20.4** — relocated CraftBukkit/NMS buckets
+  - **1.20.5–26.2** — Mojang-mapped Paper adapters (Paper/Folia recommended)

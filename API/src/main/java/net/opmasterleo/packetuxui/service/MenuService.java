@@ -6,6 +6,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
@@ -36,13 +37,17 @@ public final class MenuService {
     private final NmsAdapter adapter;
     private final PlatformScheduler scheduler;
     private final WindowIdPool windowIds = new WindowIdPool();
-    private final ConcurrentHashMap<Player, MenuSession> sessions = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<Player, UxItem> carriedItem = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<Player, List<AccumulatedDrag>> accumulatedDrag = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<UUID, MenuSession> sessions = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<UUID, UxItem> carriedItem = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<UUID, List<AccumulatedDrag>> accumulatedDrag = new ConcurrentHashMap<>();
 
     public MenuService(NmsAdapter adapter, PlatformScheduler scheduler) {
         this.adapter = adapter;
         this.scheduler = scheduler;
+    }
+
+    private static UUID id(Player player) {
+        return player.getUniqueId();
     }
 
     public void openMenu(Player player, Menu menu) {
@@ -51,7 +56,7 @@ public final class MenuService {
             Menu copy = menu.copy();
             int windowId = windowIds.allocate(player);
             MenuSession session = new MenuSession(copy, windowId);
-            sessions.put(player, session);
+            sessions.put(id(player), session);
             int stateId = session.nextStateId();
             adapter.packets().sendOpenWindow(player, windowId, copy.type().id(), copy.name());
             adapter.packets().sendWindowItems(player, windowId, stateId, contentsForOpen(player, copy), null);
@@ -67,14 +72,14 @@ public final class MenuService {
     }
 
     private void closeCurrent(Player player, boolean sendClosePacket) {
-        MenuSession session = sessions.get(player);
+        MenuSession session = sessions.get(id(player));
         if (session == null) {
             windowIds.release(player);
-            carriedItem.remove(player);
+            carriedItem.remove(id(player));
             clearAccumulatedDrag(player);
             return;
         }
-        UxItem cursor = carriedItem.getOrDefault(player, UxItem.EMPTY);
+        UxItem cursor = carriedItem.getOrDefault(id(player), UxItem.EMPTY);
         BiConsumer<Player, CloseSnapshot> onClose = session.menu().onClose();
         if (onClose != null) {
             try {
@@ -85,9 +90,9 @@ public final class MenuService {
         if (sendClosePacket) {
             adapter.packets().sendCloseWindow(player, session.windowId());
         }
-        sessions.remove(player);
+        sessions.remove(id(player));
         windowIds.release(player);
-        carriedItem.remove(player);
+        carriedItem.remove(id(player));
         clearAccumulatedDrag(player);
     }
 
@@ -97,7 +102,7 @@ public final class MenuService {
             accumulateDrag(player, packet, clickData.clickType());
             return;
         }
-        MenuSession session = sessions.get(player);
+        MenuSession session = sessions.get(id(player));
         if (session == null) {
             return;
         }
@@ -113,7 +118,54 @@ public final class MenuService {
             handleClickInventory(player, session, packet);
             return;
         }
+        settleReadOnlyOutside(player, session, packet);
+    }
+
+    private void settleReadOnlyOutside(Player player, MenuSession session, ClickPacket packet) {
+        UxItem packetCursor = packet.carried();
+        boolean emptyCursor = packetCursor == null || adapter.items().isEmpty(packetCursor);
+        Menu menu = session.menu();
+        int last = menu.type().lastIndex();
+        boolean touchesTop = (packet.slot() >= 0 && packet.slot() <= last)
+                || packet.changedSlots().keySet().stream().anyMatch(s -> s != null && s >= 0 && s <= last);
+        if (!touchesTop && emptyCursor && packet.changedSlots().isEmpty()) {
+            int stateId = session.nextStateId();
+            adapter.packets().sendSetSlot(player, session.windowId(), stateId, -1, UxItem.EMPTY);
+            carriedItem.remove(id(player));
+            return;
+        }
+        if (!touchesTop) {
+            settleBottomSlots(player, session, packet);
+            return;
+        }
         resyncDirtySlots(player, session, packet, UxItem.EMPTY);
+        carriedItem.remove(id(player));
+    }
+
+    private void settleBottomSlots(Player player, MenuSession session, ClickPacket packet) {
+        Menu menu = session.menu();
+        int topSize = menu.type().size();
+        int last = menu.type().lastIndex();
+        List<UxItem> bottom = snapshotBottom(player);
+        int windowId = session.windowId();
+        int stateId = session.nextStateId();
+        Set<Integer> dirty = new HashSet<>();
+        if (packet.slot() > last) {
+            dirty.add(packet.slot());
+        }
+        for (Integer slot : packet.changedSlots().keySet()) {
+            if (slot != null && slot > last) {
+                dirty.add(slot);
+            }
+        }
+        for (Integer slot : dirty) {
+            int idx = slot - topSize;
+            if (idx >= 0 && idx < bottom.size()) {
+                adapter.packets().sendSetSlot(player, windowId, stateId, slot, bottom.get(idx));
+            }
+        }
+        adapter.packets().sendSetSlot(player, windowId, stateId, -1, UxItem.EMPTY);
+        carriedItem.remove(id(player));
     }
 
     private void handleEditableClick(Player player, MenuSession session, ClickData clickData, ClickPacket packet) {
@@ -151,7 +203,7 @@ public final class MenuService {
             return b == null || b.takeable();
         };
 
-        UxItem cursor = carriedItem.getOrDefault(player, UxItem.EMPTY);
+        UxItem cursor = carriedItem.getOrDefault(id(player), UxItem.EMPTY);
         VirtualClickSimulator.Result result = VirtualClickSimulator.simulate(
                 menu.items(),
                 cursor,
@@ -174,7 +226,7 @@ public final class MenuService {
             return b == null || b.takeable();
         };
         List<Integer> slots = new ArrayList<>();
-        List<AccumulatedDrag> drags = accumulatedDrag.get(player);
+        List<AccumulatedDrag> drags = accumulatedDrag.get(id(player));
         if (drags != null) {
             for (AccumulatedDrag drag : drags) {
                 if (drag.type() == ClickType.DRAG_ADD) {
@@ -192,7 +244,7 @@ public final class MenuService {
             rejectEditable(player, session, packet);
             return;
         }
-        UxItem cursor = carriedItem.getOrDefault(player, UxItem.EMPTY);
+        UxItem cursor = carriedItem.getOrDefault(id(player), UxItem.EMPTY);
         VirtualClickSimulator.Result result = VirtualClickSimulator.dragEnd(
                 menu.items(),
                 cursor,
@@ -213,7 +265,7 @@ public final class MenuService {
         if (clickData.clickType() == ClickType.DRAG_END) {
             clearAccumulatedDrag(player);
         }
-        UxItem cursor = carriedItem.getOrDefault(player, UxItem.EMPTY);
+        UxItem cursor = carriedItem.getOrDefault(id(player), UxItem.EMPTY);
         resyncDirtySlots(player, session, packet, cursor);
         if (button.execute() == null) {
             return;
@@ -240,9 +292,9 @@ public final class MenuService {
         Menu menu = session.menu();
         menu.setItems(result.items());
         if (result.cursor().isEmpty()) {
-            carriedItem.remove(player);
+            carriedItem.remove(id(player));
         } else {
-            carriedItem.put(player, result.cursor());
+            carriedItem.put(id(player), result.cursor());
         }
         int windowId = session.windowId();
         int stateId = session.nextStateId();
@@ -258,7 +310,7 @@ public final class MenuService {
         int last = menu.type().lastIndex();
         int windowId = session.windowId();
         int stateId = session.nextStateId();
-        UxItem cursor = carriedItem.getOrDefault(player, UxItem.EMPTY);
+        UxItem cursor = carriedItem.getOrDefault(id(player), UxItem.EMPTY);
         if (packet.slot() >= 0 && packet.slot() <= last) {
             UxItem item = packet.slot() < menu.items().size() ? menu.items().get(packet.slot()) : UxItem.EMPTY;
             adapter.packets().sendSetSlot(player, windowId, stateId, packet.slot(), item);
@@ -268,7 +320,7 @@ public final class MenuService {
 
     private void resyncFull(Player player, MenuSession session) {
         int stateId = session.nextStateId();
-        UxItem cursor = carriedItem.getOrDefault(player, UxItem.EMPTY);
+        UxItem cursor = carriedItem.getOrDefault(id(player), UxItem.EMPTY);
         adapter.packets().sendWindowItems(
                 player,
                 session.windowId(),
@@ -339,7 +391,7 @@ public final class MenuService {
         int slot = packet.slot();
         Button button = slot >= 0 ? menu.buttons().get(slot) : null;
         resyncDirtySlots(player, session, packet, UxItem.EMPTY);
-        carriedItem.remove(player);
+        carriedItem.remove(id(player));
         if (button == null) {
             return;
         }
@@ -362,7 +414,7 @@ public final class MenuService {
 
     public void refreshWindow(Player player) {
         scheduler.runForPlayer(player, () -> {
-            MenuSession session = sessions.get(player);
+            MenuSession session = sessions.get(id(player));
             if (session == null) {
                 return;
             }
@@ -375,14 +427,14 @@ public final class MenuService {
                     session.windowId(),
                     stateId,
                     contents,
-                    carriedItem.get(player)
+                    carriedItem.get(id(player))
             );
         });
     }
 
     public void updateItem(Player player, UxItem item, int slot) {
         scheduler.runForPlayer(player, () -> {
-            MenuSession session = sessions.get(player);
+            MenuSession session = sessions.get(id(player));
             if (session == null) {
                 return;
             }
@@ -390,16 +442,22 @@ public final class MenuService {
             if (slot > menu.type().lastIndex()) {
                 throw new IllegalArgumentException("Slot out of range.");
             }
-            List<UxItem> items = new ArrayList<>(menu.items());
-            items.set(slot, item);
-            menu.setItems(items);
-            adapter.packets().sendSetSlot(player, session.windowId(), session.nextStateId(), slot, item);
+            UxItem next = item == null ? UxItem.EMPTY : item;
+            List<UxItem> items = menu.items();
+            UxItem current = slot < items.size() ? items.get(slot) : UxItem.EMPTY;
+            if (current.equals(next)) {
+                return;
+            }
+            List<UxItem> copy = new ArrayList<>(items);
+            copy.set(slot, next);
+            menu.setItems(copy);
+            adapter.packets().sendSetSlot(player, session.windowId(), session.nextStateId(), slot, next);
         });
     }
 
     public void updateItems(Player player, Map<Integer, UxItem> newItems) {
         scheduler.runForPlayer(player, () -> {
-            MenuSession session = sessions.get(player);
+            MenuSession session = sessions.get(id(player));
             if (session == null) {
                 return;
             }
@@ -410,12 +468,22 @@ public final class MenuService {
                 }
             }
             List<UxItem> items = new ArrayList<>(menu.items());
+            Map<Integer, UxItem> dirty = new HashMap<>();
             for (Map.Entry<Integer, UxItem> entry : newItems.entrySet()) {
-                items.set(entry.getKey(), entry.getValue());
+                UxItem next = entry.getValue() == null ? UxItem.EMPTY : entry.getValue();
+                UxItem current = entry.getKey() < items.size() ? items.get(entry.getKey()) : UxItem.EMPTY;
+                if (current.equals(next)) {
+                    continue;
+                }
+                items.set(entry.getKey(), next);
+                dirty.put(entry.getKey(), next);
+            }
+            if (dirty.isEmpty()) {
+                return;
             }
             menu.setItems(items);
             int stateId = session.nextStateId();
-            for (Map.Entry<Integer, UxItem> entry : newItems.entrySet()) {
+            for (Map.Entry<Integer, UxItem> entry : dirty.entrySet()) {
                 adapter.packets().sendSetSlot(
                         player,
                         session.windowId(),
@@ -429,7 +497,7 @@ public final class MenuService {
 
     public void updateButton(Player player, Button newButton, int slot) {
         scheduler.runForPlayer(player, () -> {
-            MenuSession session = sessions.get(player);
+            MenuSession session = sessions.get(id(player));
             if (session == null) {
                 return;
             }
@@ -438,16 +506,21 @@ public final class MenuService {
                 throw new IllegalArgumentException("Slot out of range.");
             }
             menu.buttons().put(slot, newButton);
+            UxItem next = newButton.item();
             List<UxItem> items = new ArrayList<>(menu.items());
-            items.set(slot, newButton.item());
+            UxItem current = slot < items.size() ? items.get(slot) : UxItem.EMPTY;
+            items.set(slot, next);
             menu.setItems(items);
-            adapter.packets().sendSetSlot(player, session.windowId(), session.nextStateId(), slot, newButton.item());
+            if (current.equals(next)) {
+                return;
+            }
+            adapter.packets().sendSetSlot(player, session.windowId(), session.nextStateId(), slot, next);
         });
     }
 
     public void updateButtons(Player player, Map<Integer, Button> newButtons) {
         scheduler.runForPlayer(player, () -> {
-            MenuSession session = sessions.get(player);
+            MenuSession session = sessions.get(id(player));
             if (session == null) {
                 return;
             }
@@ -460,30 +533,40 @@ public final class MenuService {
             menu.buttons().clear();
             menu.buttons().putAll(newButtons);
             List<UxItem> items = new ArrayList<>(menu.type().size());
+            List<UxItem> previous = menu.items();
+            Map<Integer, UxItem> dirty = new HashMap<>();
             for (int index = 0; index < menu.type().size(); index++) {
                 Button button = newButtons.get(index);
-                items.add(button != null ? button.item() : UxItem.EMPTY);
+                UxItem next = button != null ? button.item() : UxItem.EMPTY;
+                items.add(next);
+                UxItem current = index < previous.size() ? previous.get(index) : UxItem.EMPTY;
+                if (!current.equals(next)) {
+                    dirty.put(index, next);
+                }
             }
             menu.setItems(items);
+            if (dirty.isEmpty()) {
+                return;
+            }
             int stateId = session.nextStateId();
             int windowId = session.windowId();
-            for (int index = 0; index < items.size(); index++) {
-                adapter.packets().sendSetSlot(player, windowId, stateId, index, items.get(index));
+            for (Map.Entry<Integer, UxItem> entry : dirty.entrySet()) {
+                adapter.packets().sendSetSlot(player, windowId, stateId, entry.getKey(), entry.getValue());
             }
         });
     }
 
     public Menu getMenu(Player player) {
-        MenuSession session = sessions.get(player);
+        MenuSession session = sessions.get(id(player));
         return session == null ? null : session.menu();
     }
 
     public MenuSession getSession(Player player) {
-        return sessions.get(player);
+        return sessions.get(id(player));
     }
 
     public boolean shouldIgnore(int id, Player player) {
-        MenuSession session = sessions.get(player);
+        MenuSession session = sessions.get(id(player));
         return session == null || session.windowId() != id;
     }
 
@@ -544,11 +627,11 @@ public final class MenuService {
     }
 
     public void accumulateDrag(Player player, ClickPacket packet, ClickType type) {
-        accumulatedDrag.computeIfAbsent(player, key -> new ArrayList<>()).add(new AccumulatedDrag(packet, type));
+        accumulatedDrag.computeIfAbsent(id(player), key -> new ArrayList<>()).add(new AccumulatedDrag(packet, type));
     }
 
     private void handleDragEnd(Player player, Menu menu) {
-        List<AccumulatedDrag> drags = accumulatedDrag.get(player);
+        List<AccumulatedDrag> drags = accumulatedDrag.get(id(player));
         if (drags != null) {
             for (AccumulatedDrag drag : drags) {
                 ClickPacket packet = drag.type() == ClickType.DRAG_START
@@ -565,7 +648,7 @@ public final class MenuService {
     }
 
     public void clearAccumulatedDrag(Player player) {
-        List<AccumulatedDrag> drags = accumulatedDrag.get(player);
+        List<AccumulatedDrag> drags = accumulatedDrag.get(id(player));
         if (drags != null) {
             drags.clear();
         }
@@ -617,12 +700,12 @@ public final class MenuService {
 
     private void updateCarriedItem(Player player, UxItem carried, ClickType clickType) {
         if (carried == null || adapter.items().isEmpty(carried)) {
-            carriedItem.remove(player);
+            carriedItem.remove(id(player));
             return;
         }
         switch (clickType) {
-            case PICKUP, PICKUP_ALL, DRAG_START, DRAG_END -> carriedItem.put(player, carried);
-            default -> carriedItem.remove(player);
+            case PICKUP, PICKUP_ALL, DRAG_START, DRAG_END -> carriedItem.put(id(player), carried);
+            default -> carriedItem.remove(id(player));
         }
     }
 
@@ -631,7 +714,7 @@ public final class MenuService {
     }
 
     private MenuSession requireSession(Player player) {
-        MenuSession session = sessions.get(player);
+        MenuSession session = sessions.get(id(player));
         if (session == null) {
             throw new IllegalStateException("Menu under player key not found.");
         }

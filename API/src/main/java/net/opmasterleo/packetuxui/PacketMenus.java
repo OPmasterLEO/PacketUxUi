@@ -60,8 +60,16 @@ public final class PacketMenus {
         service().updateItem(player, item, slot);
     }
 
+    public static void patchSlot(Player player, int slot, UxItem item) {
+        service().updateItem(player, item, slot);
+    }
+
     public static void updateButton(Player player, int slot, Button button) {
         service().updateButton(player, button, slot);
+    }
+
+    public static void refresh(Player player) {
+        service().refreshWindow(player);
     }
 
     public static MenuMode readOnly() {
