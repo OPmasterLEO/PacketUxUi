@@ -19,7 +19,6 @@ rootProject.name = "PacketUxUi"
 
 include("nms-api")
 include("API")
-include("packetuxui")
 include("TestMenu")
 
 val nmsBuckets = listOf(

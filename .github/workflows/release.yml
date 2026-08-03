@@ -49,7 +49,7 @@ jobs:
           echo "Resolved tag=${TAG} version=${PROJECT_VERSION}"
 
       - name: Build publishable artifacts
-        run: chmod +x gradlew && ./gradlew clean :packetuxui:shadowJar -x test --no-daemon
+        run: chmod +x gradlew && ./gradlew clean shadowJar -x test --no-daemon
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
@@ -58,7 +58,7 @@ jobs:
           name: ${{ steps.meta.outputs.tag }}
           generate_release_notes: true
           files: |
-            packetuxui/build/libs/PacketUxUi-*.jar
+            build/libs/PacketUxUi-*.jar
 
       - name: Warm JitPack for release tag
         run: |

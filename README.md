@@ -190,8 +190,7 @@ Scheduler backend is chosen **once at init** — no Paper/Bukkit branching on ho
 
 | Module | Role |
 |---|---|
-| **root (`PacketUxUi`)** | Published fat jar — JitPack `com.github.OPmasterLEO:PacketUxUi` |
-| `packetuxui` | Builds the shaded jar (internal module) |
+| **root (`PacketUxUi`)** | Published fat jar — `com.github.OPmasterLEO:PacketUxUi` |
 | `API` | Public API (shaded into fat jar) |
 | `nms-api` | Bridges / `UxItem` / `AdapterLoader` |
 | `nms:*` | Per-version adapters (1.8–26.2) |

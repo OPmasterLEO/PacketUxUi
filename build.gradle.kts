@@ -1,8 +1,8 @@
 plugins {
-    base
+    `java-library`
+    id("com.gradleup.shadow")
     `maven-publish`
     id("io.papermc.paperweight.userdev") apply false
-    id("com.gradleup.shadow") apply false
 }
 
 allprojects {
@@ -32,15 +32,70 @@ subprojects {
     }
 }
 
-evaluationDependsOn(":packetuxui")
+apply(from = rootProject.file("gradle/nms-buckets.gradle.kts"))
 
-val fatJar = project(":packetuxui").tasks.named("shadowJar")
+@Suppress("UNCHECKED_CAST")
+val nmsBuckets = extra["nmsBuckets"] as List<String>
+
+dependencies {
+    implementation(project(":API"))
+    implementation(project(":nms-api"))
+    nmsBuckets.forEach { bucket ->
+        implementation(project(":nms:$bucket"))
+    }
+    compileOnly("io.papermc.paper:paper-api:1.21.4-R0.1-SNAPSHOT")
+}
+
+java {
+    toolchain {
+        languageVersion.set(JavaLanguageVersion.of(21))
+    }
+}
+
+tasks.jar {
+    enabled = false
+    dependsOn(tasks.shadowJar)
+}
+
+tasks.shadowJar {
+    archiveBaseName.set("PacketUxUi")
+    archiveClassifier.set("")
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    exclude(
+        "META-INF/*.SF",
+        "META-INF/*.DSA",
+        "META-INF/*.RSA",
+        "META-INF/maven/**"
+    )
+    mergeServiceFiles()
+    manifest {
+        attributes["Automatic-Module-Name"] = "net.opmasterleo.packetuxui"
+        attributes["Implementation-Title"] = "PacketUxUi"
+        attributes["Implementation-Version"] = project.version
+        attributes["paperweight-mappings-namespace"] = "mojang"
+    }
+}
+
+listOf("apiElements", "runtimeElements").forEach { name ->
+    configurations.named(name).configure {
+        outgoing.artifacts.clear()
+        outgoing.artifact(tasks.shadowJar)
+    }
+}
+
+tasks.compileJava {
+    options.release.set(21)
+}
+
+tasks.build {
+    dependsOn(tasks.shadowJar)
+}
 
 publishing {
     publications {
         create<MavenPublication>("maven") {
-            artifactId = rootProject.name // PacketUxUi
-            artifact(fatJar) {
+            artifactId = rootProject.name
+            artifact(tasks.shadowJar) {
                 classifier = null
             }
             pom {
@@ -74,7 +129,7 @@ publishing {
 }
 
 tasks.named("publishToMavenLocal").configure {
-    dependsOn(fatJar)
+    dependsOn(tasks.shadowJar)
 }
 
 tasks.register("printVersion") {

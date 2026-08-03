@@ -30,7 +30,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: packetuxui-build
-          path: packetuxui/build/libs/PacketUxUi-*.jar
+          path: build/libs/PacketUxUi-*.jar
           if-no-files-found: error
 
   jitpack:
