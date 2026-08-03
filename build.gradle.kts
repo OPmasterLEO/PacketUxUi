@@ -13,7 +13,14 @@ allprojects {
         mavenLocal()
         maven("https://repo.papermc.io/repository/maven-public/")
         maven("https://hub.spigotmc.org/nexus/content/repositories/snapshots/")
-        maven("https://oss.sonatype.org/content/groups/public/")
+        exclusiveContent {
+            forRepository { maven("https://repo.codemc.io/repository/nms/") }
+            forRepository { mavenLocal() }
+            filter {
+                includeModule("org.spigotmc", "spigot")
+                includeModule("org.spigotmc", "minecraft-server")
+            }
+        }
     }
 }
 
