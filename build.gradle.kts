@@ -30,3 +30,10 @@ subprojects {
         }
     }
 }
+
+// JitPack looks for root publishToMavenLocal; the fat library lives in :packetuxui.
+tasks.register("publishToMavenLocal") {
+    group = "publishing"
+    description = "Publishes PacketUxUi fat jar via :packetuxui"
+    dependsOn(":packetuxui:publishToMavenLocal")
+}

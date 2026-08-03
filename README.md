@@ -1,33 +1,122 @@
 # PacketUxUi
 
+[![JitPack](https://jitpack.io/v/OPmasterLEO/PacketUxUi.svg)](https://jitpack.io/#OPmasterLEO/PacketUxUi)
+
 Virtual packet menus for Paper / Spigot / Folia (**Minecraft 1.8 → 26.x**).  
 No Bukkit `Inventory` open — Netty click handling, dirty-slot updates, Folia entity hops.
 
-**Coords:** `net.opmasterleo:packetuxui:1.0.0` (fat jar with all NMS adapters)
+## How to
 
-## Use as a dependency
+To get this project into your build:
 
-### Gradle
+### Step 1. Add the JitPack repository
 
-```kotlin
-repositories {
-    mavenLocal() // after publishToMavenLocal
-    // or your private Maven
-}
+#### Gradle (`settings.gradle`)
 
-dependencies {
-    implementation("net.opmasterleo:packetuxui:1.0.0")
-}
-
-tasks.shadowJar {
-    // relocate("net.opmasterleo.packetuxui", "your.plugin.lib.packetuxui")
-    // If you use minimize(), keep the library tree:
-    // minimize {
-    //     exclude(dependency("net.opmasterleo:packetuxui:.*"))
-    // }
-    // or include("net/opmasterleo/packetuxui/**")
+```gradle
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        mavenCentral()
+        maven { url 'https://jitpack.io' }
+    }
 }
 ```
+
+#### Gradle Kotlin (`settings.gradle.kts`)
+
+```kotlin
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        mavenCentral()
+        maven { url = uri("https://jitpack.io") }
+    }
+}
+```
+
+#### Maven (`pom.xml`)
+
+```xml
+<repositories>
+    <repository>
+        <id>jitpack.io</id>
+        <url>https://jitpack.io</url>
+    </repository>
+</repositories>
+```
+
+### Step 2. Add the dependency
+
+Replace `Tag` with a release tag, commit hash, or `main-SNAPSHOT`.
+
+Fat jar module (recommended if the aggregator POM is empty):
+
+```kotlin
+implementation("com.github.OPmasterLEO.PacketUxUi:packetuxui:Tag")
+```
+
+#### Gradle
+
+```gradle
+dependencies {
+    implementation 'com.github.OPmasterLEO:PacketUxUi:Tag'
+    // or: implementation 'com.github.OPmasterLEO.PacketUxUi:packetuxui:Tag'
+}
+```
+
+#### Gradle Kotlin
+
+```kotlin
+dependencies {
+    implementation("com.github.OPmasterLEO:PacketUxUi:Tag")
+    // or: implementation("com.github.OPmasterLEO.PacketUxUi:packetuxui:Tag")
+}
+```
+
+#### Maven
+
+```xml
+<dependency>
+    <groupId>com.github.OPmasterLEO</groupId>
+    <artifactId>PacketUxUi</artifactId>
+    <version>Tag</version>
+</dependency>
+```
+
+Or the fat module directly:
+
+```xml
+<dependency>
+    <groupId>com.github.OPmasterLEO.PacketUxUi</groupId>
+    <artifactId>packetuxui</artifactId>
+    <version>Tag</version>
+</dependency>
+```
+
+When shading into your plugin, relocate and keep the library tree if you use `minimize()`:
+
+```kotlin
+tasks.shadowJar {
+    // relocate("net.opmasterleo.packetuxui", "your.plugin.lib.packetuxui")
+    // minimize {
+    //     exclude(dependency("com.github.OPmasterLEO:PacketUxUi:.*"))
+    // }
+}
+```
+
+### Local Maven (optional)
+
+```bash
+./gradlew :packetuxui:publishToMavenLocal
+```
+
+```kotlin
+repositories { mavenLocal() }
+dependencies { implementation("net.opmasterleo:packetuxui:1.0.0") }
+```
+
+## Use
 
 ### Init in your plugin
 
