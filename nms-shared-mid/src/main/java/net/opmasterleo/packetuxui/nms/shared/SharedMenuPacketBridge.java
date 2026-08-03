@@ -119,35 +119,61 @@ public final class SharedMenuPacketBridge implements MenuPacketBridge {
         };
     }
 
-    private static final MenuType<?>[] MENU_TYPES = {
-            MenuType.GENERIC_9x1,
-            MenuType.GENERIC_9x2,
-            MenuType.GENERIC_9x3,
-            MenuType.GENERIC_9x4,
-            MenuType.GENERIC_9x5,
-            MenuType.GENERIC_9x6,
-            MenuType.GENERIC_3x3,
-            MenuType.CRAFTER_3x3,
-            MenuType.ANVIL,
-            MenuType.BEACON,
-            MenuType.BLAST_FURNACE,
-            MenuType.BREWING_STAND,
-            MenuType.CRAFTING,
-            MenuType.ENCHANTMENT,
-            MenuType.FURNACE,
-            MenuType.GRINDSTONE,
-            MenuType.HOPPER,
-            MenuType.LECTERN,
-            MenuType.LOOM,
-            MenuType.MERCHANT,
-            MenuType.SHULKER_BOX,
-            MenuType.SMITHING,
-            MenuType.SMOKER,
-            MenuType.CARTOGRAPHY_TABLE,
-            MenuType.STONECUTTER
-    };
+    private static final MenuType<?>[] MENU_TYPES = createMenuTypes();
+    private static final boolean HAS_CRAFTER = MENU_TYPES.length > 24;
+
+    private static MenuType<?>[] createMenuTypes() {
+        java.util.ArrayList<MenuType<?>> types = new java.util.ArrayList<>(25);
+        types.add(MenuType.GENERIC_9x1);
+        types.add(MenuType.GENERIC_9x2);
+        types.add(MenuType.GENERIC_9x3);
+        types.add(MenuType.GENERIC_9x4);
+        types.add(MenuType.GENERIC_9x5);
+        types.add(MenuType.GENERIC_9x6);
+        types.add(MenuType.GENERIC_3x3);
+        MenuType<?> crafter = resolveCrafter();
+        if (crafter != null) {
+            types.add(crafter);
+        }
+        types.add(MenuType.ANVIL);
+        types.add(MenuType.BEACON);
+        types.add(MenuType.BLAST_FURNACE);
+        types.add(MenuType.BREWING_STAND);
+        types.add(MenuType.CRAFTING);
+        types.add(MenuType.ENCHANTMENT);
+        types.add(MenuType.FURNACE);
+        types.add(MenuType.GRINDSTONE);
+        types.add(MenuType.HOPPER);
+        types.add(MenuType.LECTERN);
+        types.add(MenuType.LOOM);
+        types.add(MenuType.MERCHANT);
+        types.add(MenuType.SHULKER_BOX);
+        types.add(MenuType.SMITHING);
+        types.add(MenuType.SMOKER);
+        types.add(MenuType.CARTOGRAPHY_TABLE);
+        types.add(MenuType.STONECUTTER);
+        return types.toArray(MenuType[]::new);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static MenuType<?> resolveCrafter() {
+        try {
+            return (MenuType<?>) MenuType.class.getField("CRAFTER_3x3").get(null);
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
 
     private static MenuType<?> menuType(int typeId) {
+        // InventoryType ids include CRAFTER at 7 (1.20.3+). Older NMS skips that entry.
+        if (!HAS_CRAFTER) {
+            if (typeId == 7) {
+                return MenuType.GENERIC_3x3;
+            }
+            if (typeId > 7) {
+                typeId--;
+            }
+        }
         if (typeId >= 0 && typeId < MENU_TYPES.length) {
             return MENU_TYPES[typeId];
         }
