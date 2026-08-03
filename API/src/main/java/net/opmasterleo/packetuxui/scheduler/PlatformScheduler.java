@@ -4,6 +4,7 @@ import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
+import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.block.Block;
@@ -13,54 +14,109 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 public final class PlatformScheduler {
 
-    private final SchedulerEnvironment env;
+    private final ServerPlatform platform;
     private final GlobalTasks global;
     private final EntityTasks entity;
     private final RegionTasks region;
     private final AsyncTasks async;
 
     public PlatformScheduler(JavaPlugin plugin) {
-        this.env = new SchedulerEnvironment(Objects.requireNonNull(plugin, "plugin"));
-        this.global = new GlobalTasks(env);
-        this.entity = new EntityTasks(env);
-        this.region = new RegionTasks(env, global);
-        this.async = new AsyncTasks(env);
+        this(ServerPlatform.detect(Objects.requireNonNull(plugin, "plugin")));
+    }
+
+    public PlatformScheduler(ServerPlatform platform) {
+        this.platform = Objects.requireNonNull(platform, "platform");
+        JavaPlugin plugin = platform.plugin();
+        if (platform.isPaper()) {
+            this.global = GlobalTasks.paper(plugin);
+            this.entity = EntityTasks.paper(plugin);
+            this.region = RegionTasks.paper(plugin);
+            this.async = AsyncTasks.paper(plugin);
+        } else {
+            this.global = GlobalTasks.bukkit(plugin);
+            this.entity = EntityTasks.bukkit(plugin);
+            this.region = RegionTasks.bukkit(this.global);
+            this.async = AsyncTasks.bukkit(plugin);
+        }
     }
 
     public JavaPlugin plugin() {
-        return env.plugin();
+        return platform.plugin();
+    }
+
+    public ServerPlatform platform() {
+        return platform;
+    }
+
+    public SchedulerKind kind() {
+        return platform.kind();
     }
 
     public boolean isFolia() {
-        return env.isFolia();
+        return platform.isFolia();
     }
 
     public boolean hasPaperSchedulers() {
-        return env.hasPaperSchedulers();
+        return platform.isPaper();
     }
 
     public boolean isPrimaryThread() {
-        return env.isPrimaryThread();
+        return Bukkit.isPrimaryThread();
     }
 
     public boolean isGlobalTickThread() {
-        return env.isGlobalTickThread();
+        if (!platform.isPaper()) {
+            return Bukkit.isPrimaryThread();
+        }
+        try {
+            return Bukkit.getServer().isGlobalTickThread();
+        } catch (Throwable ignored) {
+            return Bukkit.isPrimaryThread();
+        }
     }
 
     public boolean isOwnedByCurrentRegion(Entity entity) {
-        return env.isOwnedByCurrentRegion(entity);
+        if (!platform.isPaper() || entity == null) {
+            return Bukkit.isPrimaryThread();
+        }
+        try {
+            return Bukkit.isOwnedByCurrentRegion(entity);
+        } catch (Throwable ignored) {
+            return Bukkit.isPrimaryThread();
+        }
     }
 
     public boolean isOwnedByCurrentRegion(Location location) {
-        return env.isOwnedByCurrentRegion(location);
+        if (!platform.isPaper() || location == null || location.getWorld() == null) {
+            return Bukkit.isPrimaryThread();
+        }
+        try {
+            return Bukkit.isOwnedByCurrentRegion(location);
+        } catch (Throwable ignored) {
+            return Bukkit.isPrimaryThread();
+        }
     }
 
     public boolean isOwnedByCurrentRegion(Block block) {
-        return env.isOwnedByCurrentRegion(block);
+        if (!platform.isPaper() || block == null) {
+            return Bukkit.isPrimaryThread();
+        }
+        try {
+            return Bukkit.isOwnedByCurrentRegion(block);
+        } catch (Throwable ignored) {
+            return Bukkit.isPrimaryThread();
+        }
     }
 
     public boolean isOwnedByCurrentRegion(World world, int chunkX, int chunkZ) {
-        return env.isOwnedByCurrentRegion(world, chunkX, chunkZ);
+        if (!platform.isPaper() || world == null) {
+            return Bukkit.isPrimaryThread();
+        }
+        try {
+            return Bukkit.isOwnedByCurrentRegion(world, chunkX, chunkZ);
+        } catch (Throwable ignored) {
+            return Bukkit.isPrimaryThread();
+        }
     }
 
     public GlobalTasks global() {
@@ -243,6 +299,17 @@ public final class PlatformScheduler {
     }
 
     public void cancelAll() {
-        env.cancelAll();
+        JavaPlugin plugin = platform.plugin();
+        if (platform.isPaper()) {
+            try {
+                Bukkit.getGlobalRegionScheduler().cancelTasks(plugin);
+            } catch (Throwable ignored) {
+            }
+            try {
+                Bukkit.getAsyncScheduler().cancelTasks(plugin);
+            } catch (Throwable ignored) {
+            }
+        }
+        Bukkit.getScheduler().cancelTasks(plugin);
     }
 }

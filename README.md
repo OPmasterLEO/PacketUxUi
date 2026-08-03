@@ -241,9 +241,17 @@ Overlays (e.g. Worth lore):
 
 ## Folia / Paper
 
-- Player-bound work (open, click, patch, shift-insert, pipeline inject) hops via `PlatformScheduler.runForPlayer` (entity scheduler on Folia).
-- `presentAsync` / `updateAsync` build off-thread; apply on entity scheduler; stale generation is ignored.
-- No global main-thread assumptions; no PacketEvents — direct NMS **1.8 → 26.2**.
+Schedulers and lifecycle listeners are **split at init** (no per-call Paper/Bukkit branching on hot paths):
+
+| Backend | When | Sync / entity | Async | Events |
+|---------|------|---------------|-------|--------|
+| `SchedulerKind.BUKKIT` | Spigot / CraftBukkit | `BukkitScheduler` main thread | async Bukkit tasks | `BukkitLifecycleListener` |
+| `SchedulerKind.PAPER` | Paper / Folia | entity + region + global-region schedulers | Paper `AsyncScheduler` | `PaperLifecycleListener` (inline when region-owned) |
+
+- `PlatformScheduler` selects one backend once; `runForPlayer` / patches / clicks use that backend only.
+- Spigot never loads Paper scheduler classes (separate packages: `scheduler.bukkit` / `scheduler.paper`).
+- `presentAsync` / `updateAsync` build off-thread; apply on entity/main scheduler; stale generation is ignored.
+- No PacketEvents — direct NMS **1.8 → 26.2**.
 
 ## Design notes
 

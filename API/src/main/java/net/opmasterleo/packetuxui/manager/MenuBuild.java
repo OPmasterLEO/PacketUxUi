@@ -146,9 +146,6 @@ public final class MenuBuild {
         return new Menu(title, type(), buttons, new net.opmasterleo.packetuxui.dto.CooldownComponent(), mode, close);
     }
 
-    /**
-     * Differential patch an open session of the same size; otherwise reopen.
-     */
     public void applyTo(Player player) {
         PacketUxUiAPI.getService().present(player, materialize());
     }

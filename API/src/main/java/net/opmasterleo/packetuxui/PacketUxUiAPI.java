@@ -12,7 +12,7 @@ import org.bukkit.plugin.ServicePriority;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import net.kyori.adventure.text.Component;
-import net.opmasterleo.packetuxui.controller.BukkitListener;
+import net.opmasterleo.packetuxui.controller.LifecycleListeners;
 import net.opmasterleo.packetuxui.manager.PacketGuiManager;
 import net.opmasterleo.packetuxui.network.PipelineManager;
 import net.opmasterleo.packetuxui.nms.AdapterLoader;
@@ -72,10 +72,6 @@ public final class PacketUxUiAPI {
                 : Optional.empty();
     }
 
-    /**
-     * Soft-depend check when another plugin hosts PacketUxUi via
-     * {@link org.bukkit.plugin.ServicesManager}.
-     */
     public static boolean isAvailable() {
         return initialized
                 || Bukkit.getServicesManager().getRegistration(PacketUxUiHolder.class) != null;
@@ -102,7 +98,7 @@ public final class PacketUxUiAPI {
         scheduler = new PlatformScheduler(plugin);
         service = new MenuService(adapter, scheduler);
         pipelineManager = new PipelineManager(plugin, adapter, service, scheduler);
-        Bukkit.getPluginManager().registerEvents(new BukkitListener(service, pipelineManager, scheduler), plugin);
+        LifecycleListeners.register(plugin, service, pipelineManager, scheduler);
         for (Player player : Bukkit.getOnlinePlayers()) {
             pipelineManager.inject(player);
         }
@@ -118,7 +114,10 @@ public final class PacketUxUiAPI {
         initialized = true;
         plugin.getLogger().info(
                 "PacketUxUi " + VERSION + " ready (NMS " + adapter.bucketId()
-                        + ", protocol " + adapter.minProtocol() + ".." + adapter.maxProtocol() + ")"
+                        + ", protocol " + adapter.minProtocol() + ".." + adapter.maxProtocol()
+                        + ", scheduler " + scheduler.kind()
+                        + (scheduler.isFolia() ? "/folia" : "")
+                        + ")"
         );
     }
 

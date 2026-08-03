@@ -1,0 +1,103 @@
+package net.opmasterleo.packetuxui.scheduler.paper;
+
+import java.util.Objects;
+
+import org.bukkit.Bukkit;
+import org.bukkit.Location;
+import org.bukkit.World;
+import org.bukkit.plugin.java.JavaPlugin;
+
+import net.opmasterleo.packetuxui.scheduler.RegionTasks;
+import net.opmasterleo.packetuxui.scheduler.ServerPlatform;
+import net.opmasterleo.packetuxui.scheduler.TaskHandle;
+
+public final class PaperRegionTasks implements RegionTasks {
+
+    private final JavaPlugin plugin;
+
+    public PaperRegionTasks(JavaPlugin plugin) {
+        this.plugin = Objects.requireNonNull(plugin, "plugin");
+    }
+
+    @Override
+    public void runAt(Location location, Runnable task) {
+        Objects.requireNonNull(location, "location");
+        Objects.requireNonNull(task, "task");
+        if (location.getWorld() != null && Bukkit.isOwnedByCurrentRegion(location)) {
+            task.run();
+            return;
+        }
+        Bukkit.getRegionScheduler().execute(plugin, location, task);
+    }
+
+    @Override
+    public void runAt(World world, int chunkX, int chunkZ, Runnable task) {
+        Objects.requireNonNull(world, "world");
+        Objects.requireNonNull(task, "task");
+        if (Bukkit.isOwnedByCurrentRegion(world, chunkX, chunkZ)) {
+            task.run();
+            return;
+        }
+        Bukkit.getRegionScheduler().execute(plugin, world, chunkX, chunkZ, task);
+    }
+
+    @Override
+    public TaskHandle runAtNextTick(Location location, Runnable task) {
+        Objects.requireNonNull(location, "location");
+        Objects.requireNonNull(task, "task");
+        return PaperTaskHandles.of(Bukkit.getRegionScheduler().run(plugin, location, st -> task.run()));
+    }
+
+    @Override
+    public TaskHandle runAtLater(Location location, Runnable task, long delayTicks) {
+        Objects.requireNonNull(location, "location");
+        Objects.requireNonNull(task, "task");
+        return PaperTaskHandles.of(Bukkit.getRegionScheduler().runDelayed(
+                plugin, location, st -> task.run(), ServerPlatform.ticks(delayTicks)
+        ));
+    }
+
+    @Override
+    public TaskHandle runAtLater(World world, int chunkX, int chunkZ, Runnable task, long delayTicks) {
+        Objects.requireNonNull(world, "world");
+        Objects.requireNonNull(task, "task");
+        return PaperTaskHandles.of(Bukkit.getRegionScheduler().runDelayed(
+                plugin, world, chunkX, chunkZ, st -> task.run(), ServerPlatform.ticks(delayTicks)
+        ));
+    }
+
+    @Override
+    public TaskHandle runAtRepeating(Location location, Runnable task, long initialDelayTicks, long periodTicks) {
+        Objects.requireNonNull(location, "location");
+        Objects.requireNonNull(task, "task");
+        return PaperTaskHandles.of(Bukkit.getRegionScheduler().runAtFixedRate(
+                plugin,
+                location,
+                st -> task.run(),
+                ServerPlatform.ticks(initialDelayTicks),
+                ServerPlatform.ticks(periodTicks)
+        ));
+    }
+
+    @Override
+    public TaskHandle runAtRepeating(
+            World world,
+            int chunkX,
+            int chunkZ,
+            Runnable task,
+            long initialDelayTicks,
+            long periodTicks
+    ) {
+        Objects.requireNonNull(world, "world");
+        Objects.requireNonNull(task, "task");
+        return PaperTaskHandles.of(Bukkit.getRegionScheduler().runAtFixedRate(
+                plugin,
+                world,
+                chunkX,
+                chunkZ,
+                st -> task.run(),
+                ServerPlatform.ticks(initialDelayTicks),
+                ServerPlatform.ticks(periodTicks)
+        ));
+    }
+}

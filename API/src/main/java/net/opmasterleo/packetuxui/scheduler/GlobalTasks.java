@@ -1,60 +1,22 @@
 package net.opmasterleo.packetuxui.scheduler;
 
-import java.util.Objects;
+import org.bukkit.plugin.java.JavaPlugin;
 
-import org.bukkit.Bukkit;
+public interface GlobalTasks {
 
-public final class GlobalTasks {
+    void run(Runnable task);
 
-    private final SchedulerEnvironment env;
+    TaskHandle runNextTick(Runnable task);
 
-    GlobalTasks(SchedulerEnvironment env) {
-        this.env = env;
+    TaskHandle runLater(Runnable task, long delayTicks);
+
+    TaskHandle runRepeating(Runnable task, long initialDelayTicks, long periodTicks);
+
+    static GlobalTasks bukkit(JavaPlugin plugin) {
+        return new net.opmasterleo.packetuxui.scheduler.bukkit.BukkitGlobalTasks(plugin);
     }
 
-    public void run(Runnable task) {
-        Objects.requireNonNull(task, "task");
-        if (env.hasPaperSchedulers()) {
-            if (env.isGlobalTickThread()) {
-                task.run();
-                return;
-            }
-            Bukkit.getGlobalRegionScheduler().execute(env.plugin(), task);
-            return;
-        }
-        if (Bukkit.isPrimaryThread()) {
-            task.run();
-        } else {
-            Bukkit.getScheduler().runTask(env.plugin(), task);
-        }
-    }
-
-    public TaskHandle runNextTick(Runnable task) {
-        Objects.requireNonNull(task, "task");
-        if (env.hasPaperSchedulers()) {
-            return TaskHandles.of(Bukkit.getGlobalRegionScheduler().run(env.plugin(), st -> task.run()));
-        }
-        return TaskHandles.of(Bukkit.getScheduler().runTask(env.plugin(), task));
-    }
-
-    public TaskHandle runLater(Runnable task, long delayTicks) {
-        Objects.requireNonNull(task, "task");
-        long delay = SchedulerEnvironment.ticks(delayTicks);
-        if (env.hasPaperSchedulers()) {
-            return TaskHandles.of(Bukkit.getGlobalRegionScheduler().runDelayed(env.plugin(), st -> task.run(), delay));
-        }
-        return TaskHandles.of(Bukkit.getScheduler().runTaskLater(env.plugin(), task, delay));
-    }
-
-    public TaskHandle runRepeating(Runnable task, long initialDelayTicks, long periodTicks) {
-        Objects.requireNonNull(task, "task");
-        long delay = SchedulerEnvironment.ticks(initialDelayTicks);
-        long period = SchedulerEnvironment.ticks(periodTicks);
-        if (env.hasPaperSchedulers()) {
-            return TaskHandles.of(
-                    Bukkit.getGlobalRegionScheduler().runAtFixedRate(env.plugin(), st -> task.run(), delay, period)
-            );
-        }
-        return TaskHandles.of(Bukkit.getScheduler().runTaskTimer(env.plugin(), task, delay, period), true);
+    static GlobalTasks paper(JavaPlugin plugin) {
+        return new net.opmasterleo.packetuxui.scheduler.paper.PaperGlobalTasks(plugin);
     }
 }
