@@ -5,6 +5,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Predicate;
 
 import org.bukkit.Material;
@@ -14,11 +15,14 @@ import net.opmasterleo.packetuxui.nms.item.UxItem;
 
 public final class VirtualClickSimulator {
 
+    private static final Set<Integer> NO_DIRTY = Set.of();
+    private static final ConcurrentHashMap<String, Integer> MAX_STACK_CACHE = new ConcurrentHashMap<>();
+
     public record Result(List<UxItem> items, UxItem cursor, Set<Integer> dirty) {
         public Result {
             items = List.copyOf(items);
             cursor = cursor == null || cursor.isEmpty() ? UxItem.EMPTY : cursor;
-            dirty = Set.copyOf(dirty);
+            dirty = dirty == null || dirty.isEmpty() ? NO_DIRTY : Set.copyOf(dirty);
         }
     }
 
@@ -33,17 +37,24 @@ public final class VirtualClickSimulator {
             WindowClickType type,
             Predicate<Integer> takeable
     ) {
-        List<UxItem> items = new ArrayList<>(top);
         UxItem held = cursor == null || cursor.isEmpty() ? UxItem.EMPTY : cursor;
-        Set<Integer> dirty = new HashSet<>();
-        if (slot < 0 || slot >= items.size() || !takeable.test(slot)) {
-            return new Result(items, held, dirty);
+        if (slot < 0 || slot >= top.size() || !takeable.test(slot)) {
+            return unchanged(top, held);
         }
         return switch (type) {
-            case PICKUP -> pickup(items, held, slot, button, dirty);
-            case QUICK_MOVE -> shift(items, held, slot, takeable, dirty);
-            case PICKUP_ALL -> pickupAll(items, held, slot, takeable, dirty);
-            default -> new Result(items, held, dirty);
+            case PICKUP -> {
+                List<UxItem> items = new ArrayList<>(top);
+                yield pickup(items, held, slot, button, new HashSet<>(4));
+            }
+            case QUICK_MOVE -> {
+                List<UxItem> items = new ArrayList<>(top);
+                yield shift(items, held, slot, takeable, new HashSet<>(8));
+            }
+            case PICKUP_ALL -> {
+                List<UxItem> items = new ArrayList<>(top);
+                yield pickupAll(items, held, slot, takeable, new HashSet<>(8));
+            }
+            default -> unchanged(top, held);
         };
     }
 
@@ -54,13 +65,12 @@ public final class VirtualClickSimulator {
             int button,
             Predicate<Integer> takeable
     ) {
-        List<UxItem> items = new ArrayList<>(top);
         UxItem held = cursor == null || cursor.isEmpty() ? UxItem.EMPTY : cursor;
-        Set<Integer> dirty = new HashSet<>();
-        if (held.isEmpty() || slots.isEmpty()) {
-            return new Result(items, held, dirty);
+        if (held.isEmpty() || slots.isEmpty() || button == 10) {
+            return unchanged(top, held);
         }
-        List<Integer> targets = new ArrayList<>();
+        List<UxItem> items = new ArrayList<>(top);
+        List<Integer> targets = new ArrayList<>(slots.size());
         for (Integer s : slots) {
             if (s != null && s >= 0 && s < items.size() && takeable.test(s)) {
                 UxItem at = items.get(s);
@@ -69,21 +79,19 @@ public final class VirtualClickSimulator {
                 }
             }
         }
-        if (button == 10) {
-            return new Result(items, held, dirty);
-        }
         if (targets.isEmpty()) {
-            return new Result(items, held, dirty);
+            return unchanged(top, held);
         }
+        Set<Integer> dirty = new HashSet<>(targets.size());
         boolean oneEach = button == 6;
         int remaining = held.amount();
+        int max = maxStack(held);
         if (oneEach) {
             for (int s : targets) {
                 if (remaining <= 0) {
                     break;
                 }
                 UxItem at = items.get(s);
-                int max = maxStack(held);
                 int room = at.isEmpty() ? max : max - at.amount();
                 if (room <= 0) {
                     continue;
@@ -99,7 +107,6 @@ public final class VirtualClickSimulator {
                     break;
                 }
                 UxItem at = items.get(s);
-                int max = maxStack(held);
                 int room = at.isEmpty() ? max : max - at.amount();
                 if (room <= 0) {
                     continue;
@@ -114,7 +121,6 @@ public final class VirtualClickSimulator {
                     break;
                 }
                 UxItem at = items.get(s);
-                int max = maxStack(held);
                 int room = max - at.amount();
                 if (room <= 0) {
                     continue;
@@ -133,12 +139,64 @@ public final class VirtualClickSimulator {
             return 64;
         }
         String key = item.materialKey();
-        String name = key.contains(":") ? key.substring(key.indexOf(':') + 1) : key;
-        try {
-            return Material.valueOf(name.toUpperCase(Locale.ROOT)).getMaxStackSize();
-        } catch (IllegalArgumentException ignored) {
-            return 64;
+        Integer cached = MAX_STACK_CACHE.get(key);
+        if (cached != null) {
+            return cached;
         }
+        String name = key.contains(":") ? key.substring(key.indexOf(':') + 1) : key;
+        int size;
+        try {
+            size = Material.valueOf(name.toUpperCase(Locale.ROOT)).getMaxStackSize();
+        } catch (IllegalArgumentException ignored) {
+            size = 64;
+        }
+        MAX_STACK_CACHE.put(key, size);
+        return size;
+    }
+
+    public static Result shiftInto(List<UxItem> top, UxItem moving, Predicate<Integer> placeable) {
+        if (moving == null || moving.isEmpty()) {
+            return unchanged(top, UxItem.EMPTY);
+        }
+        List<UxItem> items = new ArrayList<>(top);
+        Set<Integer> dirty = new HashSet<>(8);
+        int remaining = moving.amount();
+        int max = maxStack(moving);
+        for (int i = 0; i < items.size() && remaining > 0; i++) {
+            if (!placeable.test(i)) {
+                continue;
+            }
+            UxItem at = items.get(i);
+            if (!at.isSimilar(moving)) {
+                continue;
+            }
+            int room = max - at.amount();
+            if (room <= 0) {
+                continue;
+            }
+            int place = Math.min(room, remaining);
+            items.set(i, at.withAmount(at.amount() + place));
+            dirty.add(i);
+            remaining -= place;
+        }
+        for (int i = 0; i < items.size() && remaining > 0; i++) {
+            if (!placeable.test(i) || !items.get(i).isEmpty()) {
+                continue;
+            }
+            int place = Math.min(max, remaining);
+            items.set(i, moving.withAmount(place));
+            dirty.add(i);
+            remaining -= place;
+        }
+        if (dirty.isEmpty()) {
+            return unchanged(top, moving);
+        }
+        UxItem left = remaining <= 0 ? UxItem.EMPTY : moving.withAmount(remaining);
+        return new Result(items, left, dirty);
+    }
+
+    private static Result unchanged(List<UxItem> top, UxItem cursor) {
+        return new Result(top, cursor, NO_DIRTY);
     }
 
     private static Result pickup(List<UxItem> items, UxItem held, int slot, int button, Set<Integer> dirty) {
@@ -187,45 +245,6 @@ public final class VirtualClickSimulator {
         return new Result(items, at, dirty);
     }
 
-    public static Result shiftInto(List<UxItem> top, UxItem moving, Predicate<Integer> placeable) {
-        List<UxItem> items = new ArrayList<>(top);
-        Set<Integer> dirty = new HashSet<>();
-        if (moving == null || moving.isEmpty()) {
-            return new Result(items, UxItem.EMPTY, dirty);
-        }
-        int remaining = moving.amount();
-        for (int i = 0; i < items.size() && remaining > 0; i++) {
-            if (!placeable.test(i)) {
-                continue;
-            }
-            UxItem at = items.get(i);
-            if (!at.isSimilar(moving)) {
-                continue;
-            }
-            int max = maxStack(moving);
-            int room = max - at.amount();
-            if (room <= 0) {
-                continue;
-            }
-            int place = Math.min(room, remaining);
-            items.set(i, at.withAmount(at.amount() + place));
-            dirty.add(i);
-            remaining -= place;
-        }
-        for (int i = 0; i < items.size() && remaining > 0; i++) {
-            if (!placeable.test(i) || !items.get(i).isEmpty()) {
-                continue;
-            }
-            int max = maxStack(moving);
-            int place = Math.min(max, remaining);
-            items.set(i, moving.withAmount(place));
-            dirty.add(i);
-            remaining -= place;
-        }
-        UxItem left = remaining <= 0 ? UxItem.EMPTY : moving.withAmount(remaining);
-        return new Result(items, left, dirty);
-    }
-
     private static Result shift(
             List<UxItem> items,
             UxItem held,
@@ -238,7 +257,9 @@ public final class VirtualClickSimulator {
             return new Result(items, held, dirty);
         }
         int remaining = moving.amount();
-        for (int i = 0; i < items.size() && remaining > 0; i++) {
+        int max = maxStack(moving);
+        int size = items.size();
+        for (int i = 0; i < size && remaining > 0; i++) {
             if (i == slot || !takeable.test(i)) {
                 continue;
             }
@@ -246,7 +267,6 @@ public final class VirtualClickSimulator {
             if (!at.isSimilar(moving)) {
                 continue;
             }
-            int max = maxStack(moving);
             int room = max - at.amount();
             if (room <= 0) {
                 continue;
@@ -256,14 +276,13 @@ public final class VirtualClickSimulator {
             dirty.add(i);
             remaining -= place;
         }
-        for (int i = 0; i < items.size() && remaining > 0; i++) {
+        for (int i = 0; i < size && remaining > 0; i++) {
             if (i == slot || !takeable.test(i)) {
                 continue;
             }
             if (!items.get(i).isEmpty()) {
                 continue;
             }
-            int max = maxStack(moving);
             int place = Math.min(max, remaining);
             items.set(i, moving.withAmount(place));
             dirty.add(i);
@@ -292,7 +311,8 @@ public final class VirtualClickSimulator {
             dirty.add(slot);
             total = target.amount();
         }
-        for (int i = 0; i < items.size() && total < max; i++) {
+        int size = items.size();
+        for (int i = 0; i < size && total < max; i++) {
             if (!takeable.test(i)) {
                 continue;
             }

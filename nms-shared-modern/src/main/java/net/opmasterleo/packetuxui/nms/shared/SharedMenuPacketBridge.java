@@ -117,36 +117,37 @@ public final class SharedMenuPacketBridge implements MenuPacketBridge {
         };
     }
 
+    private static final MenuType<?>[] MENU_TYPES = {
+            MenuType.GENERIC_9x1,
+            MenuType.GENERIC_9x2,
+            MenuType.GENERIC_9x3,
+            MenuType.GENERIC_9x4,
+            MenuType.GENERIC_9x5,
+            MenuType.GENERIC_9x6,
+            MenuType.GENERIC_3x3,
+            MenuType.CRAFTER_3x3,
+            MenuType.ANVIL,
+            MenuType.BEACON,
+            MenuType.BLAST_FURNACE,
+            MenuType.BREWING_STAND,
+            MenuType.CRAFTING,
+            MenuType.ENCHANTMENT,
+            MenuType.FURNACE,
+            MenuType.GRINDSTONE,
+            MenuType.HOPPER,
+            MenuType.LECTERN,
+            MenuType.LOOM,
+            MenuType.MERCHANT,
+            MenuType.SHULKER_BOX,
+            MenuType.SMITHING,
+            MenuType.SMOKER,
+            MenuType.CARTOGRAPHY_TABLE,
+            MenuType.STONECUTTER
+    };
+
     private static MenuType<?> menuType(int typeId) {
-        MenuType<?>[] types = {
-                MenuType.GENERIC_9x1,
-                MenuType.GENERIC_9x2,
-                MenuType.GENERIC_9x3,
-                MenuType.GENERIC_9x4,
-                MenuType.GENERIC_9x5,
-                MenuType.GENERIC_9x6,
-                MenuType.GENERIC_3x3,
-                MenuType.CRAFTER_3x3,
-                MenuType.ANVIL,
-                MenuType.BEACON,
-                MenuType.BLAST_FURNACE,
-                MenuType.BREWING_STAND,
-                MenuType.CRAFTING,
-                MenuType.ENCHANTMENT,
-                MenuType.FURNACE,
-                MenuType.GRINDSTONE,
-                MenuType.HOPPER,
-                MenuType.LECTERN,
-                MenuType.LOOM,
-                MenuType.MERCHANT,
-                MenuType.SHULKER_BOX,
-                MenuType.SMITHING,
-                MenuType.SMOKER,
-                MenuType.CARTOGRAPHY_TABLE,
-                MenuType.STONECUTTER
-        };
-        if (typeId >= 0 && typeId < types.length) {
-            return types[typeId];
+        if (typeId >= 0 && typeId < MENU_TYPES.length) {
+            return MENU_TYPES[typeId];
         }
         return MenuType.GENERIC_9x6;
     }

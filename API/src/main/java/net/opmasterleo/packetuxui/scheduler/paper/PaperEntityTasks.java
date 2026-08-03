@@ -44,6 +44,10 @@ public final class PaperEntityTasks implements EntityTasks {
             }
             return TaskHandle.NOOP;
         }
+        if (delayTicks <= 0L && Bukkit.isOwnedByCurrentRegion(entity)) {
+            task.run();
+            return TaskHandle.NOOP;
+        }
         return PaperTaskHandles.of(
                 entity.getScheduler().runDelayed(plugin, st -> task.run(), retired, ServerPlatform.ticks(delayTicks))
         );

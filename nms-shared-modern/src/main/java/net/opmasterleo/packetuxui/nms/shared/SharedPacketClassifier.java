@@ -37,10 +37,15 @@ public final class SharedPacketClassifier implements PacketClassifier {
         if (!(packet instanceof ServerboundContainerClickPacket click)) {
             return null;
         }
-        Map<Integer, UxItem> changed = new HashMap<>();
+        Map<Integer, UxItem> changed;
         Int2ObjectMap<ItemStack> slots = click.getChangedSlots();
-        for (Int2ObjectMap.Entry<ItemStack> entry : slots.int2ObjectEntrySet()) {
-            changed.put(entry.getIntKey(), items.fromMinecraft(entry.getValue()));
+        if (slots == null || slots.isEmpty()) {
+            changed = Map.of();
+        } else {
+            changed = new HashMap<>(slots.size());
+            for (Int2ObjectMap.Entry<ItemStack> entry : slots.int2ObjectEntrySet()) {
+                changed.put(entry.getIntKey(), items.fromMinecraft(entry.getValue()));
+            }
         }
         return new ClickPacket(
                 click.getContainerId(),

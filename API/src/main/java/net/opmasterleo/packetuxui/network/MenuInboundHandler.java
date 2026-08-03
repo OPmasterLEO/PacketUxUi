@@ -34,10 +34,7 @@ public final class MenuInboundHandler extends ChannelInboundHandlerAdapter {
         PacketClassifier.Kind kind = adapter.classifier().kindOf(msg);
         switch (kind) {
             case CLOSE -> {
-                scheduler.runForPlayer(player, () -> {
-                    menuService.onCloseMenu(player);
-                    menuService.clearAccumulatedDrag(player);
-                });
+                scheduler.runForPlayer(player, () -> menuService.onCloseMenu(player));
                 ctx.fireChannelRead(msg);
             }
             case CLICK -> {

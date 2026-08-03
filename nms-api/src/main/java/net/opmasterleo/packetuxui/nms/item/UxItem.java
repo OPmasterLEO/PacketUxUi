@@ -1,6 +1,5 @@
 package net.opmasterleo.packetuxui.nms.item;
 
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -28,6 +27,7 @@ public final class UxItem {
     private final boolean hideEnchantments;
     private final Integer customModelData;
     private final String headTextureBase64;
+    private final boolean empty;
 
     public UxItem(
             String materialKey,
@@ -47,6 +47,10 @@ public final class UxItem {
         this.hideEnchantments = hideEnchantments;
         this.customModelData = customModelData;
         this.headTextureBase64 = headTextureBase64;
+        this.empty = this.amount <= 0
+                || this.materialKey.equals("minecraft:air")
+                || this.materialKey.equals("air")
+                || this.materialKey.endsWith(":air");
     }
 
     public String materialKey() {
@@ -82,12 +86,15 @@ public final class UxItem {
     }
 
     public boolean isEmpty() {
-        return amount <= 0 || materialKey.endsWith(":air") || materialKey.equals("air");
+        return empty;
     }
 
     public UxItem withAmount(int newAmount) {
         if (newAmount <= 0) {
             return EMPTY;
+        }
+        if (newAmount == amount) {
+            return this;
         }
         return new UxItem(
                 materialKey,
@@ -105,17 +112,20 @@ public final class UxItem {
         if (other == null) {
             return false;
         }
-        if (isEmpty() && other.isEmpty()) {
+        if (this == other) {
             return true;
         }
-        if (isEmpty() || other.isEmpty()) {
+        if (empty && other.empty) {
+            return true;
+        }
+        if (empty || other.empty) {
             return false;
         }
         return hideEnchantments == other.hideEnchantments
-                && Objects.equals(materialKey, other.materialKey)
+                && materialKey.equals(other.materialKey)
                 && Objects.equals(name, other.name)
-                && Objects.equals(lore, other.lore)
-                && Objects.equals(enchantments, other.enchantments)
+                && lore.equals(other.lore)
+                && enchantments.equals(other.enchantments)
                 && Objects.equals(customModelData, other.customModelData)
                 && Objects.equals(headTextureBase64, other.headTextureBase64);
     }
@@ -140,27 +150,22 @@ public final class UxItem {
         if (!(o instanceof UxItem other)) {
             return false;
         }
-        return amount == other.amount
-                && hideEnchantments == other.hideEnchantments
-                && Objects.equals(materialKey, other.materialKey)
-                && Objects.equals(name, other.name)
-                && Objects.equals(lore, other.lore)
-                && Objects.equals(enchantments, other.enchantments)
-                && Objects.equals(customModelData, other.customModelData)
-                && Objects.equals(headTextureBase64, other.headTextureBase64);
+        if (empty && other.empty) {
+            return true;
+        }
+        return amount == other.amount && isSimilar(other);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(
-                materialKey,
-                amount,
-                name,
-                lore,
-                enchantments,
-                hideEnchantments,
-                customModelData,
-                headTextureBase64
-        );
+        int result = materialKey.hashCode();
+        result = 31 * result + amount;
+        result = 31 * result + (name == null ? 0 : name.hashCode());
+        result = 31 * result + lore.hashCode();
+        result = 31 * result + enchantments.hashCode();
+        result = 31 * result + Boolean.hashCode(hideEnchantments);
+        result = 31 * result + (customModelData == null ? 0 : customModelData.hashCode());
+        result = 31 * result + (headTextureBase64 == null ? 0 : headTextureBase64.hashCode());
+        return result;
     }
 }

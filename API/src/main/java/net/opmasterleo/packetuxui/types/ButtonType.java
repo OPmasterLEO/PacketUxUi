@@ -18,5 +18,7 @@ public enum ButtonType {
     NUM_6,
     NUM_7,
     NUM_8,
-    NUM_9
+    NUM_9;
+
+    public static final ButtonType[] VALUES = values();
 }

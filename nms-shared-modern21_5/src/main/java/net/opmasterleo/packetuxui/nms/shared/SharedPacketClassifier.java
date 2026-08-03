@@ -40,7 +40,6 @@ public final class SharedPacketClassifier implements PacketClassifier {
         if (!(packet instanceof ServerboundContainerClickPacket click)) {
             return null;
         }
-        Map<Integer, UxItem> changed = new HashMap<>();
         return new ClickPacket(
                 click.containerId(),
                 click.stateId(),
@@ -48,7 +47,7 @@ public final class SharedPacketClassifier implements PacketClassifier {
                 click.buttonNum(),
                 0,
                 fromNms(click.clickType()),
-                changed,
+                Map.of(),
                 UxItem.EMPTY
         );
     }

@@ -327,7 +327,7 @@ public final class MenuService {
         Menu menu = session.menu();
         int last = menu.type().lastIndex();
         boolean touchesTop = (packet.slot() >= 0 && packet.slot() <= last)
-                || packet.changedSlots().keySet().stream().anyMatch(s -> s != null && s >= 0 && s <= last);
+                || touchesTopSlots(packet, last);
         if (!touchesTop && emptyCursor && packet.changedSlots().isEmpty()) {
             int stateId = session.nextStateId();
             adapter.packets().sendSetSlot(player, session.windowId(), stateId, -1, UxItem.EMPTY);
@@ -637,20 +637,32 @@ public final class MenuService {
     }
 
     private void applyEditableResult(Player player, MenuSession session, VirtualClickSimulator.Result result) {
+        UUID pid = id(player);
         Menu menu = session.menu();
-        menu.setItems(result.items());
-        if (result.cursor().isEmpty()) {
-            carriedItem.remove(id(player));
+        boolean dirtyEmpty = result.dirty().isEmpty();
+        UxItem nextCursor = result.cursor();
+        UxItem prevCursor = carriedItem.getOrDefault(pid, UxItem.EMPTY);
+        if (!dirtyEmpty) {
+            menu.setItems(result.items());
+        }
+        if (nextCursor.isEmpty()) {
+            carriedItem.remove(pid);
         } else {
-            carriedItem.put(id(player), result.cursor());
+            carriedItem.put(pid, nextCursor);
+        }
+        if (dirtyEmpty && nextCursor.equals(prevCursor)) {
+            return;
         }
         int windowId = session.windowId();
         int stateId = session.nextStateId();
-        for (Integer slot : result.dirty()) {
-            UxItem item = slot < result.items().size() ? result.items().get(slot) : UxItem.EMPTY;
-            adapter.packets().sendSetSlot(player, windowId, stateId, slot, item);
+        if (!dirtyEmpty) {
+            List<UxItem> items = result.items();
+            for (Integer slot : result.dirty()) {
+                UxItem item = slot < items.size() ? items.get(slot) : UxItem.EMPTY;
+                adapter.packets().sendSetSlot(player, windowId, stateId, slot, item);
+            }
         }
-        adapter.packets().sendSetSlot(player, windowId, stateId, -1, result.cursor());
+        adapter.packets().sendSetSlot(player, windowId, stateId, -1, nextCursor);
     }
 
     private void rejectEditable(Player player, MenuSession session, ClickPacket packet) {
@@ -705,7 +717,7 @@ public final class MenuService {
     }
 
     private UxItem fromBukkitSlot(ItemStack stack) {
-        if (stack == null) {
+        if (stack == null || stack.getAmount() <= 0 || stack.getType() == org.bukkit.Material.AIR) {
             return UxItem.EMPTY;
         }
         return adapter.items().fromBukkit(stack);
@@ -855,13 +867,14 @@ public final class MenuService {
             }
             menu.buttons().put(slot, newButton);
             UxItem next = newButton.item();
-            List<UxItem> items = new ArrayList<>(menu.items());
+            List<UxItem> items = menu.items();
             UxItem current = slot < items.size() ? items.get(slot) : UxItem.EMPTY;
-            items.set(slot, next);
-            menu.setItems(items);
             if (current.equals(next)) {
                 return;
             }
+            List<UxItem> copy = new ArrayList<>(items);
+            copy.set(slot, next);
+            menu.setItems(copy);
             adapter.packets().sendSetSlot(player, session.windowId(), session.nextStateId(), slot, next);
         });
     }
@@ -939,7 +952,7 @@ public final class MenuService {
             case SHIFT_CLICK -> true;
             case PICKUP, PLACE -> packet.slot() >= 0 && packet.slot() <= last;
             case DRAG_END, PICKUP_ALL -> (packet.slot() >= 0 && packet.slot() <= last)
-                    || packet.changedSlots().keySet().stream().anyMatch(slot -> slot >= 0 && slot <= last);
+                    || touchesTopSlots(packet, last);
             default -> false;
         };
     }
@@ -950,41 +963,37 @@ public final class MenuService {
                 UxItem carried = packet.carried();
                 boolean isCarried = carried != null && !adapter.items().isEmpty(carried);
                 if (packet.button() == 0) {
-                    yield new ClickData(ButtonType.LEFT, isCarried ? ClickType.PICKUP : ClickType.PLACE);
+                    yield isCarried ? ClickData.LEFT_PICKUP : ClickData.LEFT_PLACE;
                 }
-                yield new ClickData(ButtonType.RIGHT, isCarried ? ClickType.PLACE : ClickType.PICKUP);
+                yield isCarried ? ClickData.RIGHT_PLACE : ClickData.RIGHT_PICKUP;
             }
-            case QUICK_MOVE -> packet.button() == 0
-                    ? new ClickData(ButtonType.SHIFT_LEFT, ClickType.SHIFT_CLICK)
-                    : new ClickData(ButtonType.SHIFT_RIGHT, ClickType.SHIFT_CLICK);
+            case QUICK_MOVE -> packet.button() == 0 ? ClickData.SHIFT_LEFT : ClickData.SHIFT_RIGHT;
             case SWAP -> {
                 int button = packet.button();
                 if (button >= 0 && button <= 8) {
-                    yield new ClickData(ButtonType.values()[9 + button], ClickType.PICKUP);
+                    yield new ClickData(ButtonType.VALUES[9 + button], ClickType.PICKUP);
                 }
                 if (button == 40) {
-                    yield new ClickData(ButtonType.F, ClickType.PICKUP);
+                    yield ClickData.F_PICKUP;
                 }
-                yield new ClickData(ButtonType.LEFT, ClickType.PLACE);
+                yield ClickData.LEFT_PLACE;
             }
-            case CLONE -> new ClickData(ButtonType.MIDDLE, ClickType.PICKUP);
-            case THROW -> packet.button() == 0
-                    ? new ClickData(ButtonType.DROP, ClickType.PICKUP)
-                    : new ClickData(ButtonType.CTRL_DROP, ClickType.PICKUP);
+            case CLONE -> ClickData.MIDDLE_PICKUP;
+            case THROW -> packet.button() == 0 ? ClickData.DROP_PICKUP : ClickData.CTRL_DROP_PICKUP;
             case QUICK_CRAFT -> switch (packet.button()) {
-                case 0 -> new ClickData(ButtonType.LEFT, ClickType.DRAG_START);
-                case 4 -> new ClickData(ButtonType.RIGHT, ClickType.DRAG_START);
-                case 8 -> new ClickData(ButtonType.MIDDLE, ClickType.DRAG_START);
-                case 1 -> new ClickData(ButtonType.LEFT, ClickType.DRAG_ADD);
-                case 5 -> new ClickData(ButtonType.RIGHT, ClickType.DRAG_ADD);
-                case 9 -> new ClickData(ButtonType.MIDDLE, ClickType.DRAG_ADD);
-                case 2 -> new ClickData(ButtonType.LEFT, ClickType.DRAG_END);
-                case 6 -> new ClickData(ButtonType.RIGHT, ClickType.DRAG_END);
-                case 10 -> new ClickData(ButtonType.MIDDLE, ClickType.DRAG_END);
-                default -> new ClickData(ButtonType.LEFT, ClickType.UNDEFINED);
+                case 0 -> ClickData.LEFT_DRAG_START;
+                case 4 -> ClickData.RIGHT_DRAG_START;
+                case 8 -> ClickData.MIDDLE_DRAG_START;
+                case 1 -> ClickData.LEFT_DRAG_ADD;
+                case 5 -> ClickData.RIGHT_DRAG_ADD;
+                case 9 -> ClickData.MIDDLE_DRAG_ADD;
+                case 2 -> ClickData.LEFT_DRAG_END;
+                case 6 -> ClickData.RIGHT_DRAG_END;
+                case 10 -> ClickData.MIDDLE_DRAG_END;
+                default -> ClickData.LEFT_UNDEFINED;
             };
-            case PICKUP_ALL -> new ClickData(ButtonType.DOUBLE_CLICK, ClickType.PICKUP_ALL);
-            default -> new ClickData(ButtonType.LEFT, ClickType.UNDEFINED);
+            case PICKUP_ALL -> ClickData.DOUBLE_CLICK;
+            default -> ClickData.LEFT_UNDEFINED;
         };
     }
 
@@ -1010,10 +1019,16 @@ public final class MenuService {
     }
 
     public void clearAccumulatedDrag(Player player) {
-        List<AccumulatedDrag> drags = accumulatedDrag.get(id(player));
-        if (drags != null) {
-            drags.clear();
+        accumulatedDrag.remove(id(player));
+    }
+
+    private static boolean touchesTopSlots(ClickPacket packet, int last) {
+        for (Integer slot : packet.changedSlots().keySet()) {
+            if (slot != null && slot >= 0 && slot <= last) {
+                return true;
+            }
         }
+        return false;
     }
 
     private void resyncDirtySlots(Player player, MenuSession session, ClickPacket packet, UxItem carried) {
@@ -1053,9 +1068,14 @@ public final class MenuService {
 
     private ClickPacket createAdjustedClickPacket(ClickPacket packet, Menu menu) {
         int slotOffset = packet.slot() != -999 ? packet.slot() - menu.type().size() + 9 : -999;
-        Map<Integer, UxItem> adjustedSlots = new HashMap<>();
-        for (Map.Entry<Integer, UxItem> entry : packet.changedSlots().entrySet()) {
-            adjustedSlots.put(entry.getKey() - menu.type().size() + 9, entry.getValue());
+        Map<Integer, UxItem> changed = packet.changedSlots();
+        if (changed.isEmpty()) {
+            return packet.withWindowAndSlot(0, slotOffset, Map.of());
+        }
+        Map<Integer, UxItem> adjustedSlots = new HashMap<>(changed.size());
+        int offset = -menu.type().size() + 9;
+        for (Map.Entry<Integer, UxItem> entry : changed.entrySet()) {
+            adjustedSlots.put(entry.getKey() + offset, entry.getValue());
         }
         return packet.withWindowAndSlot(0, slotOffset, adjustedSlots);
     }

@@ -1,17 +1,10 @@
 package net.opmasterleo.packetuxui.network;
 
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import io.netty.channel.Channel;
-import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelInboundHandlerAdapter;
-import net.opmasterleo.packetuxui.nms.ClickPacket;
 import net.opmasterleo.packetuxui.nms.NmsAdapter;
-import net.opmasterleo.packetuxui.nms.PacketClassifier;
 import net.opmasterleo.packetuxui.scheduler.PlatformScheduler;
 import net.opmasterleo.packetuxui.service.MenuService;
 
@@ -22,7 +15,6 @@ public final class PipelineManager {
     private final NmsAdapter adapter;
     private final MenuService menuService;
     private final PlatformScheduler scheduler;
-    private final ConcurrentHashMap<UUID, Boolean> injected = new ConcurrentHashMap<>();
 
     public PipelineManager(
             JavaPlugin plugin,
@@ -57,14 +49,12 @@ public final class PipelineManager {
                 if (!added) {
                     channel.pipeline().addFirst(HANDLER_NAME, handler);
                 }
-                injected.put(player.getUniqueId(), Boolean.TRUE);
             } catch (Throwable ignored) {
             }
         });
     }
 
     public void remove(Player player) {
-        injected.remove(player.getUniqueId());
         Channel channel = adapter.pipeline().channel(player);
         if (channel == null) {
             return;
