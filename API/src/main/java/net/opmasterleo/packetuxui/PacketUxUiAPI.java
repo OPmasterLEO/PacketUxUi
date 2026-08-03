@@ -13,6 +13,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 import net.kyori.adventure.text.Component;
 import net.opmasterleo.packetuxui.controller.BukkitListener;
+import net.opmasterleo.packetuxui.manager.PacketGuiManager;
 import net.opmasterleo.packetuxui.network.PipelineManager;
 import net.opmasterleo.packetuxui.nms.AdapterLoader;
 import net.opmasterleo.packetuxui.nms.NmsAdapter;
@@ -206,6 +207,7 @@ public final class PacketUxUiAPI {
         adapter = null;
         scheduler = null;
         pipelineManager = null;
+        PacketGuiManager.resetHolder();
     }
 
     private static void checkInitialized() {

@@ -3,11 +3,14 @@ package net.opmasterleo.packetuxui;
 import org.bukkit.entity.Player;
 
 import net.kyori.adventure.text.Component;
+import net.opmasterleo.packetuxui.manager.MenuBuild;
+import net.opmasterleo.packetuxui.manager.PacketGuiManager;
 import net.opmasterleo.packetuxui.nms.item.UxHeadItemBuilder;
 import net.opmasterleo.packetuxui.nms.item.UxItem;
 import net.opmasterleo.packetuxui.nms.item.UxItemBuilder;
 import net.opmasterleo.packetuxui.service.Button;
 import net.opmasterleo.packetuxui.service.ButtonBuilder;
+import net.opmasterleo.packetuxui.service.GuiScopeListener;
 import net.opmasterleo.packetuxui.service.IButtonBuilder;
 import net.opmasterleo.packetuxui.service.Menu;
 import net.opmasterleo.packetuxui.service.MenuBuilder;
@@ -22,6 +25,14 @@ public final class PacketMenus {
 
     public static MenuService service() {
         return PacketUxUiAPI.getService();
+    }
+
+    public static PacketGuiManager gui() {
+        return PacketGuiManager.ofApi();
+    }
+
+    public static MenuBuild build() {
+        return MenuBuild.create();
     }
 
     public static MenuBuilder menu(Component title, InventoryType type) {
@@ -56,6 +67,10 @@ public final class PacketMenus {
         PacketUxUiAPI.close(player);
     }
 
+    public static void present(Player player, Menu menu) {
+        service().present(player, menu);
+    }
+
     public static void updateItem(Player player, int slot, UxItem item) {
         service().updateItem(player, item, slot);
     }
@@ -70,6 +85,18 @@ public final class PacketMenus {
 
     public static void refresh(Player player) {
         service().refreshWindow(player);
+    }
+
+    public static int getWindowId(Player player) {
+        return service().getWindowId(player);
+    }
+
+    public static int getTopSlotCount(Player player) {
+        return service().getTopSlotCount(player);
+    }
+
+    public static void setScopeListener(GuiScopeListener listener) {
+        gui().setScopeListener(listener);
     }
 
     public static MenuMode readOnly() {

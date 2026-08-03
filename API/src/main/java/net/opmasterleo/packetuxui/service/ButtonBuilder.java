@@ -14,7 +14,7 @@ public final class ButtonBuilder implements IButtonBuilder {
     private UxItem item = UxItem.EMPTY;
     private Consumer<ExecuteComponent> click;
     private CooldownComponent cooldown = new CooldownComponent(0);
-    private boolean takeable;
+    private SlotKind kind = SlotKind.ACTION;
 
     @Override
     public IButtonBuilder item(UxItem item) {
@@ -70,12 +70,33 @@ public final class ButtonBuilder implements IButtonBuilder {
 
     @Override
     public IButtonBuilder takeable(boolean takeable) {
-        this.takeable = takeable;
+        this.kind = takeable ? SlotKind.EDITABLE : SlotKind.ACTION;
         return this;
     }
 
     @Override
+    public IButtonBuilder kind(SlotKind kind) {
+        this.kind = kind == null ? SlotKind.ACTION : kind;
+        return this;
+    }
+
+    @Override
+    public IButtonBuilder decorative() {
+        return kind(SlotKind.DECORATIVE);
+    }
+
+    @Override
+    public IButtonBuilder action() {
+        return kind(SlotKind.ACTION);
+    }
+
+    @Override
+    public IButtonBuilder editable() {
+        return kind(SlotKind.EDITABLE);
+    }
+
+    @Override
     public Button build() {
-        return new Button(item, click, cooldown, takeable);
+        return new Button(item, click, cooldown, kind);
     }
 }

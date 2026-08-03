@@ -187,6 +187,45 @@ public final class VirtualClickSimulator {
         return new Result(items, at, dirty);
     }
 
+    public static Result shiftInto(List<UxItem> top, UxItem moving, Predicate<Integer> placeable) {
+        List<UxItem> items = new ArrayList<>(top);
+        Set<Integer> dirty = new HashSet<>();
+        if (moving == null || moving.isEmpty()) {
+            return new Result(items, UxItem.EMPTY, dirty);
+        }
+        int remaining = moving.amount();
+        for (int i = 0; i < items.size() && remaining > 0; i++) {
+            if (!placeable.test(i)) {
+                continue;
+            }
+            UxItem at = items.get(i);
+            if (!at.isSimilar(moving)) {
+                continue;
+            }
+            int max = maxStack(moving);
+            int room = max - at.amount();
+            if (room <= 0) {
+                continue;
+            }
+            int place = Math.min(room, remaining);
+            items.set(i, at.withAmount(at.amount() + place));
+            dirty.add(i);
+            remaining -= place;
+        }
+        for (int i = 0; i < items.size() && remaining > 0; i++) {
+            if (!placeable.test(i) || !items.get(i).isEmpty()) {
+                continue;
+            }
+            int max = maxStack(moving);
+            int place = Math.min(max, remaining);
+            items.set(i, moving.withAmount(place));
+            dirty.add(i);
+            remaining -= place;
+        }
+        UxItem left = remaining <= 0 ? UxItem.EMPTY : moving.withAmount(remaining);
+        return new Result(items, left, dirty);
+    }
+
     private static Result shift(
             List<UxItem> items,
             UxItem held,
@@ -199,7 +238,6 @@ public final class VirtualClickSimulator {
             return new Result(items, held, dirty);
         }
         int remaining = moving.amount();
-        // merge into similar takeable stacks first
         for (int i = 0; i < items.size() && remaining > 0; i++) {
             if (i == slot || !takeable.test(i)) {
                 continue;

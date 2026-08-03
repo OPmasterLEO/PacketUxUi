@@ -16,7 +16,7 @@ import net.opmasterleo.packetuxui.types.InventoryType;
 
 public class Menu {
 
-    private final Component name;
+    private volatile Component name;
     private final InventoryType type;
     private final ConcurrentMap<Integer, Button> buttons;
     private final CooldownComponent cooldown;
@@ -69,6 +69,10 @@ public class Menu {
 
     public Component name() {
         return name;
+    }
+
+    public void setName(Component name) {
+        this.name = name == null ? Component.empty() : name;
     }
 
     public InventoryType type() {

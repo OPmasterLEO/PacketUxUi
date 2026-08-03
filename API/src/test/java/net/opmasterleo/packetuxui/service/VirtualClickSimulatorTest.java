@@ -114,15 +114,52 @@ class VirtualClickSimulatorTest {
     }
 
     @Test
-    void swapTypeIsNoOpInSimulator() {
-        List<UxItem> top = list(stack("minecraft:stone", 1));
-        UxItem cursor = stack("minecraft:dirt", 1);
-        VirtualClickSimulator.Result r = VirtualClickSimulator.simulate(
-                top, cursor, 0, 0, WindowClickType.SWAP, ALL
+    void shiftIntoMergesThenEmpty() {
+        List<UxItem> top = list(
+                stack("minecraft:stone", 60),
+                UxItem.EMPTY,
+                stack("minecraft:dirt", 1)
+        );
+        Predicate<Integer> editable = slot -> slot == 0 || slot == 1;
+        VirtualClickSimulator.Result r = VirtualClickSimulator.shiftInto(
+                top, stack("minecraft:stone", 10), editable
+        );
+        assertEquals(64, r.items().get(0).amount());
+        assertEquals(6, r.items().get(1).amount());
+        assertEquals(1, r.items().get(2).amount());
+        assertTrue(r.cursor().isEmpty());
+        assertConserved(
+                List.of(stack("minecraft:stone", 60), UxItem.EMPTY, stack("minecraft:dirt", 1)),
+                stack("minecraft:stone", 10),
+                r.items(),
+                r.cursor()
+        );
+    }
+
+    @Test
+    void dragSkipsNonTakeableSlotsWithoutLoss() {
+        List<UxItem> top = list(UxItem.EMPTY, stack("minecraft:barrier", 1), UxItem.EMPTY);
+        UxItem cursor = stack("minecraft:arrow", 3);
+        Predicate<Integer> editableOnly = slot -> slot == 0 || slot == 2;
+        VirtualClickSimulator.Result r = VirtualClickSimulator.dragEnd(
+                top, cursor, List.of(0, 1, 2), 2, editableOnly
         );
         assertConserved(top, cursor, r.items(), r.cursor());
+        assertEquals(2, r.items().get(0).amount());
+        assertEquals(1, r.items().get(1).amount()); // untouched locked slot
+        assertEquals(1, r.items().get(2).amount());
+        assertTrue(r.cursor().isEmpty());
+    }
+
+    @Test
+    void lockedSlotShiftIsNoOp() {
+        List<UxItem> top = list(stack("minecraft:stone", 8), UxItem.EMPTY);
+        Predicate<Integer> none = slot -> false;
+        VirtualClickSimulator.Result r = VirtualClickSimulator.simulate(
+                top, UxItem.EMPTY, 0, 0, WindowClickType.QUICK_MOVE, none
+        );
         assertEquals(top, r.items());
-        assertEquals(cursor, r.cursor());
+        assertTrue(r.cursor().isEmpty());
     }
 
     private static void assertConserved(List<UxItem> beforeTop, UxItem beforeCursor, List<UxItem> afterTop, UxItem afterCursor) {

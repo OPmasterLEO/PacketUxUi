@@ -20,5 +20,13 @@ public interface IButtonBuilder {
 
     IButtonBuilder takeable(boolean takeable);
 
+    IButtonBuilder kind(SlotKind kind);
+
+    IButtonBuilder decorative();
+
+    IButtonBuilder action();
+
+    IButtonBuilder editable();
+
     Button build();
 }

@@ -1,8 +1,11 @@
 package net.opmasterleo.packetuxui.controller;
 
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerKickEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 
 import net.opmasterleo.packetuxui.network.PipelineManager;
@@ -28,7 +31,24 @@ public final class BukkitListener implements Listener {
 
     @EventHandler
     public void onQuit(PlayerQuitEvent event) {
-        service.onCloseMenu(event.getPlayer());
+        forceClose(event.getPlayer());
         pipelineManager.remove(event.getPlayer());
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onKick(PlayerKickEvent event) {
+        forceClose(event.getPlayer());
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onDeath(PlayerDeathEvent event) {
+        forceClose(event.getEntity());
+    }
+
+    private void forceClose(org.bukkit.entity.Player player) {
+        try {
+            service.onCloseMenu(player);
+        } catch (Throwable ignored) {
+        }
     }
 }
