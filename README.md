@@ -207,7 +207,7 @@ Takeable predicates (`registerTakeablePredicate` / `registerTakeablePredicateBuk
 
 ## Build / publish locally
 
-Legacy NMS (`org.spigotmc:spigot`, 1.8–1.16 and Spigot-mapped mid versions) resolves from [CodeMC NMS](https://docs.codemc.io/faq/using-nms-repository/) — no BuildTools required for those jars. Mojang-remapped Spigot classifiers (`:remapped-mojang`, 1.17–1.20.4) still need `BuildTools --remapped` in `~/.m2` if CodeMC does not host that classifier. Modern Paper adapters (`1.20.5+`) use paperweight and need network on first setup.
+Legacy / Spigot-mapped NMS jars resolve from [CodeMC NMS](https://docs.codemc.io/faq/using-nms-repository/) (`repo.codemc.org/repository/nms/`). Modern Paper adapters (`1.20.5+`) use paperweight and need network on first setup.
 
 ```bash
 ./gradlew.bat :packetuxui:publishToMavenLocal
