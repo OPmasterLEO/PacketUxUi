@@ -37,3 +37,9 @@ tasks.register("publishToMavenLocal") {
     description = "Publishes PacketUxUi fat jar via :packetuxui"
     dependsOn(":packetuxui:publishToMavenLocal")
 }
+
+tasks.register("printVersion") {
+    doLast {
+        println(version)
+    }
+}

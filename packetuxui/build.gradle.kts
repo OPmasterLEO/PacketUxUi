@@ -78,6 +78,7 @@ publishing {
                 name.set("PacketUxUi")
                 description.set(
                     "Virtual packet menus for Paper/Spigot/Folia (1.8–26.x). " +
+                        "Fat jar with API + all NMS adapters shaded. " +
                         "Shade into your plugin or publish as a soft-depend host."
                 )
                 url.set("https://github.com/OPmasterLEO/PacketUxUi")

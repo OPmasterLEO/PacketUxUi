@@ -1,6 +1,5 @@
 plugins {
     `java-library`
-    `maven-publish`
 }
 
 java {
@@ -37,25 +36,4 @@ tasks.named<Javadoc>("javadoc") {
         }
     }
     isFailOnError = false
-}
-
-publishing {
-    publications {
-        create<MavenPublication>("maven") {
-            groupId = "net.opmasterleo"
-            artifactId = "packetuxui-api"
-            version = project.version.toString()
-            from(components["java"])
-            pom {
-                name.set("PacketUxUi API")
-                description.set(
-                    "Compile-only API for PacketUxUi. For runtime, depend on net.opmasterleo:packetuxui (shaded NMS)."
-                )
-                url.set("https://github.com/OPmasterLEO/PacketUxUi")
-            }
-        }
-    }
-    repositories {
-        mavenLocal()
-    }
 }

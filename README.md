@@ -56,47 +56,25 @@ dependencyResolutionManagement {
 
 Replace `Tag` with a release tag, commit hash, or `main-SNAPSHOT`.
 
-Fat jar module (recommended if the aggregator POM is empty):
-
-```kotlin
-implementation("com.github.OPmasterLEO.PacketUxUi:packetuxui:Tag")
-```
-
-
+One fat jar — API + all NMS adapters (1.8 → 26.2) shaded in. Do **not** depend on a separate API module.
 
 #### Gradle
 
 ```gradle
 dependencies {
-    implementation 'com.github.OPmasterLEO:PacketUxUi:Tag'
-    // or: implementation 'com.github.OPmasterLEO.PacketUxUi:packetuxui:Tag'
+    implementation 'com.github.OPmasterLEO.PacketUxUi:packetuxui:Tag'
 }
 ```
-
-
 
 #### Gradle Kotlin
 
 ```kotlin
 dependencies {
-    implementation("com.github.OPmasterLEO:PacketUxUi:Tag")
-    // or: implementation("com.github.OPmasterLEO.PacketUxUi:packetuxui:Tag")
+    implementation("com.github.OPmasterLEO.PacketUxUi:packetuxui:Tag")
 }
 ```
 
-
-
 #### Maven
-
-```xml
-<dependency>
-    <groupId>com.github.OPmasterLEO</groupId>
-    <artifactId>PacketUxUi</artifactId>
-    <version>Tag</version>
-</dependency>
-```
-
-Or the fat module directly:
 
 ```xml
 <dependency>
@@ -112,7 +90,7 @@ When shading into your plugin, relocate and keep the library tree if you use `mi
 tasks.shadowJar {
     // relocate("net.opmasterleo.packetuxui", "your.plugin.lib.packetuxui")
     // minimize {
-    //     exclude(dependency("com.github.OPmasterLEO:PacketUxUi:.*"))
+    //     exclude(dependency("com.github.OPmasterLEO.PacketUxUi:packetuxui:.*"))
     // }
 }
 ```
@@ -216,13 +194,13 @@ Takeable predicates (`registerTakeablePredicate` / `registerTakeablePredicateBuk
 ## Modules
 
 
-| Module       | Artifact                         | Purpose                                                |
-| ------------ | -------------------------------- | ------------------------------------------------------ |
-| `packetuxui` | `net.opmasterleo:packetuxui`     | **Publish this** — API + nms-api + all adapters shaded |
-| `API`        | `net.opmasterleo:packetuxui-api` | Thin compile API (no adapters)                         |
-| `nms-api`    | —                                | Bridges / `UxItem` / `AdapterLoader`                   |
-| `nms:*`      | —                                | Per-version adapters (1.8–26.2)                        |
-| `TestMenu`   | —                                | Demo Paper plugin                                      |
+| Module       | Artifact                     | Purpose                                              |
+| ------------ | ---------------------------- | ---------------------------------------------------- |
+| `packetuxui` | `net.opmasterleo:packetuxui` | **Only published artifact** — API + all NMS shaded |
+| `API`        | — (internal)                 | Public API sources (bundled into fat jar)            |
+| `nms-api`    | — (internal)                 | Bridges / `UxItem` / `AdapterLoader`                 |
+| `nms:*`      | — (internal)                 | Per-version adapters (1.8–26.2)                      |
+| `TestMenu`   | —                            | Demo Paper plugin                                    |
 
 
 

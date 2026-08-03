@@ -8,8 +8,6 @@ apply(from = rootProject.file("gradle/nms-buckets.gradle.kts"))
 
 dependencies {
     compileOnly("io.papermc.paper:paper-api:1.21.4-R0.1-SNAPSHOT")
-    // Compile against thin API; runtime/shade pulls fat library (all NMS adapters).
-    implementation(project(":API"))
     implementation(project(":packetuxui"))
     implementation("org.incendo:cloud-paper:2.0.0-beta.10")
 }
