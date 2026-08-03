@@ -14,6 +14,7 @@ import net.minecraft.network.protocol.game.ClientboundContainerClosePacket;
 import net.minecraft.network.protocol.game.ClientboundContainerSetContentPacket;
 import net.minecraft.network.protocol.game.ClientboundContainerSetSlotPacket;
 import net.minecraft.network.protocol.game.ClientboundOpenScreenPacket;
+import net.minecraft.network.protocol.game.ClientboundSetCursorItemPacket;
 import net.minecraft.network.protocol.game.ServerboundContainerClickPacket;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.inventory.ClickType;
@@ -92,12 +93,7 @@ public final class SharedMenuPacketBridge implements MenuPacketBridge {
         if (sp == null) {
             return;
         }
-        sp.connection.send(new ClientboundContainerSetSlotPacket(
-                -1,
-                0,
-                -1,
-                items.toMinecraft(item)
-        ));
+        sp.connection.send(new ClientboundSetCursorItemPacket(items.toMinecraft(item)));
     }
 
     @Override

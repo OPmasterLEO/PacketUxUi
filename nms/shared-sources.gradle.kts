@@ -17,6 +17,7 @@ val sharedRootName = when (era) {
     "legacy16" -> "nms-shared-legacy16"
     "mid" -> "nms-shared-mid"
     "mid17" -> "nms-shared-mid17"
+    "modern21_2" -> "nms-shared-modern21_2"
     "modern21_5" -> "nms-shared-modern21_5"
     "modern26" -> "nms-shared-modern26"
     else -> "nms-shared-modern"
