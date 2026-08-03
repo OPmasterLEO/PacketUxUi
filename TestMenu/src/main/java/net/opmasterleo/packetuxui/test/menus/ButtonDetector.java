@@ -8,6 +8,7 @@ import net.opmasterleo.packetuxui.nms.item.UxItemBuilder;
 import net.opmasterleo.packetuxui.service.Button;
 import net.opmasterleo.packetuxui.service.ButtonBuilder;
 import net.opmasterleo.packetuxui.service.Menu;
+import net.opmasterleo.packetuxui.types.ExecuteComponent;
 import net.opmasterleo.packetuxui.types.InventoryType;
 
 public final class ButtonDetector {
@@ -33,18 +34,12 @@ public final class ButtonDetector {
 
         Button hoverButton = new ButtonBuilder()
                 .item(glowingItem)
-                .click(it -> {
-                    it.player().sendMessage(StringUtils.toComponent("<green>You clicked on the glowing button!"));
-                    it.player().sendMessage(StringUtils.toComponent("Ur button is " + it.buttonType()));
-                })
+                .click(GlowingClick.INSTANCE)
                 .build();
 
         Button cooldownButton = new ButtonBuilder()
                 .item(heavyItem)
-                .click(it -> {
-                    it.player().sendMessage(StringUtils.toComponent("<gold>Clicked on Heavy Anvil!"));
-                    it.player().sendMessage(StringUtils.toComponent("Ur button is " + it.buttonType()));
-                })
+                .click(HeavyClick.INSTANCE)
                 .build();
 
         this.menu = new Menu(
@@ -68,5 +63,25 @@ public final class ButtonDetector {
 
     public Menu menu() {
         return menu;
+    }
+
+    private static final class GlowingClick implements ExecuteComponent.Handler {
+        private static final GlowingClick INSTANCE = new GlowingClick();
+
+        @Override
+        public void accept(ExecuteComponent it) {
+            it.player().sendMessage(StringUtils.toComponent("<green>You clicked on the glowing button!"));
+            it.player().sendMessage(StringUtils.toComponent("Ur button is " + it.buttonType()));
+        }
+    }
+
+    private static final class HeavyClick implements ExecuteComponent.Handler {
+        private static final HeavyClick INSTANCE = new HeavyClick();
+
+        @Override
+        public void accept(ExecuteComponent it) {
+            it.player().sendMessage(StringUtils.toComponent("<gold>Clicked on Heavy Anvil!"));
+            it.player().sendMessage(StringUtils.toComponent("Ur button is " + it.buttonType()));
+        }
     }
 }

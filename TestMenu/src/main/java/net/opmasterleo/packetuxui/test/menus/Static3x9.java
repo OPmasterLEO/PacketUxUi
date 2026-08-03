@@ -8,6 +8,7 @@ import net.opmasterleo.packetuxui.nms.item.UxItemBuilder;
 import net.opmasterleo.packetuxui.service.Button;
 import net.opmasterleo.packetuxui.service.ButtonBuilder;
 import net.opmasterleo.packetuxui.service.Menu;
+import net.opmasterleo.packetuxui.types.ExecuteComponent;
 import net.opmasterleo.packetuxui.types.InventoryType;
 
 public final class Static3x9 {
@@ -40,10 +41,7 @@ public final class Static3x9 {
 
         Button button1 = new ButtonBuilder()
                 .item(item1)
-                .click(it -> {
-                    String key = it.itemStack() == null ? "null" : it.itemStack().materialKey();
-                    it.player().sendMessage(StringUtils.toComponent("You clicked with item: " + key));
-                })
+                .click(ClickItemMessage.INSTANCE)
                 .build();
 
         Button button2 = new ButtonBuilder()
@@ -62,17 +60,32 @@ public final class Static3x9 {
                         20, button1,
                         24, button2
                 ),
-                new CooldownComponent(
-                        5000,
-                        it -> it.player().sendMessage(
-                                StringUtils.toComponent("Menu cooldown bigger so it overrides item's one")
-                        ),
-                        1000
-                )
+                new CooldownComponent(5000, MenuCooldownMessage.INSTANCE, 1000)
         );
     }
 
     public Menu menu() {
         return menu;
+    }
+
+    private static final class ClickItemMessage implements ExecuteComponent.Handler {
+        private static final ClickItemMessage INSTANCE = new ClickItemMessage();
+
+        @Override
+        public void accept(ExecuteComponent it) {
+            String key = it.itemStack() == null ? "null" : it.itemStack().materialKey();
+            it.player().sendMessage(StringUtils.toComponent("You clicked with item: " + key));
+        }
+    }
+
+    private static final class MenuCooldownMessage implements ExecuteComponent.Handler {
+        private static final MenuCooldownMessage INSTANCE = new MenuCooldownMessage();
+
+        @Override
+        public void accept(ExecuteComponent it) {
+            it.player().sendMessage(StringUtils.toComponent(
+                    "Menu cooldown bigger so it overrides item's one"
+            ));
+        }
     }
 }

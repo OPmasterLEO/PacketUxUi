@@ -6,6 +6,7 @@ import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 
 import org.bukkit.Bukkit;
+import org.bukkit.entity.Player;
 
 import net.opmasterleo.packetuxui.PacketUxUiAPI;
 import net.opmasterleo.packetuxui.common.StringUtils;
@@ -17,6 +18,7 @@ import net.opmasterleo.packetuxui.service.Button;
 import net.opmasterleo.packetuxui.service.ButtonBuilder;
 import net.opmasterleo.packetuxui.service.Menu;
 import net.opmasterleo.packetuxui.service.MenuService;
+import net.opmasterleo.packetuxui.types.ExecuteComponent;
 import net.opmasterleo.packetuxui.types.InventoryType;
 
 public final class AllInOne {
@@ -57,42 +59,26 @@ public final class AllInOne {
 
         Button hoverButton = new ButtonBuilder()
                 .item(glowingItem)
-                .click(it -> {
-                    it.player().sendMessage(StringUtils.toComponent("<green>You clicked on the glowing button!"));
-                    it.player().sendMessage(StringUtils.toComponent("Button type: " + it.buttonType()));
-                })
+                .click(GlowingClick.INSTANCE)
                 .build();
 
         Button cooldownButton = new ButtonBuilder()
                 .item(redWool)
-                .click(it -> {
-                    it.player().sendMessage(StringUtils.toComponent("<gold>Clicked on Red Wool!"));
-                    String key = it.itemStack() == null ? "null" : it.itemStack().materialKey();
-                    it.player().sendMessage(StringUtils.toComponent("Item type: " + key));
-                })
-                .cooldown(new CooldownComponent(
-                        4000,
-                        it -> it.player().sendMessage(
-                                StringUtils.toComponent("<red>Cooldown active. Wait before clicking again.")
-                        ),
-                        1000
-                ))
+                .click(RedWoolClick.INSTANCE)
+                .cooldown(new CooldownComponent(4000, ButtonCooldownMessage.INSTANCE, 1000))
                 .build();
 
         Button staticButton = new ButtonBuilder()
                 .item(coolSign)
-                .click(it -> it.player().sendMessage(
-                        StringUtils.toComponent("<aqua>You clicked on the Cool Sign!")
-                ))
+                .click(CoolSignClick.INSTANCE)
                 .build();
 
         Map<Integer, Button> buttons = new HashMap<>();
         for (int slot = 0; slot < 36; slot++) {
-            int captured = slot;
             if (UPDATE_BUTTONS.contains(slot)) {
                 buttons.put(slot, new ButtonBuilder()
                         .item(stone)
-                        .click(it -> service.updateItem(it.player(), air, captured))
+                        .click(new ClearSlotClick(service, air, slot))
                         .build());
             } else if (slot % 9 == 0) {
                 buttons.put(slot, hoverButton);
@@ -116,28 +102,10 @@ public final class AllInOne {
                 StringUtils.toComponent("<gradient:#ff6d2e:#1e90ff><bold>Feature Showcase Menu"),
                 InventoryType.GENERIC9X4,
                 buttons,
-                new CooldownComponent(
-                        6000,
-                        it -> it.player().sendMessage(StringUtils.toComponent("<yellow>Menu is on cooldown!")),
-                        1200
-                )
+                new CooldownComponent(6000, MenuCooldownMessage.INSTANCE, 1200)
         );
 
-        scheduler.runRepeatingGlobal(() -> {
-            for (var player : Bukkit.getOnlinePlayers()) {
-                scheduler.runForPlayer(player, () -> {
-                    Menu open = service.getMenu(player);
-                    if (open == null || !open.name().equals(menu.name())) {
-                        return;
-                    }
-                    for (int slot : UPDATE_BUTTONS) {
-                        if (chance(20)) {
-                            service.updateItem(player, chance(50) ? stone : air, slot);
-                        }
-                    }
-                });
-            }
-        }, 4L);
+        scheduler.runRepeatingGlobal(new ShowcaseTicker(service, scheduler, menu, stone, air), 4L);
     }
 
     public Menu menu() {
@@ -149,5 +117,128 @@ public final class AllInOne {
             throw new IllegalArgumentException("percent out of range");
         }
         return ThreadLocalRandom.current().nextFloat() * 100 < percent;
+    }
+
+    private static final class GlowingClick implements ExecuteComponent.Handler {
+        private static final GlowingClick INSTANCE = new GlowingClick();
+
+        @Override
+        public void accept(ExecuteComponent it) {
+            it.player().sendMessage(StringUtils.toComponent("<green>You clicked on the glowing button!"));
+            it.player().sendMessage(StringUtils.toComponent("Button type: " + it.buttonType()));
+        }
+    }
+
+    private static final class RedWoolClick implements ExecuteComponent.Handler {
+        private static final RedWoolClick INSTANCE = new RedWoolClick();
+
+        @Override
+        public void accept(ExecuteComponent it) {
+            it.player().sendMessage(StringUtils.toComponent("<gold>Clicked on Red Wool!"));
+            String key = it.itemStack() == null ? "null" : it.itemStack().materialKey();
+            it.player().sendMessage(StringUtils.toComponent("Item type: " + key));
+        }
+    }
+
+    private static final class CoolSignClick implements ExecuteComponent.Handler {
+        private static final CoolSignClick INSTANCE = new CoolSignClick();
+
+        @Override
+        public void accept(ExecuteComponent it) {
+            it.player().sendMessage(StringUtils.toComponent("<aqua>You clicked on the Cool Sign!"));
+        }
+    }
+
+    private static final class ButtonCooldownMessage implements ExecuteComponent.Handler {
+        private static final ButtonCooldownMessage INSTANCE = new ButtonCooldownMessage();
+
+        @Override
+        public void accept(ExecuteComponent it) {
+            it.player().sendMessage(StringUtils.toComponent("<red>Cooldown active. Wait before clicking again."));
+        }
+    }
+
+    private static final class MenuCooldownMessage implements ExecuteComponent.Handler {
+        private static final MenuCooldownMessage INSTANCE = new MenuCooldownMessage();
+
+        @Override
+        public void accept(ExecuteComponent it) {
+            it.player().sendMessage(StringUtils.toComponent("<yellow>Menu is on cooldown!"));
+        }
+    }
+
+    private static final class ClearSlotClick implements ExecuteComponent.Handler {
+        private final MenuService service;
+        private final UxItem air;
+        private final int slot;
+
+        private ClearSlotClick(MenuService service, UxItem air, int slot) {
+            this.service = service;
+            this.air = air;
+            this.slot = slot;
+        }
+
+        @Override
+        public void accept(ExecuteComponent it) {
+            service.updateItem(it.player(), air, slot);
+        }
+    }
+
+    private static final class ShowcaseTicker implements Runnable {
+        private final MenuService service;
+        private final PlatformScheduler scheduler;
+        private final Menu menu;
+        private final UxItem stone;
+        private final UxItem air;
+
+        private ShowcaseTicker(
+                MenuService service,
+                PlatformScheduler scheduler,
+                Menu menu,
+                UxItem stone,
+                UxItem air
+        ) {
+            this.service = service;
+            this.scheduler = scheduler;
+            this.menu = menu;
+            this.stone = stone;
+            this.air = air;
+        }
+
+        @Override
+        public void run() {
+            for (Player player : Bukkit.getOnlinePlayers()) {
+                scheduler.runForPlayer(player, new PlayerTick(service, menu, stone, air, player));
+            }
+        }
+    }
+
+    private static final class PlayerTick implements Runnable {
+        private final MenuService service;
+        private final Menu menu;
+        private final UxItem stone;
+        private final UxItem air;
+        private final Player player;
+
+        private PlayerTick(MenuService service, Menu menu, UxItem stone, UxItem air, Player player) {
+            this.service = service;
+            this.menu = menu;
+            this.stone = stone;
+            this.air = air;
+            this.player = player;
+        }
+
+        @Override
+        public void run() {
+            Menu open = service.getMenu(player);
+            if (open == null || !open.name().equals(menu.name())) {
+                return;
+            }
+            for (int slot : UPDATE_BUTTONS) {
+                if (chance(20)) {
+                    service.updateItem(player, chance(50) ? stone : air, slot);
+                }
+            }
+        }
     }
 }

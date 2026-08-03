@@ -8,9 +8,16 @@ import net.opmasterleo.packetuxui.nms.item.UxItemBuilder;
 import net.opmasterleo.packetuxui.service.Button;
 import net.opmasterleo.packetuxui.service.ButtonBuilder;
 import net.opmasterleo.packetuxui.service.Menu;
+import net.opmasterleo.packetuxui.types.ExecuteComponent;
 import net.opmasterleo.packetuxui.types.InventoryType;
 
 public final class CooldownTest {
+
+    private static final String COOLDOWN_HINT = """
+            
+            <red>You can do everything the same as in execute, 
+            when the player is under cooldown
+            but not when freeze time""";
 
     private final Menu menu;
 
@@ -36,24 +43,12 @@ public final class CooldownTest {
 
         Button button = new ButtonBuilder()
                 .item(item)
-                .cooldown(new CooldownComponent(10000, it -> it.player().sendMessage(StringUtils.toComponent(
-                        """
-                        
-                        <red>You can do everything the same as in execute, 
-                        when the player is under cooldown
-                        but not when freeze time"""
-                ))))
+                .cooldown(new CooldownComponent(10000, CooldownHint.INSTANCE))
                 .build();
 
         Button button1 = new ButtonBuilder()
                 .item(item1)
-                .cooldown(new CooldownComponent(2000, it -> it.player().sendMessage(StringUtils.toComponent(
-                        """
-                        
-                        <red>You can do everything the same as in execute, 
-                        when the player is under cooldown
-                        but not when freeze time"""
-                )), 1000))
+                .cooldown(new CooldownComponent(2000, CooldownHint.INSTANCE, 1000))
                 .build();
 
         this.menu = new Menu(
@@ -69,5 +64,14 @@ public final class CooldownTest {
 
     public Menu menu() {
         return menu;
+    }
+
+    private static final class CooldownHint implements ExecuteComponent.Handler {
+        private static final CooldownHint INSTANCE = new CooldownHint();
+
+        @Override
+        public void accept(ExecuteComponent it) {
+            it.player().sendMessage(StringUtils.toComponent(COOLDOWN_HINT));
+        }
     }
 }

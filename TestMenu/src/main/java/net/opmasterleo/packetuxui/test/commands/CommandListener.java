@@ -4,6 +4,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 import org.bukkit.plugin.java.JavaPlugin;
+import org.incendo.cloud.context.CommandContext;
 import org.incendo.cloud.execution.ExecutionCoordinator;
 import org.incendo.cloud.paper.PaperCommandManager;
 import org.incendo.cloud.paper.util.sender.PaperSimpleSenderMapper;
@@ -48,16 +49,44 @@ public final class CommandListener {
             String description = entry.getValue().description();
             commandManager.command(
                     openMenuBuilder.literal(subcommand)
-                            .handler(context -> service.openMenu(context.sender().source(), menu))
+                            .handler(new OpenMenuHandler(service, menu))
             );
             commandManager.command(
                     openMenuBuilder.literal(subcommand)
                             .literal("desc")
-                            .handler(context -> context.sender().source().sendMessage(description))
+                            .handler(new DescHandler(description))
             );
         }
     }
 
     private record MenuEntry(Menu menu, String description) {
+    }
+
+    private static final class OpenMenuHandler implements org.incendo.cloud.execution.CommandExecutionHandler<PlayerSource> {
+        private final MenuService service;
+        private final Menu menu;
+
+        private OpenMenuHandler(MenuService service, Menu menu) {
+            this.service = service;
+            this.menu = menu;
+        }
+
+        @Override
+        public void execute(CommandContext<PlayerSource> context) {
+            service.openMenu(context.sender().source(), menu);
+        }
+    }
+
+    private static final class DescHandler implements org.incendo.cloud.execution.CommandExecutionHandler<PlayerSource> {
+        private final String description;
+
+        private DescHandler(String description) {
+            this.description = description;
+        }
+
+        @Override
+        public void execute(CommandContext<PlayerSource> context) {
+            context.sender().source().sendMessage(description);
+        }
     }
 }
