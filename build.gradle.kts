@@ -32,12 +32,16 @@ subprojects {
     }
 }
 
+evaluationDependsOn(":packetuxui")
+
+val fatJar = project(":packetuxui").tasks.named("shadowJar")
+
 publishing {
     publications {
         create<MavenPublication>("maven") {
             artifactId = rootProject.name // PacketUxUi
-            artifact(layout.projectDirectory.file("packetuxui/build/libs/PacketUxUi-${version}.jar")) {
-                builtBy(":packetuxui:shadowJar")
+            artifact(fatJar) {
+                classifier = null
             }
             pom {
                 name.set("PacketUxUi")
@@ -70,7 +74,7 @@ publishing {
 }
 
 tasks.named("publishToMavenLocal").configure {
-    dependsOn(":packetuxui:shadowJar")
+    dependsOn(fatJar)
 }
 
 tasks.register("printVersion") {
