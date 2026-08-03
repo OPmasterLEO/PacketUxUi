@@ -4,13 +4,13 @@ Virtual packet menus for **Paper / Spigot / Folia** — Minecraft **1.8 → 26.2
 
 Direct NMS (no PacketEvents). Netty click handling, dirty-slot Set Slot updates, Folia-safe schedulers.
 
-[JitPack](https://jitpack.io/#OPmasterLEO/PacketUxUi) · one fat jar (`packetuxui`) with API + all version adapters shaded in.
+[JitPack](https://jitpack.io/#OPmasterLEO/PacketUxUi) · one fat jar (API + all NMS adapters shaded).
 
 ---
 
 ## Install
 
-Add JitPack, then depend on the fat module. Replace `Tag` with a release tag, commit SHA, or `main-SNAPSHOT`.
+Add JitPack, then depend on the repo. Replace `Tag` with a release tag, commit SHA, or `main-SNAPSHOT`.
 
 **Gradle**
 
@@ -21,7 +21,7 @@ repositories {
 }
 
 dependencies {
-    implementation 'com.github.OPmasterLEO.PacketUxUi:packetuxui:Tag'
+    implementation 'com.github.OPmasterLEO:PacketUxUi:Tag'
 }
 ```
 
@@ -34,7 +34,7 @@ repositories {
 }
 
 dependencies {
-    implementation("com.github.OPmasterLEO.PacketUxUi:packetuxui:Tag")
+    implementation("com.github.OPmasterLEO:PacketUxUi:Tag")
 }
 ```
 
@@ -49,19 +49,19 @@ dependencies {
 </repositories>
 
 <dependency>
-  <groupId>com.github.OPmasterLEO.PacketUxUi</groupId>
-  <artifactId>packetuxui</artifactId>
+  <groupId>com.github.OPmasterLEO</groupId>
+  <artifactId>PacketUxUi</artifactId>
   <version>Tag</version>
 </dependency>
 ```
 
-Shade into your plugin if you want a soft-depend-free jar. If you use `minimize()`, exclude this dependency so NMS wrappers are not stripped:
+That single dependency is the full library (API + every NMS adapter). Shade it into your plugin if you want; if you use `minimize()`, exclude it so wrappers are not stripped:
 
 ```kotlin
 tasks.shadowJar {
     // relocate("net.opmasterleo.packetuxui", "your.plugin.lib.packetuxui")
     minimize {
-        exclude(dependency("com.github.OPmasterLEO.PacketUxUi:packetuxui:.*"))
+        exclude(dependency("com.github.OPmasterLEO:PacketUxUi:.*"))
     }
 }
 ```
@@ -69,12 +69,12 @@ tasks.shadowJar {
 **Local publish**
 
 ```bash
-./gradlew :packetuxui:publishToMavenLocal
+./gradlew publishToMavenLocal
 ```
 
 ```kotlin
 repositories { mavenLocal() }
-dependencies { implementation("net.opmasterleo:packetuxui:1.0.0") }
+dependencies { implementation("net.opmasterleo:PacketUxUi:1.0.0") }
 ```
 
 ---
@@ -190,14 +190,15 @@ Scheduler backend is chosen **once at init** — no Paper/Bukkit branching on ho
 
 | Module | Role |
 |---|---|
-| **`packetuxui`** | Only published artifact — fat jar |
+| **root (`PacketUxUi`)** | Published fat jar — JitPack `com.github.OPmasterLEO:PacketUxUi` |
+| `packetuxui` | Builds the shaded jar (internal module) |
 | `API` | Public API (shaded into fat jar) |
 | `nms-api` | Bridges / `UxItem` / `AdapterLoader` |
 | `nms:*` | Per-version adapters (1.8–26.2) |
 | `TestMenu` | Demo Paper plugin |
 
 ```bash
-./gradlew :packetuxui:publishToMavenLocal
+./gradlew publishToMavenLocal
 ./gradlew :TestMenu:shadowJar
 ```
 

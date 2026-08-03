@@ -1,7 +1,6 @@
 plugins {
     `java-library`
     id("com.gradleup.shadow")
-    `maven-publish`
 }
 
 apply(from = rootProject.file("gradle/nms-buckets.gradle.kts"))
@@ -33,7 +32,7 @@ tasks.jar {
 }
 
 tasks.shadowJar {
-    archiveBaseName.set("packetuxui")
+    archiveBaseName.set("PacketUxUi")
     archiveClassifier.set("")
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     exclude(
@@ -61,52 +60,6 @@ listOf("apiElements", "runtimeElements").forEach { name ->
 
 tasks.compileJava {
     options.release.set(21)
-}
-
-publishing {
-    publications {
-        create<MavenPublication>("maven") {
-            groupId = "net.opmasterleo"
-            artifactId = "packetuxui"
-            version = project.version.toString()
-
-            artifact(tasks.shadowJar) {
-                classifier = null
-            }
-
-            pom {
-                name.set("PacketUxUi")
-                description.set(
-                    "Virtual packet menus for Paper/Spigot/Folia (1.8–26.x). " +
-                        "Fat jar with API + all NMS adapters shaded. " +
-                        "Shade into your plugin or publish as a soft-depend host."
-                )
-                url.set("https://github.com/OPmasterLEO/PacketUxUi")
-                licenses {
-                    license {
-                        name.set("See LICENSE.md")
-                        url.set("https://github.com/OPmasterLEO/PacketUxUi/blob/main/LICENSE.md")
-                    }
-                }
-                developers {
-                    developer {
-                        id.set("opmasterleo")
-                        name.set("OPmasterLEO")
-                    }
-                }
-                withXml {
-                    asNode().appendNode("dependencies")
-                }
-            }
-        }
-    }
-    repositories {
-        mavenLocal()
-    }
-}
-
-tasks.named("publishToMavenLocal") {
-    dependsOn(tasks.shadowJar)
 }
 
 tasks.build {

@@ -1,5 +1,6 @@
 plugins {
     base
+    `maven-publish`
     id("io.papermc.paperweight.userdev") apply false
     id("com.gradleup.shadow") apply false
 }
@@ -31,11 +32,53 @@ subprojects {
     }
 }
 
-// JitPack looks for root publishToMavenLocal; the fat library lives in :packetuxui.
-tasks.register("publishToMavenLocal") {
-    group = "publishing"
-    description = "Publishes PacketUxUi fat jar via :packetuxui"
-    dependsOn(":packetuxui:publishToMavenLocal")
+publishing {
+    publications {
+        create<MavenPublication>("maven") {
+            artifactId = rootProject.name // PacketUxUi
+            pom {
+                name.set("PacketUxUi")
+                description.set(
+                    "Virtual packet menus for Paper/Spigot/Folia (1.8–26.x). " +
+                        "Fat jar with API + all NMS adapters shaded."
+                )
+                url.set("https://github.com/OPmasterLEO/PacketUxUi")
+                licenses {
+                    license {
+                        name.set("See LICENSE.md")
+                        url.set("https://github.com/OPmasterLEO/PacketUxUi/blob/main/LICENSE.md")
+                    }
+                }
+                developers {
+                    developer {
+                        id.set("opmasterleo")
+                        name.set("OPmasterLEO")
+                    }
+                }
+                withXml {
+                    asNode().appendNode("dependencies")
+                }
+            }
+        }
+    }
+    repositories {
+        mavenLocal()
+    }
+}
+
+gradle.projectsEvaluated {
+    val fatJar = project(":packetuxui").tasks.named("shadowJar")
+    publishing.publications.named<MavenPublication>("maven") {
+        artifact(fatJar) {
+            classifier = null
+        }
+    }
+    tasks.named("publishMavenPublicationToMavenLocalRepository").configure {
+        dependsOn(fatJar)
+    }
+    tasks.named("publishToMavenLocal").configure {
+        dependsOn(fatJar)
+    }
 }
 
 tasks.register("printVersion") {
