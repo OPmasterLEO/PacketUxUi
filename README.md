@@ -11,33 +11,23 @@ To get this project into your build:
 
 ### Step 1. Add the JitPack repository
 
-#### Gradle (`settings.gradle`)
+#### Gradle (`build.gradle`)
 
 ```gradle
-dependencyResolutionManagement {
-    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
-    repositories {
-        mavenCentral()
-        maven { url 'https://jitpack.io' }
-    }
+repositories {
+    mavenCentral()
+    maven { url 'https://jitpack.io' }
 }
 ```
 
-
-
-#### Gradle Kotlin (`settings.gradle.kts`)
+#### Gradle Kotlin (`build.gradle.kts`)
 
 ```kotlin
-dependencyResolutionManagement {
-    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
-    repositories {
-        mavenCentral()
-        maven { url = uri("https://jitpack.io") }
-    }
+repositories {
+    mavenCentral()
+    maven("https://jitpack.io")
 }
 ```
-
-
 
 #### Maven (`pom.xml`)
 
