@@ -84,6 +84,8 @@ public final class AdapterLoader {
         map.put("1.21.10", "v1_21_R6");
         map.put("1.21.11", "v1_21_R7");
         map.put("26.1", "v26_1");
+        map.put("26.1.1", "v26_1");
+        map.put("26.1.2", "v26_1");
         map.put("26.2", "v26_2");
         MINECRAFT_TO_BUCKET = Collections.unmodifiableMap(map);
     }
@@ -125,16 +127,45 @@ public final class AdapterLoader {
             }
         }
 
-        String minecraftVersion = Bukkit.getBukkitVersion().split("-")[0];
-        String mapped = MINECRAFT_TO_BUCKET.get(minecraftVersion);
+        String minecraftVersion = normalizeMinecraftVersion(Bukkit.getBukkitVersion());
+        String mapped = lookupBucket(minecraftVersion);
         if (mapped != null) {
             return mapped;
         }
 
         throw new NmsUnsupportedException(
                 "Unsupported Minecraft version \"" + minecraftVersion
+                        + "\" from \"" + Bukkit.getBukkitVersion()
                         + "\" (craftbukkit package " + craftBukkitPackage + ")"
         );
+    }
+
+    static String normalizeMinecraftVersion(String bukkitVersion) {
+        String version = bukkitVersion;
+        int dash = version.indexOf('-');
+        if (dash >= 0) {
+            version = version.substring(0, dash);
+        }
+        int buildIdx = version.indexOf(".build.");
+        if (buildIdx >= 0) {
+            version = version.substring(0, buildIdx);
+        }
+        return version;
+    }
+
+    static String lookupBucket(String minecraftVersion) {
+        String mapped = MINECRAFT_TO_BUCKET.get(minecraftVersion);
+        if (mapped != null) {
+            return mapped;
+        }
+        int lastDot = minecraftVersion.lastIndexOf('.');
+        if (lastDot > 0) {
+            String majorMinor = minecraftVersion.substring(0, lastDot);
+            if (majorMinor.indexOf('.') >= 0) {
+                return MINECRAFT_TO_BUCKET.get(majorMinor);
+            }
+        }
+        return null;
     }
 
     private static String describeServer() {
