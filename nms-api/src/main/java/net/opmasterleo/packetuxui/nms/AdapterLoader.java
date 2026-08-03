@@ -158,12 +158,21 @@ public final class AdapterLoader {
         if (mapped != null) {
             return mapped;
         }
-        int lastDot = minecraftVersion.lastIndexOf('.');
-        if (lastDot > 0) {
-            String majorMinor = minecraftVersion.substring(0, lastDot);
-            if (majorMinor.indexOf('.') >= 0) {
-                return MINECRAFT_TO_BUCKET.get(majorMinor);
+        int firstDot = minecraftVersion.indexOf('.');
+        if (firstDot <= 0) {
+            return null;
+        }
+        try {
+            int major = Integer.parseInt(minecraftVersion.substring(0, firstDot));
+            if (major < 26) {
+                return null;
             }
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
+        int lastDot = minecraftVersion.lastIndexOf('.');
+        if (lastDot > firstDot) {
+            return MINECRAFT_TO_BUCKET.get(minecraftVersion.substring(0, lastDot));
         }
         return null;
     }

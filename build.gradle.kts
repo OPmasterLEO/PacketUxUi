@@ -36,6 +36,9 @@ publishing {
     publications {
         create<MavenPublication>("maven") {
             artifactId = rootProject.name // PacketUxUi
+            artifact(layout.projectDirectory.file("packetuxui/build/libs/PacketUxUi-${version}.jar")) {
+                builtBy(":packetuxui:shadowJar")
+            }
             pom {
                 name.set("PacketUxUi")
                 description.set(
@@ -66,19 +69,8 @@ publishing {
     }
 }
 
-gradle.projectsEvaluated {
-    val fatJar = project(":packetuxui").tasks.named("shadowJar")
-    publishing.publications.named<MavenPublication>("maven") {
-        artifact(fatJar) {
-            classifier = null
-        }
-    }
-    tasks.named("publishMavenPublicationToMavenLocalRepository").configure {
-        dependsOn(fatJar)
-    }
-    tasks.named("publishToMavenLocal").configure {
-        dependsOn(fatJar)
-    }
+tasks.named("publishToMavenLocal").configure {
+    dependsOn(":packetuxui:shadowJar")
 }
 
 tasks.register("printVersion") {
