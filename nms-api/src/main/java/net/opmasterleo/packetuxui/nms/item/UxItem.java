@@ -85,6 +85,41 @@ public final class UxItem {
         return amount <= 0 || materialKey.endsWith(":air") || materialKey.equals("air");
     }
 
+    public UxItem withAmount(int newAmount) {
+        if (newAmount <= 0) {
+            return EMPTY;
+        }
+        return new UxItem(
+                materialKey,
+                newAmount,
+                name,
+                lore,
+                enchantments,
+                hideEnchantments,
+                customModelData,
+                headTextureBase64
+        );
+    }
+
+    public boolean isSimilar(UxItem other) {
+        if (other == null) {
+            return false;
+        }
+        if (isEmpty() && other.isEmpty()) {
+            return true;
+        }
+        if (isEmpty() || other.isEmpty()) {
+            return false;
+        }
+        return hideEnchantments == other.hideEnchantments
+                && Objects.equals(materialKey, other.materialKey)
+                && Objects.equals(name, other.name)
+                && Objects.equals(lore, other.lore)
+                && Objects.equals(enchantments, other.enchantments)
+                && Objects.equals(customModelData, other.customModelData)
+                && Objects.equals(headTextureBase64, other.headTextureBase64);
+    }
+
     public static UxItemBuilder builder() {
         return new UxItemBuilder();
     }

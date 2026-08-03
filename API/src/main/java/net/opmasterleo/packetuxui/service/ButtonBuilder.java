@@ -14,6 +14,7 @@ public final class ButtonBuilder implements IButtonBuilder {
     private UxItem item = UxItem.EMPTY;
     private Consumer<ExecuteComponent> click;
     private CooldownComponent cooldown = new CooldownComponent(0);
+    private boolean takeable;
 
     @Override
     public IButtonBuilder item(UxItem item) {
@@ -68,7 +69,13 @@ public final class ButtonBuilder implements IButtonBuilder {
     }
 
     @Override
+    public IButtonBuilder takeable(boolean takeable) {
+        this.takeable = takeable;
+        return this;
+    }
+
+    @Override
     public Button build() {
-        return new Button(item, click, cooldown);
+        return new Button(item, click, cooldown, takeable);
     }
 }

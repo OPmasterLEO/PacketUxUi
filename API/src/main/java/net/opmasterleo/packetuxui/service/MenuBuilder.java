@@ -3,6 +3,7 @@ package net.opmasterleo.packetuxui.service;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
 import org.bukkit.entity.Player;
@@ -20,6 +21,7 @@ public final class MenuBuilder {
     private final Map<Integer, Button> buttons = new LinkedHashMap<>();
     private CooldownComponent cooldown = new CooldownComponent();
     private MenuMode mode = MenuMode.READ_ONLY;
+    private BiConsumer<Player, CloseSnapshot> onClose;
 
     private MenuBuilder(Component name, InventoryType type) {
         this.name = Objects.requireNonNull(name, "name");
@@ -43,8 +45,19 @@ public final class MenuBuilder {
         return mode(MenuMode.READ_ONLY);
     }
 
+    public MenuBuilder editable() {
+        return mode(MenuMode.EDITABLE);
+    }
+
+    /** @deprecated use {@link #editable()} */
+    @Deprecated
     public MenuBuilder editablePlayerInventory() {
         return mode(MenuMode.EDITABLE_PLAYER_INVENTORY);
+    }
+
+    public MenuBuilder onClose(BiConsumer<Player, CloseSnapshot> onClose) {
+        this.onClose = onClose;
+        return this;
     }
 
     public MenuBuilder cooldown(CooldownComponent cooldown) {
@@ -75,7 +88,7 @@ public final class MenuBuilder {
     }
 
     public Menu build() {
-        return new Menu(name, type, buttons, cooldown, mode);
+        return new Menu(name, type, buttons, cooldown, mode, onClose);
     }
 
     public Menu open(Player player) {

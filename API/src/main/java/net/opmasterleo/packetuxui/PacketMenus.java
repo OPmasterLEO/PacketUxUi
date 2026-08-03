@@ -68,6 +68,12 @@ public final class PacketMenus {
         return MenuMode.READ_ONLY;
     }
 
+    public static MenuMode editable() {
+        return MenuMode.EDITABLE;
+    }
+
+    /** @deprecated use {@link #editable()} */
+    @Deprecated
     public static MenuMode editablePlayerInventory() {
         return MenuMode.EDITABLE_PLAYER_INVENTORY;
     }

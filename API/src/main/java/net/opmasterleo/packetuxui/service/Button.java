@@ -11,11 +11,17 @@ public final class Button {
     private final UxItem item;
     private final Consumer<ExecuteComponent> execute;
     private final CooldownComponent cooldown;
+    private final boolean takeable;
 
     public Button(UxItem item, Consumer<ExecuteComponent> execute, CooldownComponent cooldown) {
+        this(item, execute, cooldown, false);
+    }
+
+    public Button(UxItem item, Consumer<ExecuteComponent> execute, CooldownComponent cooldown, boolean takeable) {
         this.item = item;
         this.execute = execute;
         this.cooldown = cooldown;
+        this.takeable = takeable;
     }
 
     public static IButtonBuilder builder() {
@@ -32,5 +38,9 @@ public final class Button {
 
     public CooldownComponent cooldown() {
         return cooldown;
+    }
+
+    public boolean takeable() {
+        return takeable;
     }
 }

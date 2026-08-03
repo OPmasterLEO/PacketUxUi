@@ -18,5 +18,7 @@ public interface IButtonBuilder {
 
     IButtonBuilder cooldown(CooldownComponent cooldown);
 
+    IButtonBuilder takeable(boolean takeable);
+
     Button build();
 }

@@ -7,14 +7,19 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 
 import org.bukkit.entity.Player;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.PlayerInventory;
 
 import net.opmasterleo.packetuxui.dto.AccumulatedDrag;
 import net.opmasterleo.packetuxui.dto.CooldownComponent;
 import net.opmasterleo.packetuxui.nms.ClickPacket;
 import net.opmasterleo.packetuxui.nms.NmsAdapter;
+import net.opmasterleo.packetuxui.nms.WindowClickType;
 import net.opmasterleo.packetuxui.nms.item.UxItem;
 import net.opmasterleo.packetuxui.scheduler.PlatformScheduler;
 import net.opmasterleo.packetuxui.types.ButtonType;
@@ -49,7 +54,7 @@ public final class MenuService {
             sessions.put(player, session);
             int stateId = session.nextStateId();
             adapter.packets().sendOpenWindow(player, windowId, copy.type().id(), copy.name());
-            adapter.packets().sendWindowItems(player, windowId, stateId, copy.items(), null);
+            adapter.packets().sendWindowItems(player, windowId, stateId, contentsForOpen(player, copy), null);
         });
     }
 
@@ -63,7 +68,21 @@ public final class MenuService {
 
     private void closeCurrent(Player player, boolean sendClosePacket) {
         MenuSession session = sessions.get(player);
-        if (session != null && sendClosePacket) {
+        if (session == null) {
+            windowIds.release(player);
+            carriedItem.remove(player);
+            clearAccumulatedDrag(player);
+            return;
+        }
+        UxItem cursor = carriedItem.getOrDefault(player, UxItem.EMPTY);
+        BiConsumer<Player, CloseSnapshot> onClose = session.menu().onClose();
+        if (onClose != null) {
+            try {
+                onClose.accept(player, new CloseSnapshot(session.menu().items(), cursor));
+            } catch (Throwable ignored) {
+            }
+        }
+        if (sendClosePacket) {
             adapter.packets().sendCloseWindow(player, session.windowId());
         }
         sessions.remove(player);
@@ -82,6 +101,10 @@ public final class MenuService {
         if (session == null) {
             return;
         }
+        if (session.menu().mode() == MenuMode.EDITABLE) {
+            handleEditableClick(player, session, clickData, packet);
+            return;
+        }
         if (isMenuClick(packet, clickData.clickType(), player)) {
             handleClickMenu(player, session, clickData, packet);
             return;
@@ -91,6 +114,201 @@ public final class MenuService {
             return;
         }
         resyncDirtySlots(player, session, packet, UxItem.EMPTY);
+    }
+
+    private void handleEditableClick(Player player, MenuSession session, ClickData clickData, ClickPacket packet) {
+        Menu menu = session.menu();
+        int last = menu.type().lastIndex();
+        WindowClickType type = packet.clickType();
+
+        if (type == WindowClickType.SWAP || type == WindowClickType.THROW || type == WindowClickType.CLONE) {
+            rejectEditable(player, session, packet);
+            return;
+        }
+
+        if (clickData.clickType() == ClickType.DRAG_END) {
+            handleEditableDragEnd(player, session, packet);
+            return;
+        }
+
+        boolean topSlot = packet.slot() >= 0 && packet.slot() <= last;
+        if (!topSlot) {
+            resyncFull(player, session);
+            return;
+        }
+
+        Button button = menu.buttons().get(packet.slot());
+        if (button != null && !button.takeable()) {
+            fireLockedButton(player, session, clickData, packet, button);
+            return;
+        }
+
+        Predicate<Integer> takeable = slot -> {
+            if (slot < 0 || slot > last) {
+                return false;
+            }
+            Button b = menu.buttons().get(slot);
+            return b == null || b.takeable();
+        };
+
+        UxItem cursor = carriedItem.getOrDefault(player, UxItem.EMPTY);
+        VirtualClickSimulator.Result result = VirtualClickSimulator.simulate(
+                menu.items(),
+                cursor,
+                packet.slot(),
+                packet.button(),
+                type,
+                takeable
+        );
+        applyEditableResult(player, session, result);
+    }
+
+    private void handleEditableDragEnd(Player player, MenuSession session, ClickPacket packet) {
+        Menu menu = session.menu();
+        int last = menu.type().lastIndex();
+        Predicate<Integer> takeable = slot -> {
+            if (slot < 0 || slot > last) {
+                return false;
+            }
+            Button b = menu.buttons().get(slot);
+            return b == null || b.takeable();
+        };
+        List<Integer> slots = new ArrayList<>();
+        List<AccumulatedDrag> drags = accumulatedDrag.get(player);
+        if (drags != null) {
+            for (AccumulatedDrag drag : drags) {
+                if (drag.type() == ClickType.DRAG_ADD) {
+                    slots.add(drag.packet().slot());
+                }
+            }
+        }
+        for (Integer slot : packet.changedSlots().keySet()) {
+            if (slot != null) {
+                slots.add(slot);
+            }
+        }
+        clearAccumulatedDrag(player);
+        if (packet.button() == 10) {
+            rejectEditable(player, session, packet);
+            return;
+        }
+        UxItem cursor = carriedItem.getOrDefault(player, UxItem.EMPTY);
+        VirtualClickSimulator.Result result = VirtualClickSimulator.dragEnd(
+                menu.items(),
+                cursor,
+                slots,
+                packet.button(),
+                takeable
+        );
+        applyEditableResult(player, session, result);
+    }
+
+    private void fireLockedButton(
+            Player player,
+            MenuSession session,
+            ClickData clickData,
+            ClickPacket packet,
+            Button button
+    ) {
+        if (clickData.clickType() == ClickType.DRAG_END) {
+            clearAccumulatedDrag(player);
+        }
+        UxItem cursor = carriedItem.getOrDefault(player, UxItem.EMPTY);
+        resyncDirtySlots(player, session, packet, cursor);
+        if (button.execute() == null) {
+            return;
+        }
+        long now = System.currentTimeMillis();
+        Menu menu = session.menu();
+        CooldownComponent cooldown = button.cooldown().combine(menu.cooldown());
+        Consumer<ExecuteComponent> execute;
+        if (!cooldown.isFreezeExpired(now)) {
+            execute = null;
+        } else if (!cooldown.isTimeExpired(now)) {
+            button.cooldown().resetFreeze();
+            execute = button.cooldown().execute();
+        } else {
+            button.cooldown().resetTime();
+            execute = button.execute();
+        }
+        if (execute != null) {
+            execute.accept(new ExecuteComponent(player, clickData.buttonType(), packet.slot(), cursor));
+        }
+    }
+
+    private void applyEditableResult(Player player, MenuSession session, VirtualClickSimulator.Result result) {
+        Menu menu = session.menu();
+        menu.setItems(result.items());
+        if (result.cursor().isEmpty()) {
+            carriedItem.remove(player);
+        } else {
+            carriedItem.put(player, result.cursor());
+        }
+        int windowId = session.windowId();
+        int stateId = session.nextStateId();
+        for (Integer slot : result.dirty()) {
+            UxItem item = slot < result.items().size() ? result.items().get(slot) : UxItem.EMPTY;
+            adapter.packets().sendSetSlot(player, windowId, stateId, slot, item);
+        }
+        adapter.packets().sendSetSlot(player, windowId, stateId, -1, result.cursor());
+    }
+
+    private void rejectEditable(Player player, MenuSession session, ClickPacket packet) {
+        Menu menu = session.menu();
+        int last = menu.type().lastIndex();
+        int windowId = session.windowId();
+        int stateId = session.nextStateId();
+        UxItem cursor = carriedItem.getOrDefault(player, UxItem.EMPTY);
+        if (packet.slot() >= 0 && packet.slot() <= last) {
+            UxItem item = packet.slot() < menu.items().size() ? menu.items().get(packet.slot()) : UxItem.EMPTY;
+            adapter.packets().sendSetSlot(player, windowId, stateId, packet.slot(), item);
+        }
+        adapter.packets().sendSetSlot(player, windowId, stateId, -1, cursor);
+    }
+
+    private void resyncFull(Player player, MenuSession session) {
+        int stateId = session.nextStateId();
+        UxItem cursor = carriedItem.getOrDefault(player, UxItem.EMPTY);
+        adapter.packets().sendWindowItems(
+                player,
+                session.windowId(),
+                stateId,
+                fullContents(player, session.menu()),
+                cursor.isEmpty() ? null : cursor
+        );
+    }
+
+    private List<UxItem> contentsForOpen(Player player, Menu menu) {
+        if (menu.mode() == MenuMode.EDITABLE) {
+            return fullContents(player, menu);
+        }
+        return menu.items();
+    }
+
+    private List<UxItem> fullContents(Player player, Menu menu) {
+        List<UxItem> contents = new ArrayList<>(menu.type().size() + 36);
+        contents.addAll(menu.items());
+        contents.addAll(snapshotBottom(player));
+        return contents;
+    }
+
+    private List<UxItem> snapshotBottom(Player player) {
+        List<UxItem> bottom = new ArrayList<>(36);
+        PlayerInventory inv = player.getInventory();
+        for (int i = 9; i < 36; i++) {
+            bottom.add(fromBukkitSlot(inv.getItem(i)));
+        }
+        for (int i = 0; i < 9; i++) {
+            bottom.add(fromBukkitSlot(inv.getItem(i)));
+        }
+        return bottom;
+    }
+
+    private UxItem fromBukkitSlot(ItemStack stack) {
+        if (stack == null) {
+            return UxItem.EMPTY;
+        }
+        return adapter.items().fromBukkit(stack);
     }
 
     public void handleClickInventory(Player player, ClickPacket packet) {
@@ -120,8 +338,6 @@ public final class MenuService {
         Menu menu = session.menu();
         int slot = packet.slot();
         Button button = slot >= 0 ? menu.buttons().get(slot) : null;
-        // Always revert client prediction with dirty Set Slots — never full content
-        // and never player.updateInventory().
         resyncDirtySlots(player, session, packet, UxItem.EMPTY);
         carriedItem.remove(player);
         if (button == null) {
@@ -151,11 +367,14 @@ public final class MenuService {
                 return;
             }
             int stateId = session.nextStateId();
+            List<UxItem> contents = session.menu().mode() == MenuMode.EDITABLE
+                    ? fullContents(player, session.menu())
+                    : session.menu().items();
             adapter.packets().sendWindowItems(
                     player,
                     session.windowId(),
                     stateId,
-                    session.menu().items(),
+                    contents,
                     carriedItem.get(player)
             );
         });
@@ -381,7 +600,7 @@ public final class MenuService {
                 slot,
                 0,
                 0,
-                net.opmasterleo.packetuxui.nms.WindowClickType.PICKUP,
+                WindowClickType.PICKUP,
                 Map.of(),
                 UxItem.EMPTY
         );

@@ -5,6 +5,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.function.BiConsumer;
+
+import org.bukkit.entity.Player;
 
 import net.kyori.adventure.text.Component;
 import net.opmasterleo.packetuxui.dto.CooldownComponent;
@@ -18,14 +21,15 @@ public class Menu {
     private final ConcurrentMap<Integer, Button> buttons;
     private final CooldownComponent cooldown;
     private final MenuMode mode;
+    private final BiConsumer<Player, CloseSnapshot> onClose;
     private volatile List<UxItem> items;
 
     public Menu(Component name, InventoryType type, Map<Integer, Button> buttons) {
-        this(name, type, buttons, new CooldownComponent(), MenuMode.READ_ONLY);
+        this(name, type, buttons, new CooldownComponent(), MenuMode.READ_ONLY, null);
     }
 
     public Menu(Component name, InventoryType type, Map<Integer, Button> buttons, CooldownComponent cooldown) {
-        this(name, type, buttons, cooldown, MenuMode.READ_ONLY);
+        this(name, type, buttons, cooldown, MenuMode.READ_ONLY, null);
     }
 
     public Menu(
@@ -35,6 +39,17 @@ public class Menu {
             CooldownComponent cooldown,
             MenuMode mode
     ) {
+        this(name, type, buttons, cooldown, mode, null);
+    }
+
+    public Menu(
+            Component name,
+            InventoryType type,
+            Map<Integer, Button> buttons,
+            CooldownComponent cooldown,
+            MenuMode mode,
+            BiConsumer<Player, CloseSnapshot> onClose
+    ) {
         if (buttons.size() > type.size()) {
             throw new IllegalArgumentException("Too many items in menu");
         }
@@ -43,6 +58,7 @@ public class Menu {
         this.buttons = new ConcurrentHashMap<>(buttons);
         this.cooldown = cooldown;
         this.mode = mode == null ? MenuMode.READ_ONLY : mode;
+        this.onClose = onClose;
         List<UxItem> built = new ArrayList<>(type.size());
         for (int index = 0; index < type.size(); index++) {
             Button button = this.buttons.get(index);
@@ -71,8 +87,16 @@ public class Menu {
         return mode;
     }
 
+    public BiConsumer<Player, CloseSnapshot> onClose() {
+        return onClose;
+    }
+
     public boolean isReadOnly() {
         return mode == MenuMode.READ_ONLY;
+    }
+
+    public boolean isEditable() {
+        return mode == MenuMode.EDITABLE;
     }
 
     public List<UxItem> items() {
@@ -84,6 +108,6 @@ public class Menu {
     }
 
     public Menu copy() {
-        return new Menu(name, type, buttons, cooldown, mode);
+        return new Menu(name, type, buttons, cooldown, mode, onClose);
     }
 }

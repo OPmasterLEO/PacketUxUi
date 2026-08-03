@@ -57,8 +57,9 @@ PacketMenus.menu("<gold>Leaderboard", InventoryType.GENERIC9X6)
 ```
 
 **Menu modes**
-- `READ_ONLY` (default) — leaderboards / stats / worth browse; no real inventory mutation
-- `EDITABLE_PLAYER_INVENTORY` — bottom bar injects into the player inventory (keep Bukkit GUIs for sell/order ownership)
+- `READ_ONLY` (default) — leaderboards / stats / worth browse; clicks reverted
+- `EDITABLE` — packet-based top-slot movement; bottom strip mirrored read-only; cursor discarded on close unless you handle `onClose`
+- `EDITABLE_PLAYER_INVENTORY` (deprecated) — injects bottom clicks into real inventory; prefer `EDITABLE`
 
 ## Modules
 
