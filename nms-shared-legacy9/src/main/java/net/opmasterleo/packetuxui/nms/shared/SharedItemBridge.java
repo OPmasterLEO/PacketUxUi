@@ -6,12 +6,14 @@ import java.util.List;
 import java.util.Map;
 
 import org.bukkit.Material;
+import org.bukkit.craftbukkit.NMS.inventory.CraftItemStack;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.meta.ItemMeta;
 
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
+import net.minecraft.server.NMS.ItemStack;
 import net.opmasterleo.packetuxui.nms.ItemBridge;
 import net.opmasterleo.packetuxui.nms.item.UxItem;
 
@@ -19,15 +21,15 @@ public final class SharedItemBridge implements ItemBridge {
 
     @Override
     public Object toNms(UxItem item) {
-        return toBukkit(item);
+        return CraftItemStack.asNMSCopy(toBukkit(item));
     }
 
     @Override
     public UxItem fromNms(Object nmsItem) {
-        if (nmsItem instanceof org.bukkit.inventory.ItemStack stack) {
-            return fromBukkit(stack);
+        if (!(nmsItem instanceof ItemStack stack)) {
+            return UxItem.EMPTY;
         }
-        return UxItem.EMPTY;
+        return fromBukkit(CraftItemStack.asBukkitCopy(stack));
     }
 
     @Override

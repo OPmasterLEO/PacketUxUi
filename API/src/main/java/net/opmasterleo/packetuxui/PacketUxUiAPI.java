@@ -1,7 +1,9 @@
 package net.opmasterleo.packetuxui;
 
+import java.util.LinkedHashSet;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.bukkit.Bukkit;
@@ -24,6 +26,7 @@ public final class PacketUxUiAPI {
     public static final String VERSION = "1.0.0";
 
     private static final AtomicInteger RETAIN = new AtomicInteger();
+    private static final Set<JavaPlugin> CLIENTS = new LinkedHashSet<>();
 
     private static volatile boolean initialized;
     private static volatile JavaPlugin host;
@@ -80,7 +83,7 @@ public final class PacketUxUiAPI {
     public static synchronized void init(JavaPlugin plugin) {
         Objects.requireNonNull(plugin, "plugin");
         if (initialized) {
-            RETAIN.incrementAndGet();
+            retain(plugin);
             return;
         }
         init(plugin, AdapterLoader.load());
@@ -90,7 +93,7 @@ public final class PacketUxUiAPI {
         Objects.requireNonNull(plugin, "plugin");
         Objects.requireNonNull(nmsAdapter, "nmsAdapter");
         if (initialized) {
-            RETAIN.incrementAndGet();
+            retain(plugin);
             return;
         }
         adapter = nmsAdapter;
@@ -108,6 +111,8 @@ public final class PacketUxUiAPI {
                 plugin,
                 ServicePriority.Normal
         );
+        CLIENTS.clear();
+        CLIENTS.add(plugin);
         RETAIN.set(1);
         initialized = true;
         plugin.getLogger().info(
@@ -117,14 +122,16 @@ public final class PacketUxUiAPI {
     }
 
     public static synchronized void terminate(JavaPlugin plugin) {
-        if (!initialized) {
+        if (!initialized || plugin == null) {
             return;
         }
-        if (plugin != null && host != null && plugin != host && RETAIN.get() > 1) {
-            RETAIN.decrementAndGet();
+        if (!CLIENTS.remove(plugin)) {
             return;
         }
-        if (RETAIN.decrementAndGet() > 0 && plugin != host) {
+        if (RETAIN.decrementAndGet() > 0) {
+            if (plugin == host) {
+                transferHost();
+            }
             return;
         }
         shutdown();
@@ -153,6 +160,30 @@ public final class PacketUxUiAPI {
         return MenuBuilder.of(miniMessageTitle, type);
     }
 
+    private static void retain(JavaPlugin plugin) {
+        if (CLIENTS.add(plugin)) {
+            RETAIN.incrementAndGet();
+        }
+    }
+
+    private static void transferHost() {
+        JavaPlugin previous = host;
+        JavaPlugin next = CLIENTS.iterator().next();
+        host = next;
+        try {
+            if (previous != null) {
+                Bukkit.getServicesManager().unregisterAll(previous);
+            }
+        } catch (Throwable ignored) {
+        }
+        Bukkit.getServicesManager().register(
+                PacketUxUiHolder.class,
+                new PacketUxUiHolder(),
+                next,
+                ServicePriority.Normal
+        );
+    }
+
     private static void shutdown() {
         for (Player player : Bukkit.getOnlinePlayers()) {
             try {
@@ -169,6 +200,7 @@ public final class PacketUxUiAPI {
         }
         initialized = false;
         RETAIN.set(0);
+        CLIENTS.clear();
         host = null;
         service = null;
         adapter = null;
