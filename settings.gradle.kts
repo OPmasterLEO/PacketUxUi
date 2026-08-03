@@ -1,8 +1,13 @@
 pluginManagement {
     repositories {
-        mavenCentral()
+        maven("https://plugins.gradle.org/m2/")
         gradlePluginPortal()
+        mavenCentral()
         maven("https://repo.papermc.io/repository/maven-public/")
+    }
+    plugins {
+        id("io.papermc.paperweight.userdev") version "2.0.0-beta.21"
+        id("com.gradleup.shadow") version "9.6.0"
     }
 }
 
