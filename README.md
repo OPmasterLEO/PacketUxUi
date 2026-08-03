@@ -270,7 +270,7 @@ Schedulers and lifecycle listeners are **split at init** (no per-call Paper/Bukk
 
 ## Requirements
 
-- JDK **21** (build / modern runtimes); older Spigot servers still work via versioned NMS adapters
+- JDK **21** to run Gradle; JDK **25** toolchain is auto-provisioned (Foojay) for Minecraft 26.x paperweight modules
 - Supported servers: **Minecraft 1.8 → 26.2** (Spigot / Paper / Folia where available)
   - **1.8–1.20.4** — relocated CraftBukkit/NMS buckets
   - **1.20.5–26.2** — Mojang-mapped Paper adapters (Paper/Folia recommended)

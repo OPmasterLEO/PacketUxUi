@@ -1,4 +1,5 @@
 jdk:
   - openjdk21
+# v26_* paperweight needs a JDK 25 toolchain; Gradle Foojay resolver downloads it.
 install:
   - ./gradlew clean publishToMavenLocal -x test --no-daemon
