@@ -72,6 +72,10 @@ public final class SharedMenuPacketBridge implements MenuPacketBridge {
 
     @Override
     public void sendSetSlot(Player player, int windowId, int stateId, int slot, UxItem item) {
+        if (slot < 0) {
+            sendCursorItem(player, item);
+            return;
+        }
         ServerPlayer sp = nms(player);
         if (sp == null) {
             return;
@@ -80,6 +84,20 @@ public final class SharedMenuPacketBridge implements MenuPacketBridge {
                 windowId,
                 stateId,
                 slot,
+                items.toMinecraft(item)
+        ));
+    }
+
+    @Override
+    public void sendCursorItem(Player player, UxItem item) {
+        ServerPlayer sp = nms(player);
+        if (sp == null) {
+            return;
+        }
+        sp.connection.send(new ClientboundContainerSetSlotPacket(
+                -1,
+                0,
+                -1,
                 items.toMinecraft(item)
         ));
     }

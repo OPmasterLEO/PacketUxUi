@@ -66,11 +66,21 @@ public final class SharedMenuPacketBridge implements MenuPacketBridge {
 
     @Override
     public void sendSetSlot(Player player, int windowId, int stateId, int slot, UxItem item) {
+        if (slot < 0) {
+            sendCursorItem(player, item);
+            return;
+        }
         EntityPlayer handle = ((CraftPlayer) player).getHandle();
         ItemStack nmsItem = CraftItemStack.asNMSCopy(items.toBukkit(item));
         handle.playerConnection.sendPacket(new PacketPlayOutSetSlot(windowId, slot, nmsItem));
     }
 
+    @Override
+    public void sendCursorItem(Player player, UxItem item) {
+        EntityPlayer handle = ((CraftPlayer) player).getHandle();
+        ItemStack nmsItem = CraftItemStack.asNMSCopy(items.toBukkit(item));
+        handle.playerConnection.sendPacket(new PacketPlayOutSetSlot(-1, -1, nmsItem));
+    }
     @Override
     public void injectClick(Player player, ClickPacket click) {
         EntityPlayer handle = ((CraftPlayer) player).getHandle();

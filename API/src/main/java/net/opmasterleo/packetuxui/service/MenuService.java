@@ -328,8 +328,7 @@ public final class MenuService {
         boolean touchesTop = (packet.slot() >= 0 && packet.slot() <= last)
                 || touchesTopSlots(packet, last);
         if (!touchesTop && emptyCursor && packet.changedSlotIds().isEmpty()) {
-            int stateId = session.nextStateId();
-            adapter.packets().sendSetSlot(player, session.windowId(), stateId, -1, UxItem.EMPTY);
+            adapter.packets().sendCursorItem(player, UxItem.EMPTY);
             carriedItem.remove(id(player));
             return;
         }
@@ -362,7 +361,7 @@ public final class MenuService {
                 }
             }
         }
-        adapter.packets().sendSetSlot(player, windowId, stateId, -1, UxItem.EMPTY);
+        adapter.packets().sendCursorItem(player, UxItem.EMPTY);
         carriedItem.remove(id(player));
     }
 
@@ -471,11 +470,8 @@ public final class MenuService {
             adapter.packets().sendSetSlot(player, windowId, stateId, slot, item);
         }
         adapter.packets().sendSetSlot(player, windowId, stateId, packet.slot(), leftover);
-        adapter.packets().sendSetSlot(
+        adapter.packets().sendCursorItem(
                 player,
-                windowId,
-                stateId,
-                -1,
                 carriedItem.getOrDefault(id(player), UxItem.EMPTY)
         );
     }
@@ -501,7 +497,7 @@ public final class MenuService {
             }
         }
         UxItem cursor = carriedItem.getOrDefault(id(player), UxItem.EMPTY);
-        adapter.packets().sendSetSlot(player, windowId, stateId, -1, cursor);
+        adapter.packets().sendCursorItem(player, cursor);
     }
 
     private void writeBottom(Player player, List<UxItem> bottom) {
@@ -660,7 +656,7 @@ public final class MenuService {
                 adapter.packets().sendSetSlot(player, windowId, stateId, slot, item);
             }
         }
-        adapter.packets().sendSetSlot(player, windowId, stateId, -1, nextCursor);
+        adapter.packets().sendCursorItem(player, nextCursor);
     }
 
     private void rejectEditable(Player player, MenuSession session, ClickPacket packet) {
@@ -673,7 +669,7 @@ public final class MenuService {
             UxItem item = packet.slot() < menu.items().size() ? menu.items().get(packet.slot()) : UxItem.EMPTY;
             adapter.packets().sendSetSlot(player, windowId, stateId, packet.slot(), item);
         }
-        adapter.packets().sendSetSlot(player, windowId, stateId, -1, cursor);
+        adapter.packets().sendCursorItem(player, cursor);
     }
 
     private void resyncFull(Player player, MenuSession session) {
@@ -1044,7 +1040,7 @@ public final class MenuService {
                 adapter.packets().sendSetSlot(player, windowId, stateId, slot, item);
             }
         }
-        adapter.packets().sendSetSlot(player, windowId, stateId, -1, carried == null ? UxItem.EMPTY : carried);
+        adapter.packets().sendCursorItem(player, carried == null ? UxItem.EMPTY : carried);
     }
 
     private ClickPacket syntheticClick(MenuSession session, int slot) {

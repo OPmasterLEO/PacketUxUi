@@ -17,5 +17,7 @@ public interface MenuPacketBridge {
 
     void sendSetSlot(Player player, int windowId, int stateId, int slot, UxItem item);
 
+    void sendCursorItem(Player player, UxItem item);
+
     void injectClick(Player player, ClickPacket click);
 }
