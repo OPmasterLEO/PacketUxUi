@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.13.9
+
+### Chore: single `nms-shared` variant tree
+
+Deleted all `nms-shared-legacy*` / `mid*` / `modern*` folder copies. Shared sources live under one [`nms-shared/`](nms-shared/) tree keyed by content variant (`adapter/`, `item/`, `pipeline/`, `classifier/`, `menu/`, `limits/`). Each `nmsEra` picks the matching variant set in [`nms/shared-sources.gradle.kts`](nms/shared-sources.gradle.kts).
+
+### Artifact
+`net.opmasterleo:packetuxui:0.13.9`
+
 ## 0.13.8
 
 ### Chore: dedupe nms-shared sources

@@ -6,57 +6,67 @@ val versionSharedPath = versionSharedPackage.replace('.', '/')
 val era = project.findProperty("nmsEra")?.toString() ?: "modern"
 val nmsVersion = project.findProperty("nmsVersion")?.toString() ?: project.name
 
-/** Ordered source roots: later layers overwrite earlier files with the same name. */
-val sharedLayers: List<String> = when (era) {
-    "legacy8", "legacy82", "legacy", "legacy9", "legacy11",
-    "legacy13", "legacy14", "legacy15", "legacy16" ->
-        listOf("nms-shared-legacy-base", "nms-shared-$era")
-    "mid17", "mid" ->
-        listOf("nms-shared-mid-base", "nms-shared-$era")
-    "modern" ->
-        listOf(
-            "nms-shared-mid-base",
-            "nms-shared-modern-common",
-            "nms-shared-modern-item",
-            "nms-shared-modern"
-        )
-    "modern21_2" ->
-        listOf(
-            "nms-shared-modern21-base",
-            "nms-shared-modern-common",
-            "nms-shared-modern-item",
-            "nms-shared-modern21_2"
-        )
-    "modern21_5", "modern26" ->
-        listOf(
-            "nms-shared-modern21-base",
-            "nms-shared-modern-common",
-            "nms-shared-modern21_5-item",
-            "nms-shared-$era"
-        )
-    else -> listOf("nms-shared-modern")
+/**
+ * One [nms-shared] tree, keyed by content variant (not era folder copies).
+ * Each era picks adapter/item/pipeline/classifier/menu/(limits) variant dirs.
+ */
+data class SharedParts(
+    val adapter: String,
+    val item: String,
+    val pipeline: String,
+    val classifier: String,
+    val menu: String,
+    val limits: String? = null,
+)
+
+val parts: SharedParts = when (era) {
+    "legacy8" -> SharedParts("legacy", "legacy", "legacy8", "legacy8", "legacy8")
+    "legacy82" -> SharedParts("legacy", "legacy", "legacy82", "legacy8", "legacy_r3")
+    "legacy" -> SharedParts("legacy", "legacy", "legacy", "legacy8", "legacy_r3")
+    "legacy9" -> SharedParts("legacy", "legacy", "legacy", "legacy9", "legacy9")
+    "legacy11" -> SharedParts("legacy", "legacy", "legacy", "legacy9", "legacy11")
+    "legacy13" -> SharedParts("legacy", "legacy", "legacy", "legacy13", "legacy11")
+    "legacy14" -> SharedParts("legacy", "legacy", "legacy", "legacy13", "legacy14")
+    "legacy15" -> SharedParts("legacy", "legacy", "legacy", "legacy13", "legacy15")
+    "legacy16" -> SharedParts("legacy", "legacy", "legacy", "legacy13", "legacy16")
+    "mid17" -> SharedParts("mid", "mid17", "mid17", "mid17", "mid17")
+    "mid" -> SharedParts("mid", "mid", "mid", "mid", "mid")
+    "modern" -> SharedParts("mid", "modern", "modern", "mid", "modern")
+    "modern21_2" -> SharedParts("modern21", "modern", "modern", "mid", "modern21_2", "modern21")
+    "modern21_5" -> SharedParts("modern21", "modern21_5", "modern", "modern21_5", "modern21_5", "modern21")
+    "modern26" -> SharedParts("modern21", "modern21_5", "modern", "modern26", "modern26", "modern21")
+    else -> throw GradleException("Unknown nmsEra=$era")
+}
+
+val sharedVariantDirs: List<File> = buildList {
+    val root = rootProject.file("nms-shared")
+    add(File(root, "adapter/${parts.adapter}"))
+    add(File(root, "item/${parts.item}"))
+    add(File(root, "pipeline/${parts.pipeline}"))
+    add(File(root, "classifier/${parts.classifier}"))
+    add(File(root, "menu/${parts.menu}"))
+    parts.limits?.let { add(File(root, "limits/$it")) }
 }
 
 val prepareSharedSources = tasks.register("prepareSharedSources") {
-    val fromPath = "net/opmasterleo/packetuxui/nms/shared"
-    val layerRoots = sharedLayers.map { rootProject.file("$it/src/main/java") }
-    layerRoots.forEach { inputs.dir(it) }
+    sharedVariantDirs.forEach { inputs.dir(it) }
     inputs.property("nmsVersion", nmsVersion)
     inputs.property("era", era)
-    inputs.property("layers", sharedLayers.joinToString(","))
+    inputs.property(
+        "parts",
+        "${parts.adapter}/${parts.item}/${parts.pipeline}/${parts.classifier}/${parts.menu}/${parts.limits}"
+    )
     outputs.dir(sharedOut)
     doLast {
         val outRoot = sharedOut.get().asFile
         outRoot.deleteRecursively()
         var copied = 0
-        for (srcRoot in layerRoots) {
-            val fromDir = File(srcRoot, fromPath)
-            if (!fromDir.isDirectory) {
-                throw GradleException("Missing shared sources: ${fromDir.absolutePath}")
+        for (variantDir in sharedVariantDirs) {
+            if (!variantDir.isDirectory) {
+                throw GradleException("Missing shared variant: ${variantDir.absolutePath}")
             }
-            fromDir.walkTopDown().filter { it.isFile && it.extension == "java" }.forEach { file ->
-                val relative = file.relativeTo(fromDir)
-                val dest = File(outRoot, "$versionSharedPath/$relative")
+            variantDir.listFiles { f -> f.isFile && f.extension == "java" }?.forEach { file ->
+                val dest = File(outRoot, "$versionSharedPath/${file.name}")
                 dest.parentFile.mkdirs()
                 var text = file.readText()
                     .replace(
@@ -82,7 +92,7 @@ val prepareSharedSources = tasks.register("prepareSharedSources") {
             }
         }
         if (copied == 0) {
-            throw GradleException("No shared Java sources copied for era=$era layers=$sharedLayers")
+            throw GradleException("No shared Java sources copied for era=$era")
         }
     }
 }
