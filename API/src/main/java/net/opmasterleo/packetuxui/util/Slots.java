@@ -64,7 +64,11 @@ public final class Slots {
     }
 
     public static boolean isBottom(int slot, int topSlotCount) {
-        return slot >= topSlotCount && slot < topSlotCount + 36;
+        return isBottom(slot, topSlotCount, 36);
+    }
+
+    public static boolean isBottom(int slot, int topSlotCount, int bottomSlotCount) {
+        return slot >= topSlotCount && slot < topSlotCount + bottomSlotCount;
     }
 
     /** Protocol bottom slot → 0..35 inventory snapshot index (storage then hotbar). */

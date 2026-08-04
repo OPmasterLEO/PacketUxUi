@@ -704,7 +704,7 @@ public final class MenuService {
         if (slot == -999 || slot == -1) {
             return true;
         }
-        int max = session.menu().type().protocolTopSize() + 36;
+        int max = session.menu().type().totalProtocolSlots();
         return slot >= 0 && slot < max;
     }
 
@@ -725,7 +725,7 @@ public final class MenuService {
         Menu menu = session.menu();
         int topSize = menu.type().protocolTopSize();
         int last = menu.type().protocolLastIndex();
-        int maxSlot = topSize + 36;
+        int maxSlot = topSize + menu.type().bottomSlotCount();
         List<UxItem> bottom = snapshotBottom(player);
         int windowId = session.windowId();
         int stateId = protocolState(player, session, packet.stateId());
@@ -969,7 +969,7 @@ public final class MenuService {
 
     private void settleEditableBottom(Player player, MenuSession session, ClickPacket packet) {
         int topSize = session.menu().type().protocolTopSize();
-        int maxSlot = topSize + 36;
+        int maxSlot = topSize + session.menu().type().bottomSlotCount();
         int windowId = session.windowId();
         int stateId = protocolState(player, session, packet.stateId());
         List<UxItem> bottom = snapshotBottom(player);
@@ -995,7 +995,7 @@ public final class MenuService {
         UUID pid = id(player);
         UxItem topCursor = carriedItem.getOrDefault(pid, UxItem.EMPTY);
         int topSize = session.menu().type().protocolTopSize();
-        int maxSlot = topSize + 36;
+        int maxSlot = topSize + session.menu().type().bottomSlotCount();
         int slot = packet.slot();
         if (slot < topSize || slot >= maxSlot) {
             settleEditableBottom(player, session, packet);
@@ -1331,7 +1331,7 @@ public final class MenuService {
         Menu menu = session.menu();
         int last = menu.type().protocolLastIndex();
         int topSize = menu.type().protocolTopSize();
-        int maxSlot = topSize + 36;
+        int maxSlot = topSize + menu.type().bottomSlotCount();
         int windowId = session.windowId();
         int stateId = protocolState(player, session, packet.stateId());
         UxItem cursor = activeCursor(player);
@@ -1465,18 +1465,20 @@ public final class MenuService {
 
     private List<UxItem> assembleContents(Menu menu, List<UxItem> bottom) {
         int top = menu.type().protocolTopSize();
-        List<UxItem> contents = new ArrayList<>(top + 36);
+        int bottomCount = menu.type().bottomSlotCount();
+        List<UxItem> contents = new ArrayList<>(top + bottomCount);
         List<UxItem> items = menu.items();
         for (int i = 0; i < top; i++) {
             UxItem item = i < items.size() ? items.get(i) : null;
             contents.add(item == null ? UxItem.EMPTY : item);
         }
-        if (bottom == null || bottom.size() < 36) {
-            for (int i = 0; i < 36; i++) {
+        for (int i = 0; i < bottomCount; i++) {
+            if (bottom != null && i < bottom.size()) {
+                UxItem item = bottom.get(i);
+                contents.add(item == null ? UxItem.EMPTY : item);
+            } else {
                 contents.add(UxItem.EMPTY);
             }
-        } else {
-            contents.addAll(bottom);
         }
         return contents;
     }

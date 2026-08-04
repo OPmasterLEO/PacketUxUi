@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.13.0
+
+### All vanilla inventory types on `MenuBuild`
+
+- `PacketMenus.build().type(InventoryType)` / `.hopper()` / `.anvil()` / `.furnace()` / … for every Open Screen type
+- Correct protocol sizes: hopper=5, brewing=5, lectern=1 (no player inv), crafter=9
+- `InventoryType.bottomSlotCount()` / `totalProtocolSlots()` — MenuService no longer hardcodes `+36`
+- `InventorySlots` named indices (`HOPPER_CENTER`, `ANVIL_RESULT`, …)
+- Same modes on all types: readOnly / editable / extractable / action / decorative
+- Chest bind still **generic 9×N only**; hopper/anvil/furnace/etc. are packet-only (correct Open Screen — do not fake hopper as `rows(1)`)
+
+### Artifact
+`net.opmasterleo:packetuxui:0.13.0`
+
 ## 0.12.10
 
 ### Full Folia/Paper scheduler surface + correct threads

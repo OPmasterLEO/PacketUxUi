@@ -47,11 +47,11 @@ public final class GuiView {
     }
 
     public int bottomSlotCount() {
-        return 36;
+        return type().bottomSlotCount();
     }
 
     public int totalSlotCount() {
-        return topSlotCount + 36;
+        return topSlotCount + bottomSlotCount();
     }
 
     public int stateId() {

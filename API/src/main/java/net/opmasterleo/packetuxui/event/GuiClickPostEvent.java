@@ -46,7 +46,11 @@ public final class GuiClickPostEvent extends GuiEvent {
                 ? ButtonType.LEFT
                 : clickData.buttonType();
         this.slot = packet.slot();
-        this.slotType = GuiClickMapper.slotType(this.slot, topSlotCount);
+        this.slotType = GuiClickMapper.slotType(
+                this.slot,
+                topSlotCount,
+                menu == null ? 36 : menu.type().bottomSlotCount()
+        );
         this.currentItem = GuiClickMapper.currentItem(menu, this.slot, topSlotCount);
         this.cursor = cursor == null ? UxItem.EMPTY : cursor;
         this.action = GuiClickMapper.action(packet, clickData, this.currentItem, this.cursor);

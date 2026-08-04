@@ -29,10 +29,20 @@ import net.opmasterleo.packetuxui.types.ClickType;
 import net.opmasterleo.packetuxui.types.ExecuteComponent;
 import net.opmasterleo.packetuxui.types.InventoryType;
 
+/**
+ * Fluent menu builder for every {@link InventoryType}.
+ * <p>
+ * Use {@link #rows(int)} for generic 9×N chests, or {@link #type(InventoryType)} /
+ * {@link #hopper()} / {@link #anvil()} / … for correct protocol layouts (do not fake
+ * hopper as {@code rows(1)}).
+ * <p>
+ * Modes ({@link #readOnly()}, {@link #editable()}, extractable/action/decorative slots)
+ * work the same on chest and packet-only types. Only generic 9×N get NMS chest bind.
+ */
 public final class MenuBuild {
 
     private Component title = Component.empty();
-    private int rows = 3;
+    private InventoryType type = InventoryType.GENERIC9X3;
     private MenuMode mode = MenuMode.READ_ONLY;
     private final Map<Integer, Button> buttons = new LinkedHashMap<>();
     private final Map<Integer, UxItem> ownedItems = new LinkedHashMap<>();
@@ -53,12 +63,105 @@ public final class MenuBuild {
         return this;
     }
 
+    /**
+     * Generic chest rows 1–6 → {@link InventoryType#GENERIC9X1}…{@link InventoryType#GENERIC9X6}.
+     * Prefer {@link #type(InventoryType)} / {@link #hopper()} for non-chest screens.
+     */
     public MenuBuild rows(int rows) {
-        if (rows < 1 || rows > 6) {
-            throw new IllegalArgumentException("rows must be 1..6");
-        }
-        this.rows = rows;
+        this.type = InventoryType.genericRows(rows);
         return this;
+    }
+
+    /** Any vanilla Open Screen type (hopper, anvil, furnace, …). */
+    public MenuBuild type(InventoryType type) {
+        this.type = Objects.requireNonNull(type, "type");
+        return this;
+    }
+
+    public MenuBuild hopper() {
+        return type(InventoryType.HOPPER);
+    }
+
+    public MenuBuild anvil() {
+        return type(InventoryType.ANVIL);
+    }
+
+    public MenuBuild furnace() {
+        return type(InventoryType.FURNACE);
+    }
+
+    public MenuBuild smoker() {
+        return type(InventoryType.SMOKER);
+    }
+
+    public MenuBuild blastFurnace() {
+        return type(InventoryType.BLAST_FURNACE);
+    }
+
+    public MenuBuild brewingStand() {
+        return type(InventoryType.BREWING_STAND);
+    }
+
+    public MenuBuild grindstone() {
+        return type(InventoryType.GRINDSTONE);
+    }
+
+    public MenuBuild smithingTable() {
+        return type(InventoryType.SMITHING_TABLE);
+    }
+
+    public MenuBuild loom() {
+        return type(InventoryType.LOOM);
+    }
+
+    public MenuBuild cartographyTable() {
+        return type(InventoryType.CARTOGRAPHY_TABLE);
+    }
+
+    public MenuBuild stonecutter() {
+        return type(InventoryType.STONECUTTER);
+    }
+
+    public MenuBuild beacon() {
+        return type(InventoryType.BEACON);
+    }
+
+    public MenuBuild enchantmentTable() {
+        return type(InventoryType.ENCHANTMENT_TABLE);
+    }
+
+    public MenuBuild craftingTable() {
+        return type(InventoryType.CRAFTING_TABLE);
+    }
+
+    /** Dispenser / dropper 3×3. */
+    public MenuBuild dispenser() {
+        return type(InventoryType.GENERIC3X3);
+    }
+
+    public MenuBuild generic3x3() {
+        return type(InventoryType.GENERIC3X3);
+    }
+
+    public MenuBuild shulkerBox() {
+        return type(InventoryType.SHULKER_BOX);
+    }
+
+    /** Merchant / villager trading screen. */
+    public MenuBuild merchant() {
+        return type(InventoryType.VILLAGER);
+    }
+
+    public MenuBuild villager() {
+        return type(InventoryType.VILLAGER);
+    }
+
+    public MenuBuild lectern() {
+        return type(InventoryType.LECTERN);
+    }
+
+    public MenuBuild crafter() {
+        return type(InventoryType.CRAFTER3X3);
     }
 
     public MenuBuild mode(MenuMode mode) {
@@ -130,7 +233,7 @@ public final class MenuBuild {
         UxItem ux = filler == null
                 ? UxItem.EMPTY
                 : PacketUxUiAPI.getAdapter().items().fromBukkit(filler);
-        for (int slot = 0; slot < type().size(); slot++) {
+        for (int slot = 0; slot < type.size(); slot++) {
             if (buttons.containsKey(slot)) {
                 continue;
             }
@@ -151,14 +254,7 @@ public final class MenuBuild {
     }
 
     public InventoryType type() {
-        return switch (rows) {
-            case 1 -> InventoryType.GENERIC9X1;
-            case 2 -> InventoryType.GENERIC9X2;
-            case 3 -> InventoryType.GENERIC9X3;
-            case 4 -> InventoryType.GENERIC9X4;
-            case 5 -> InventoryType.GENERIC9X5;
-            default -> InventoryType.GENERIC9X6;
-        };
+        return type;
     }
 
     public Menu materialize() {
@@ -167,7 +263,7 @@ public final class MenuBuild {
             Consumer<Player> playerOnly = closePlayerOnly;
             close = (player, snap) -> playerOnly.accept(player);
         }
-        return new Menu(title, type(), buttons, new net.opmasterleo.packetuxui.dto.CooldownComponent(), mode, close);
+        return new Menu(title, type, buttons, new net.opmasterleo.packetuxui.dto.CooldownComponent(), mode, close);
     }
 
     public void applyTo(Player player) {
@@ -186,13 +282,16 @@ public final class MenuBuild {
         return Map.copyOf(buttons);
     }
 
+    /**
+     * Chest rows for generic 9×N / shulker; {@code -1} for hopper, anvil, furnace, etc.
+     */
     public int rows() {
-        return rows;
+        return type.chestRows();
     }
 
     public LayoutDiagnostics validateLayout() {
         ArrayList<LayoutIssue> issues = new ArrayList<>();
-        int size = type().size();
+        int size = type.size();
         for (Integer slot : buttons.keySet()) {
             if (slot == null || slot < 0 || slot >= size) {
                 issues.add(new LayoutIssue(slot == null ? -1 : slot, "OUT_OF_BOUNDS", "Button slot out of bounds"));
@@ -256,9 +355,11 @@ public final class MenuBuild {
             BiConsumer<Player, ClickType> typedClick,
             SlotKind kind
     ) {
-        int size = type().size();
+        int size = type.size();
         if (slot < 0 || slot >= size) {
-            throw new IllegalArgumentException("Slot out of range: " + slot);
+            throw new IllegalArgumentException(
+                    "Slot out of range: " + slot + " for " + type + " (size " + size + ")"
+            );
         }
         IButtonBuilder builder = new ButtonBuilder().item(ux).kind(kind);
         if (typedClick != null) {

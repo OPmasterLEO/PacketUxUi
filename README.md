@@ -19,7 +19,7 @@ repositories {
 }
 
 dependencies {
-    implementation("net.opmasterleo:packetuxui:0.12.10")
+    implementation("net.opmasterleo:packetuxui:0.13.0")
 }
 ```
 
@@ -51,6 +51,13 @@ gui.present(player, PacketMenus.build()
         .editableSlot(13, ItemStack.empty())
         .action(22, confirm, p -> save(p))
         .onClose((p, snap) -> reclaim(snap)));
+
+// Hopper AH insert (correct 5-slot layout — do not fake with rows(1))
+gui.present(player, PacketMenus.build()
+        .title("Insert item")
+        .hopper()
+        .editable()
+        .editableSlot(2, ItemStack.empty())); // InventorySlots.HOPPER_CENTER
 
 // Same type+mode → differential update (no flicker / cursor reset)
 gui.present(player, sameTypeRefresh);
@@ -99,7 +106,29 @@ gui.present(p, PacketMenus.build().title("Spawner").rows(3).editable()
         .action(22, closeBtn, Player::closeInventory));
 ```
 
-Virtual window ids use vanilla `nextContainerCounter()` (**1–100**). Pipeline injects before `packet_handler`. Modern 21.5+/26.x bind a real `ChestMenu` (9xN only) and own `stateId` via `incrementStateId`; top stacks are mirrored into the bound container.
+Virtual window ids use vanilla `nextContainerCounter()` (**1–100**). Pipeline injects before `packet_handler`. Modern 21.5+/26.x bind a real `ChestMenu` (**generic 9×N only**) and own `stateId` via `incrementStateId`; top stacks are mirrored into the bound container.
+
+### Inventory types
+
+`PacketMenus.build()` supports every vanilla Open Screen type:
+
+| Builder | Type | Top slots | Bind |
+|---|---|---:|---|
+| `.rows(1..6)` | GENERIC9xN | 9–54 | ChestMenu |
+| `.hopper()` | HOPPER | 5 | packet-only |
+| `.anvil()` | ANVIL | 3 | packet-only |
+| `.furnace()` / `.smoker()` / `.blastFurnace()` | furnace family | 3 | packet-only |
+| `.brewingStand()` | BREWING_STAND | 5 | packet-only |
+| `.grindstone()` / `.smithingTable()` / `.loom()` / `.cartographyTable()` / `.stonecutter()` | workstations | 2–4 | packet-only |
+| `.beacon()` / `.enchantmentTable()` / `.craftingTable()` | specialty | 1–10 | packet-only |
+| `.dispenser()` / `.generic3x3()` | GENERIC3X3 | 9 | packet-only |
+| `.shulkerBox()` | SHULKER_BOX | 27 | packet-only |
+| `.merchant()` / `.villager()` | VILLAGER | 3 | packet-only |
+| `.lectern()` | LECTERN | 1 (no player inv) | packet-only |
+| `.crafter()` | CRAFTER3X3 | 9 | packet-only |
+| `.type(InventoryType.X)` | any | per type | chest only if `supportsChestBind()` |
+
+Named indices: `InventorySlots.HOPPER_CENTER`, `ANVIL_RESULT`, `FURNACE_FUEL`, … Same modes on all types: `readOnly` / `editable` / `extractableSlot` / `action` / `decorative`.
 
 Threading: full Folia/Paper scheduler coverage — **entity** (player menus), **region** (location/chunk/block), **global**, **async**, plus elastic **menu workers**. `presentAsync` builds on the menu pool then hops to the entity thread. Init/shutdown/pipeline inject hop per-player. Overrides: `-Dpacketuxui.menuWorkers.max|core|queue`. Never use global/async for player inventory on Folia.
 
@@ -112,7 +141,7 @@ Threading: full Folia/Paper scheduler coverage — **entity** (player menus), **
 | stateId         | Bound menu `incrementStateId` (session mirrors last sent)     |
 | READ_ONLY click | Netty: SetCursorItem(EMPTY). Main: one SetContent + handler   |
 | EDITABLE click  | Simulate → mirror → one bumped SetSlot(s) + SetCursorItem     |
-| Bind            | Generic 9xN chests only — no wrong-size bind for hopper/anvil |
+| Bind            | Generic 9xN chests only — hopper/anvil/furnace/etc. packet-only |
 
 
 Debug (server JVM, not plugin.yml):

@@ -19,17 +19,24 @@ public final class GuiClickMapper {
     }
 
     public static GuiSlotType slotType(int slot, int topSize) {
+        return slotType(slot, topSize, 36);
+    }
+
+    public static GuiSlotType slotType(int slot, int topSize, int bottomSize) {
         if (slot == -999 || slot < 0) {
             return GuiSlotType.OUTSIDE;
         }
         if (slot < topSize) {
             return GuiSlotType.CONTAINER;
         }
+        if (bottomSize <= 0) {
+            return GuiSlotType.OUTSIDE;
+        }
         int bottom = slot - topSize;
-        if (bottom >= 27 && bottom < 36) {
+        if (bottom >= 27 && bottom < bottomSize) {
             return GuiSlotType.HOTBAR;
         }
-        if (bottom >= 0 && bottom < 36) {
+        if (bottom >= 0 && bottom < bottomSize) {
             return GuiSlotType.PLAYER;
         }
         return GuiSlotType.OUTSIDE;

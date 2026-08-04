@@ -24,7 +24,7 @@ import net.opmasterleo.packetuxui.service.MenuService;
 
 public final class PacketUxUiAPI {
 
-    public static final String VERSION = "0.12.10";
+    public static final String VERSION = "0.13.0";
 
     private static final AtomicInteger RETAIN = new AtomicInteger();
     private static final Set<JavaPlugin> CLIENTS = new LinkedHashSet<>();
