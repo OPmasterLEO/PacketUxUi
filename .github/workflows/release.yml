@@ -15,6 +15,7 @@ jobs:
   release:
     name: Publish Release
     runs-on: ubuntu-24.04
+    environment: REPO
 
     steps:
       - name: Checkout code
