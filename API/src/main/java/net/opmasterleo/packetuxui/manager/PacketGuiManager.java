@@ -21,10 +21,8 @@ import net.opmasterleo.packetuxui.service.GuiScopeListener;
 import net.opmasterleo.packetuxui.service.Menu;
 import net.opmasterleo.packetuxui.service.MenuService;
 import net.opmasterleo.packetuxui.service.MenuSessionDiagnostics;
-import net.opmasterleo.packetuxui.service.MenuSession;
-import net.opmasterleo.packetuxui.service.SlotKind;
 import net.opmasterleo.packetuxui.service.SessionPhase;
-import net.opmasterleo.packetuxui.service.TransitionToken;
+import net.opmasterleo.packetuxui.service.SlotKind;
 
 public final class PacketGuiManager {
 
@@ -78,10 +76,6 @@ public final class PacketGuiManager {
         service.closeMenu(player);
     }
 
-    /**
-     * Close the packet menu, wait one tick (cursor empty / unbound / session gone), then run
-     * {@code onSettled}. Prefer this over delayed Bukkit tasks before SignGUI / chat UIs.
-     */
     public void closeThen(Player player, Runnable onSettled) {
         service.closeThen(player, onSettled);
     }
@@ -102,15 +96,8 @@ public final class PacketGuiManager {
         service.present(player, menu);
     }
 
-    public void present(Player player, Menu menu, PresentOptions options) {
-        if (options != null && options.forceReopenIfOnCloseChanged()) {
-            Menu current = service.getMenu(player);
-            if (current != null && current.onClose() != menu.onClose()) {
-                service.openMenu(player, menu);
-                return;
-            }
-        }
-        service.present(player, menu);
+    public void present(Player player, MenuBuild build) {
+        present(player, build.materialize());
     }
 
     public void reopen(Player player, Menu menu) {
@@ -119,38 +106,6 @@ public final class PacketGuiManager {
 
     public void reopen(Player player, MenuBuild build) {
         reopen(player, build.materialize());
-    }
-
-    public void present(Player player, MenuBuild build) {
-        present(player, build.materialize());
-    }
-
-    public void present(Player player, MenuBuild build, PresentOptions options) {
-        present(player, build.materialize(), options);
-    }
-
-    public void update(Player player, Menu menu) {
-        present(player, menu);
-    }
-
-    public void update(Player player, Menu menu, PresentOptions options) {
-        present(player, menu, options);
-    }
-
-    public void update(Player player, MenuBuild build) {
-        present(player, build);
-    }
-
-    public void update(Player player, MenuBuild build, PresentOptions options) {
-        present(player, build, options);
-    }
-
-    public TransitionToken beginTransition(Player player) {
-        return service.beginTransition(player);
-    }
-
-    public boolean endTransition(Player player, TransitionToken token) {
-        return service.endTransition(player, token);
     }
 
     public void patchSlots(Player player, Map<Integer, ItemStack> slots) {
@@ -197,142 +152,63 @@ public final class PacketGuiManager {
         service.updateTitle(player, title);
     }
 
+    /**
+     * Build on an async thread, then {@link #present} on the player scheduler.
+     */
     public void presentAsync(Player player, Supplier<MenuBuild> builder) {
-        presentAsyncResult(player, builder, PresentMode.PRESENT, PresentOptions.DEFAULT);
+        presentAsync(player, builder, null);
     }
 
-    public CompletableFuture<AsyncMenuResult> presentAsyncResult(Player player, Supplier<MenuBuild> builder) {
-        return presentAsyncResult(player, builder, PresentMode.PRESENT, PresentOptions.DEFAULT);
-    }
-
-    public CompletableFuture<AsyncMenuResult> presentAsyncResult(
-            Player player,
-            Supplier<MenuBuild> builder,
-            PresentMode mode,
-            PresentOptions options
-    ) {
+    public void presentAsync(Player player, Supplier<MenuBuild> builder, Consumer<Throwable> onError) {
         Objects.requireNonNull(builder, "builder");
-        MenuSession prior = service.getSession(player);
-        int expected = prior == null ? -1 : prior.generation();
-        CompletableFuture<AsyncMenuResult> future = new CompletableFuture<>();
         scheduler.runAsync(() -> {
             MenuBuild build;
             try {
                 build = builder.get();
             } catch (Throwable error) {
-                future.complete(AsyncMenuResult.fail(
-                        AsyncMenuStatus.SUPPLIER_FAILED,
-                        error.getClass().getSimpleName(),
-                        expected,
-                        prior == null ? -1 : prior.generation()
-                ));
+                if (onError != null) {
+                    onError.accept(error);
+                }
                 return;
             }
             if (build == null) {
-                future.complete(AsyncMenuResult.fail(AsyncMenuStatus.SUPPLIER_RETURNED_NULL, "builder returned null", expected, -1));
+                return;
+            }
+            Menu menu = build.materialize();
+            scheduler.runForPlayer(player, () -> {
+                if (player.isOnline()) {
+                    present(player, menu);
+                }
+            });
+        });
+    }
+
+    public CompletableFuture<Void> presentAsyncFuture(Player player, Supplier<MenuBuild> builder) {
+        CompletableFuture<Void> future = new CompletableFuture<>();
+        Objects.requireNonNull(builder, "builder");
+        scheduler.runAsync(() -> {
+            MenuBuild build;
+            try {
+                build = builder.get();
+            } catch (Throwable error) {
+                future.completeExceptionally(error);
+                return;
+            }
+            if (build == null) {
+                future.completeExceptionally(new IllegalStateException("builder returned null"));
                 return;
             }
             Menu menu = build.materialize();
             scheduler.runForPlayer(player, () -> {
                 if (!player.isOnline()) {
-                    future.complete(AsyncMenuResult.fail(AsyncMenuStatus.PLAYER_OFFLINE, "player offline", expected, -1));
+                    future.completeExceptionally(new IllegalStateException("player offline"));
                     return;
                 }
-                MenuSession current = service.getSession(player);
-                int observed = current == null ? -1 : current.generation();
-                if (expected >= 0) {
-                    if (current == null || current.generation() != expected || current.phase() != SessionPhase.OPEN) {
-                        future.complete(AsyncMenuResult.fail(
-                                current == null ? AsyncMenuStatus.MENU_NOT_OPEN : AsyncMenuStatus.GENERATION_MISMATCH,
-                                "session changed before apply",
-                                expected,
-                                observed
-                        ));
-                        return;
-                    }
-                }
-                switch (mode == null ? PresentMode.PRESENT : mode) {
-                    case UPDATE_IF_OPEN -> {
-                        if (current == null || current.phase() != SessionPhase.OPEN) {
-                            future.complete(AsyncMenuResult.fail(AsyncMenuStatus.MENU_NOT_OPEN, "menu not open", expected, observed));
-                            return;
-                        }
-                        present(player, menu, options == null ? PresentOptions.DEFAULT : options);
-                    }
-                    case OPEN_IF_MISSING -> {
-                        if (current == null) {
-                            open(player, menu);
-                        } else {
-                            present(player, menu, options == null ? PresentOptions.DEFAULT : options);
-                        }
-                    }
-                    default -> present(player, menu, options == null ? PresentOptions.DEFAULT : options);
-                }
-                MenuSession applied = service.getSession(player);
-                if (applied == null || applied.phase() != SessionPhase.OPEN) {
-                    future.complete(AsyncMenuResult.fail(AsyncMenuStatus.PHASE_MISMATCH, "session not open after apply", expected, observed));
-                    return;
-                }
-                future.complete(AsyncMenuResult.ok(expected, applied.generation()));
+                present(player, menu);
+                future.complete(null);
             });
         });
         return future;
-    }
-
-    public void updateAsync(Player player, Supplier<MenuBuild> builder) {
-        presentAsyncResult(player, builder, PresentMode.UPDATE_IF_OPEN, PresentOptions.DEFAULT);
-    }
-
-    public CompletableFuture<AsyncMenuResult> updateAsyncResult(Player player, Supplier<MenuBuild> builder) {
-        return presentAsyncResult(player, builder, PresentMode.UPDATE_IF_OPEN, PresentOptions.DEFAULT);
-    }
-
-    public void presentAsync(Player player, Supplier<MenuBuild> builder, Consumer<AsyncMenuResult> completion) {
-        CompletableFuture<AsyncMenuResult> future = presentAsyncResult(player, builder);
-        if (completion != null) {
-            future.whenComplete((result, error) -> completion.accept(
-                    error == null
-                            ? result
-                            : AsyncMenuResult.fail(AsyncMenuStatus.SUPPLIER_FAILED, error.getClass().getSimpleName(), -1, -1)
-            ));
-        }
-    }
-
-    public void updateAsync(Player player, Supplier<MenuBuild> builder, Consumer<AsyncMenuResult> completion) {
-        CompletableFuture<AsyncMenuResult> future = updateAsyncResult(player, builder);
-        if (completion != null) {
-            future.whenComplete((result, error) -> completion.accept(
-                    error == null
-                            ? result
-                            : AsyncMenuResult.fail(AsyncMenuStatus.SUPPLIER_FAILED, error.getClass().getSimpleName(), -1, -1)
-            ));
-        }
-    }
-
-    public CompletableFuture<AsyncMenuResult> updateIfOpen(Player player, Supplier<MenuBuild> builder) {
-        return presentAsyncResult(player, builder, PresentMode.UPDATE_IF_OPEN, PresentOptions.DEFAULT);
-    }
-
-    public CompletableFuture<AsyncMenuResult> presentOrUpdate(
-            Player player,
-            Supplier<MenuBuild> builder,
-            PresentMode mode,
-            PresentOptions options
-    ) {
-        return presentAsyncResult(player, builder, mode, options);
-    }
-
-    public void refreshPage(Player player, Supplier<MenuBuild> pageModel, RefreshStrategy strategy) {
-        Objects.requireNonNull(pageModel, "pageModel");
-        MenuBuild build = pageModel.get();
-        if (build == null) {
-            return;
-        }
-        if (strategy == RefreshStrategy.FORCE_REOPEN) {
-            service.openMenu(player, build.materialize());
-            return;
-        }
-        present(player, build.materialize());
     }
 
     public Menu getOpen(Player player) {

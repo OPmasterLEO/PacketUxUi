@@ -75,23 +75,23 @@ public final class MenuBuild {
     }
 
     public MenuBuild item(int slot, ItemStack stack) {
-        return item(slot, stack, (Consumer<Player>) null, SlotKind.ACTION);
+        return item(slot, stack, (Consumer<Player>) null, defaultItemKind());
     }
 
     public MenuBuild item(int slot, ItemStack stack, Consumer<Player> click) {
-        return item(slot, stack, click, SlotKind.ACTION);
+        return item(slot, stack, click, click != null ? SlotKind.ACTION : defaultItemKind());
     }
 
     public MenuBuild item(int slot, ItemStack stack, Consumer<Player> click, SlotKind kind) {
         Objects.requireNonNull(stack, "stack");
         UxItem ux = PacketUxUiAPI.getAdapter().items().fromBukkit(stack.clone());
-        return put(slot, ux, click, null, kind == null ? SlotKind.ACTION : kind);
+        return put(slot, ux, click, null, kind == null ? defaultItemKind() : kind);
     }
 
     public MenuBuild item(int slot, ItemStack stack, BiConsumer<Player, ClickType> click) {
         Objects.requireNonNull(stack, "stack");
         UxItem ux = PacketUxUiAPI.getAdapter().items().fromBukkit(stack.clone());
-        return put(slot, ux, null, click, SlotKind.ACTION);
+        return put(slot, ux, null, click, click != null ? SlotKind.ACTION : defaultItemKind());
     }
 
     public MenuBuild itemOwned(int slot, ItemStack stack) {
@@ -238,6 +238,10 @@ public final class MenuBuild {
         for (Integer slot : overlap) {
             issues.add(new LayoutIssue(slot == null ? -1 : slot, code, "Layout slot collision"));
         }
+    }
+
+    private SlotKind defaultItemKind() {
+        return mode == MenuMode.EDITABLE ? SlotKind.EDITABLE : SlotKind.ACTION;
     }
 
     private MenuBuild put(

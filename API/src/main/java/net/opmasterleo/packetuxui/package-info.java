@@ -3,7 +3,7 @@
  *
  * <h2>Dependency (recommended)</h2>
  * <pre>{@code
- * implementation("net.opmasterleo:packetuxui:0.9")
+ * implementation("net.opmasterleo:packetuxui:0.10")
  * // then shade into your plugin jar
  * }</pre>
  *

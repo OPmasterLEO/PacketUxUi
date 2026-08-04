@@ -49,12 +49,6 @@ public final class MenuBuilder {
         return mode(MenuMode.EDITABLE);
     }
 
-    /** @deprecated use {@link #editable()} */
-    @Deprecated
-    public MenuBuilder editablePlayerInventory() {
-        return mode(MenuMode.EDITABLE_PLAYER_INVENTORY);
-    }
-
     public MenuBuilder onClose(BiConsumer<Player, CloseSnapshot> onClose) {
         this.onClose = onClose;
         return this;
