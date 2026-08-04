@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.13.1
+
+### Hopper / editable cursor place + close dup fix
+
+- **Cursor place**: inv pickup is tracked in `bottomHeld`; placing into EDITABLE top now uses that cursor instead of restoring the item first (shift-click already worked)
+- **Close dup**: flush empty top to the client before `CloseWindow` so vanilla cannot dump GUI items back into the inv alongside plugin `onClose` refunds
+- **CloseSnapshot.cursor** includes `bottomHeld` (what the player actually sees on the cursor)
+- Single cursor reclaim (no double reclaim of held + carried)
+- In-place type replace (`present` same mode, different type) skips menu `onClose` — refresh-like, no false refunds
+
+### Artifact
+`net.opmasterleo:packetuxui:0.13.1`
+
 ## 0.13.0
 
 ### All vanilla inventory types on `MenuBuild`

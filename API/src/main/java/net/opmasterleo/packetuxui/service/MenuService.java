@@ -221,8 +221,8 @@ public final class MenuService {
      * {@code CloseWindow}. Client gets {@code OpenScreen} + contents only — no inventory flash.
      */
     private void replaceMenuInPlace(Player player, MenuSession existing, Menu menu) {
-        // Soft teardown: reclaim cursor, fire close, unbind — keep window id assigned.
-        closeCurrent(player, false, true, GuiCloseReason.REPLACE, false);
+        // Soft teardown: keep window id, skip CloseWindow, skip onClose refunds (refresh-like).
+        closeCurrent(player, false, true, GuiCloseReason.REPLACE, false, false);
         installOpen(player, menu);
         if (debugLogging) {
             debug(player, "REPLACE_IN_PLACE windowId=" + getWindowId(player)
@@ -324,11 +324,11 @@ public final class MenuService {
     }
 
     private void closeCurrent(Player player, boolean sendClosePacket, boolean reclaim) {
-        closeCurrent(player, sendClosePacket, reclaim, GuiCloseReason.API, true);
+        closeCurrent(player, sendClosePacket, reclaim, GuiCloseReason.API, true, true);
     }
 
     private void closeCurrent(Player player, boolean sendClosePacket, boolean reclaim, GuiCloseReason reason) {
-        closeCurrent(player, sendClosePacket, reclaim, reason, true);
+        closeCurrent(player, sendClosePacket, reclaim, reason, true, true);
     }
 
     private void closeCurrent(
@@ -337,6 +337,17 @@ public final class MenuService {
             boolean reclaim,
             GuiCloseReason reason,
             boolean releaseWindowId
+    ) {
+        closeCurrent(player, sendClosePacket, reclaim, reason, releaseWindowId, true);
+    }
+
+    private void closeCurrent(
+            Player player,
+            boolean sendClosePacket,
+            boolean reclaim,
+            GuiCloseReason reason,
+            boolean releaseWindowId,
+            boolean fireMenuOnClose
     ) {
         MenuSession session = sessions.get(id(player));
         if (session == null) {
@@ -349,23 +360,24 @@ public final class MenuService {
             return;
         }
         session.setPhase(SessionPhase.CLOSING);
-        UxItem cursor = carriedItem.getOrDefault(id(player), UxItem.EMPTY);
+        // Include bottomHeld so CloseSnapshot.cursor matches what the player sees.
+        UxItem cursor = activeCursor(player);
         CloseSnapshot snapshot = new CloseSnapshot(session.menu().items(), cursor);
-        EditableBottomMoves.Held heldBottom = bottomHeld.get(id(player));
         BiConsumer<Player, CloseSnapshot> onClose = session.menu().onClose();
-        if (onClose != null) {
+        if (fireMenuOnClose && onClose != null) {
             try {
                 onClose.accept(player, snapshot);
             } catch (Throwable ignored) {
             }
         }
-        if (reclaim && reclaimCursorOnClose) {
-            if (cursor != null && !cursor.isEmpty()) {
-                CursorReclaim.reclaim(player, adapter.items(), cursor);
-            }
-            if (heldBottom != null && !heldBottom.isEmpty()) {
-                CursorReclaim.reclaim(player, adapter.items(), heldBottom.item());
-            }
+        if (reclaim && reclaimCursorOnClose && cursor != null && !cursor.isEmpty()) {
+            // Single reclaim — covers carriedItem and bottomHeld (activeCursor).
+            CursorReclaim.reclaim(player, adapter.items(), cursor);
+        }
+        // Empty top on the client before CloseWindow so vanilla does not dump GUI items
+        // back into the player inventory (would duplicate plugin onClose refunds).
+        if (sendClosePacket) {
+            flushClientTopEmpty(player, session);
         }
         adapter.packets().sendCursorItem(player, UxItem.EMPTY);
         if (sendClosePacket) {
@@ -385,9 +397,35 @@ public final class MenuService {
         bottomCache.remove(id(player));
         if (debugLogging) {
             debug(player, "CLOSE windowId=" + windowId + " sendPacket=" + sendClosePacket
-                    + " reclaim=" + reclaim + " releaseId=" + releaseWindowId + " reason=" + reason);
+                    + " reclaim=" + reclaim + " releaseId=" + releaseWindowId
+                    + " fireOnClose=" + fireMenuOnClose + " reason=" + reason);
         }
         fireScope(player, false, session, top, reason, snapshot);
+    }
+
+    /** Clear top slots client-side so CloseWindow cannot dump virtual items into the inv. */
+    private void flushClientTopEmpty(Player player, MenuSession session) {
+        Menu menu = session.menu();
+        int top = menu.type().protocolTopSize();
+        if (top <= 0) {
+            return;
+        }
+        int windowId = session.windowId();
+        int stateId = protocolState(player, session);
+        List<UxItem> bottom = bottomCache.get(id(player));
+        if (bottom == null || bottom.size() != menu.type().bottomSlotCount()) {
+            bottom = snapshotBottom(player);
+            bottomCache.put(id(player), bottom);
+        }
+        List<UxItem> emptied = new ArrayList<>(top + bottom.size());
+        for (int i = 0; i < top; i++) {
+            emptied.add(UxItem.EMPTY);
+        }
+        emptied.addAll(bottom);
+        adapter.packets().mirrorTopSlots(player, emptied.subList(0, top));
+        if (!adapter.packets().sendBoundAuthority(player, stateId, true)) {
+            adapter.packets().sendWindowItems(player, windowId, stateId, emptied, UxItem.EMPTY);
+        }
     }
 
     private void fireScope(
@@ -723,12 +761,12 @@ public final class MenuService {
             return;
         }
 
-        if (bottomHeld.containsKey(id(player))) {
-            restoreBottomHeld(player, session);
-        }
-
         SlotKind kind = session.slotKind(packet.slot());
         if (kind == SlotKind.ACTION || kind == SlotKind.DECORATIVE) {
+            // Buttons must not keep a floating inv cursor — return it first.
+            if (bottomHeld.containsKey(id(player))) {
+                restoreBottomHeld(player, session);
+            }
             UxItem at = packet.slot() < menu.items().size() ? menu.items().get(packet.slot()) : UxItem.EMPTY;
             UxItem cursor = carriedItem.getOrDefault(id(player), UxItem.EMPTY);
             boolean taking = cursor.isEmpty() && !at.isEmpty() && isTakeableItem(at);
@@ -761,13 +799,19 @@ public final class MenuService {
             return;
         }
 
-        // EDITABLE — both directions
+        // EDITABLE — both directions. Cursor may be carriedItem OR bottomHeld (inv pickup).
         if (type == WindowClickType.QUICK_MOVE) {
+            if (bottomHeld.containsKey(id(player))) {
+                restoreBottomHeld(player, session);
+            }
             handleShiftFromTopToBottom(player, session, packet);
             return;
         }
 
-        UxItem cursor = carriedItem.getOrDefault(id(player), UxItem.EMPTY);
+        UUID pid = id(player);
+        EditableBottomMoves.Held held = bottomHeld.get(pid);
+        boolean fromBottomHeld = held != null && !held.isEmpty();
+        UxItem cursor = fromBottomHeld ? held.item() : carriedItem.getOrDefault(pid, UxItem.EMPTY);
         Predicate<Integer> allow = cursor.isEmpty()
                 ? new SessionAllowTake(session)
                 : new SessionAllowPlace(session);
@@ -783,7 +827,12 @@ public final class MenuService {
                 type,
                 allow
         );
-        emitDecision(player, packet, kind, false, false, "editable_simulate");
+        if (fromBottomHeld) {
+            // Item left the player-inv hold and is now on the top cursor / placed in GUI.
+            bottomHeld.remove(pid);
+        }
+        emitDecision(player, packet, kind, false, false,
+                fromBottomHeld ? "editable_place_from_inv_cursor" : "editable_simulate");
         applyEditableResult(player, session, result, packet.stateId());
     }
 
@@ -793,7 +842,7 @@ public final class MenuService {
             ClickPacket packet,
             WindowClickType type
     ) {
-        UxItem cursor = carriedItem.getOrDefault(id(player), UxItem.EMPTY);
+        UxItem cursor = activeCursor(player);
         if (!cursor.isEmpty()) {
             // Cannot place into extractable slots.
             emitDecision(player, packet, SlotKind.EXTRACTABLE, false, false, "extractable_reject_place");
@@ -869,6 +918,9 @@ public final class MenuService {
     }
 
     private void handleShiftFromBottom(Player player, MenuSession session, ClickPacket packet) {
+        if (bottomHeld.containsKey(id(player))) {
+            restoreBottomHeld(player, session);
+        }
         Menu menu = session.menu();
         int topSize = menu.type().protocolTopSize();
         int bottomIndex = packet.slot() - topSize;
@@ -1823,11 +1875,13 @@ public final class MenuService {
         public void run() {
             MenuSession existing = owner.sessions.get(id(player));
             if (existing != null && existing.phase() == SessionPhase.OPEN) {
+                // Same type+mode → differential SetSlots (no close, no onClose refund).
                 if (existing.menu().mode() == menu.mode()
                         && existing.menu().type() == menu.type()) {
                     owner.applyMenuDifferential(player, existing, menu);
                     return;
                 }
+                // Same mode, different type/size → OpenScreen in-place (no CloseWindow, no onClose).
                 if (existing.menu().mode() == menu.mode()) {
                     owner.replaceMenuInPlace(player, existing, menu);
                     return;

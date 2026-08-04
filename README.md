@@ -19,7 +19,7 @@ repositories {
 }
 
 dependencies {
-    implementation("net.opmasterleo:packetuxui:0.13.0")
+    implementation("net.opmasterleo:packetuxui:0.13.1")
 }
 ```
 
@@ -52,14 +52,14 @@ gui.present(player, PacketMenus.build()
         .action(22, confirm, p -> save(p))
         .onClose((p, snap) -> reclaim(snap)));
 
-// Hopper AH insert (correct 5-slot layout — do not fake with rows(1))
+// Hopper insert (correct 5-slot layout — do not fake with rows(1))
 gui.present(player, PacketMenus.build()
         .title("Insert item")
         .hopper()
         .editable()
         .editableSlot(2, ItemStack.empty())); // InventorySlots.HOPPER_CENTER
 
-// Same type+mode → differential update (no flicker / cursor reset)
+// Same type+mode → differential update
 gui.present(player, sameTypeRefresh);
 gui.patchSlots(player, Map.of(11, newItem)); // single/multi slot in place
 gui.refresh(player); // full SetContent, same window
@@ -67,7 +67,7 @@ gui.refresh(player); // full SetContent, same window
 // Different size, same mode (27↔54) → silent replace (no CloseWindow)
 gui.present(player, smallerOrLargerMenu);
 
-// Force hard close+open only when needed (SignGUI handoff, etc.)
+// Force hard close+open only when needed
 gui.reopen(player, menu);
 
 // Close then SignGUI / chat / anything else
@@ -75,32 +75,34 @@ gui.closeThen(player, () -> signGui.open(player));
 ```
 
 
-| API                                                          | Role                                              |
-| ------------------------------------------------------------ | ------------------------------------------------- |
+| API                                                          | Role                                                                         |
+| ------------------------------------------------------------ | ---------------------------------------------------------------------------- |
 | `present`                                                    | Diff if same type; **silent replace** if same mode different size; else open |
-| `reopen`                                                     | Force close+open                                                            |
-| `close`                                                      | Empty cursor, close packet, unbind, clear session |
-| `closeThen`                                                  | `close` + 1 tick, then runnable                   |
-| `presentAsync`                                               | Build on dedicated menu pool + preload, then `present` on entity thread |
-| `patchSlots` / `patchSlotAtomic` / `refresh` / `updateTitle` | In-place mutators                                 |
+| `reopen`                                                     | Force close+open                                                             |
+| `close`                                                      | Empty cursor, close packet, unbind, clear session                            |
+| `closeThen`                                                  | `close` + 1 tick, then runnable                                              |
+| `presentAsync`                                               | Build on dedicated menu pool + preload, then `present` on entity thread      |
+| `patchSlots` / `patchSlotAtomic` / `refresh` / `updateTitle` | In-place mutators                                                            |
 
 
 ### Editable policies
 
-| Goal | Build |
-|---|---|
-| Sell / deposit both ways (inv↔gui) | `.editable()` + `.editableSlot(slot, stack)` |
-| Spawner loot take-only (gui→inv) | `.editable()` + `.extractableSlot(slot, stack)` |
-| Buttons + fillers | `.action` / `.decorative` as usual |
+
+| Goal                               | Build                                           |
+| ---------------------------------- | ----------------------------------------------- |
+| Sell / deposit both ways (inv↔gui) | `.editable()` + `.editableSlot(slot, stack)`    |
+| Spawner loot take-only (gui→inv)   | `.editable()` + `.extractableSlot(slot, stack)` |
+| Buttons + fillers                  | `.action` / `.decorative` as usual              |
+
 
 ```java
-// Sell — place into GUI and take out
+// Place into GUI and take out
 gui.present(p, PacketMenus.build().title("Sell").rows(6).editable()
         .editableSlot(10, ItemStack.empty())
         .editableSlot(11, ItemStack.empty())
         .action(49, confirm, this::sell));
 
-// Spawner — only take from GUI into inv (shift or pickup→click inv)
+// Only take from GUI into inv (shift or pickup→click inv)
 gui.present(p, PacketMenus.build().title("Spawner").rows(3).editable()
         .extractableSlot(13, drop)
         .action(22, closeBtn, Player::closeInventory));
@@ -112,21 +114,23 @@ Virtual window ids use vanilla `nextContainerCounter()` (**1–100**). Pipeline 
 
 `PacketMenus.build()` supports every vanilla Open Screen type:
 
-| Builder | Type | Top slots | Bind |
-|---|---|---:|---|
-| `.rows(1..6)` | GENERIC9xN | 9–54 | ChestMenu |
-| `.hopper()` | HOPPER | 5 | packet-only |
-| `.anvil()` | ANVIL | 3 | packet-only |
-| `.furnace()` / `.smoker()` / `.blastFurnace()` | furnace family | 3 | packet-only |
-| `.brewingStand()` | BREWING_STAND | 5 | packet-only |
-| `.grindstone()` / `.smithingTable()` / `.loom()` / `.cartographyTable()` / `.stonecutter()` | workstations | 2–4 | packet-only |
-| `.beacon()` / `.enchantmentTable()` / `.craftingTable()` | specialty | 1–10 | packet-only |
-| `.dispenser()` / `.generic3x3()` | GENERIC3X3 | 9 | packet-only |
-| `.shulkerBox()` | SHULKER_BOX | 27 | packet-only |
-| `.merchant()` / `.villager()` | VILLAGER | 3 | packet-only |
-| `.lectern()` | LECTERN | 1 (no player inv) | packet-only |
-| `.crafter()` | CRAFTER3X3 | 9 | packet-only |
-| `.type(InventoryType.X)` | any | per type | chest only if `supportsChestBind()` |
+
+| Builder                                                                                     | Type           | Top slots         | Bind                                |
+| ------------------------------------------------------------------------------------------- | -------------- | ----------------- | ----------------------------------- |
+| `.rows(1..6)`                                                                               | GENERIC9xN     | 9–54              | ChestMenu                           |
+| `.hopper()`                                                                                 | HOPPER         | 5                 | packet-only                         |
+| `.anvil()`                                                                                  | ANVIL          | 3                 | packet-only                         |
+| `.furnace()` / `.smoker()` / `.blastFurnace()`                                              | furnace family | 3                 | packet-only                         |
+| `.brewingStand()`                                                                           | BREWING_STAND  | 5                 | packet-only                         |
+| `.grindstone()` / `.smithingTable()` / `.loom()` / `.cartographyTable()` / `.stonecutter()` | workstations   | 2–4               | packet-only                         |
+| `.beacon()` / `.enchantmentTable()` / `.craftingTable()`                                    | specialty      | 1–10              | packet-only                         |
+| `.dispenser()` / `.generic3x3()`                                                            | GENERIC3X3     | 9                 | packet-only                         |
+| `.shulkerBox()`                                                                             | SHULKER_BOX    | 27                | packet-only                         |
+| `.merchant()` / `.villager()`                                                               | VILLAGER       | 3                 | packet-only                         |
+| `.lectern()`                                                                                | LECTERN        | 1 (no player inv) | packet-only                         |
+| `.crafter()`                                                                                | CRAFTER3X3     | 9                 | packet-only                         |
+| `.type(InventoryType.X)`                                                                    | any            | per type          | chest only if `supportsChestBind()` |
+
 
 Named indices: `InventorySlots.HOPPER_CENTER`, `ANVIL_RESULT`, `FURNACE_FUEL`, … Same modes on all types: `readOnly` / `editable` / `extractableSlot` / `action` / `decorative`.
 
@@ -135,12 +139,12 @@ Threading: full Folia/Paper scheduler coverage — **entity** (player menus), **
 ### Protocol
 
 
-| Rule            | Behavior                                                      |
-| --------------- | ------------------------------------------------------------- |
-| Window id       | Vanilla 1..100; tracked per player (`isOurs`)                 |
-| stateId         | Bound menu `incrementStateId` (session mirrors last sent)     |
-| READ_ONLY click | Netty: SetCursorItem(EMPTY). Main: one SetContent + handler   |
-| EDITABLE click  | Simulate → mirror → one bumped SetSlot(s) + SetCursorItem     |
+| Rule            | Behavior                                                        |
+| --------------- | --------------------------------------------------------------- |
+| Window id       | Vanilla 1..100; tracked per player (`isOurs`)                   |
+| stateId         | Bound menu `incrementStateId` (session mirrors last sent)       |
+| READ_ONLY click | Netty: SetCursorItem(EMPTY). Main: one SetContent + handler     |
+| EDITABLE click  | Simulate → mirror → one bumped SetSlot(s) + SetCursorItem       |
 | Bind            | Generic 9xN chests only — hopper/anvil/furnace/etc. packet-only |
 
 
@@ -160,16 +164,18 @@ On boot you should see `debug=true` in the PacketUxUi ready line, then `[PacketU
 
 PacketUxUi **supports** pagination, live refresh, filters, custom layouts — it does **not** ship them as builtin widgets. You compose with primitives ({@code present}, {@code reopen}, {@code patchSlots}, listeners).
 
-| You want | Use |
-|---|---|
-| Open / update menu | `present` (diff) / `reopen` (force) |
-| Live slot refresh | `patchSlots` / `patchSlotAtomic` / `refresh` / `MenuPackets.setSlot` |
-| Pagination | Your page index + rebuild `MenuBuild` + `present`/`reopen`; nav buttons call your code |
-| Global click filter | `PacketMenus.registerListener` → cancel `GuiClickEvent` |
-| Bukkit-like click metadata | `action()` / `slotType()` / `currentItem()` / `cursor()` / `view()` |
-| Drag | `onDrag(GuiDragEvent)` START/ADD/END |
-| Layout math | `Slots.index` / `border` / `rectangle` |
-| Raw packets | `MenuPackets` (stateId-aware) |
+
+| You want                   | Use                                                                                    |
+| -------------------------- | -------------------------------------------------------------------------------------- |
+| Open / update menu         | `present` (diff) / `reopen` (force)                                                    |
+| Live slot refresh          | `patchSlots` / `patchSlotAtomic` / `refresh` / `MenuPackets.setSlot`                   |
+| Pagination                 | Your page index + rebuild `MenuBuild` + `present`/`reopen`; nav buttons call your code |
+| Global click filter        | `PacketMenus.registerListener` → cancel `GuiClickEvent`                                |
+| Bukkit-like click metadata | `action()` / `slotType()` / `currentItem()` / `cursor()` / `view()`                    |
+| Drag                       | `onDrag(GuiDragEvent)` START/ADD/END                                                   |
+| Layout math                | `Slots.index` / `border` / `rectangle`                                                 |
+| Raw packets                | `MenuPackets` (stateId-aware)                                                          |
+
 
 ```java
 void openPage(Player p, int page) {
@@ -212,8 +218,6 @@ PacketMenus.registerListener(new GuiListener() {
 `.editable()` menus: `item(...)` defaults to movable. Use `action(...)` / `decorative(...)` when locked.
 
 ---
-
-
 
 ## Modules
 
