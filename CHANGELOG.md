@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.12
+
+Composable APIs for plugins — not builtin GUI products (no PaginatedMenu / ConfirmMenu).
+
+- **Event bus**: `GuiListener` + `GuiClickEvent` (cancelable) / `GuiClickPostEvent` / `GuiOpenEvent` / `GuiCloseEvent` via `PacketMenus.registerListener` / `PacketUxUiAPI.getEventManager()`
+- **`MenuPackets`**: public facade for open / setContent / setSlot / setCursor / close / stateId / bind
+- **`Slots`**: row/col, border, rectangle, top/bottom index helpers
+- **`ExecuteComponent`**: `clickType()`, `carried()`, `isTop()` / `isBottom()`
+
+### Artifact
+`net.opmasterleo:packetuxui:0.12`
+
 ## 0.11
 
 ### Protocol rewrite (vanilla-aligned)

@@ -19,7 +19,7 @@ repositories {
 }
 
 dependencies {
-    implementation("net.opmasterleo:packetuxui:0.10")
+    implementation("net.opmasterleo:packetuxui:0.12")
 }
 ```
 
@@ -89,7 +89,30 @@ Debug: `-Dpacketuxui.debug=true`
 
 ---
 
+## Library model
 
+Plugins compose; PacketUxUi does not ship paginated shops or confirm dialogs.
+
+| Primitive | Use |
+|---|---|
+| `PacketMenus.build()` / `present` | High-level menus |
+| `PacketMenus.registerListener(GuiListener)` | Global click/open/close (cancel clicks) |
+| `MenuPackets` | Advanced setSlot/content/cursor without digging NMS |
+| `Slots` | Row/col, border, rectangle layout math |
+| `ExecuteComponent` | `clickType()`, `carried()`, `isTop()` |
+
+```java
+PacketMenus.registerListener(new GuiListener() {
+    @Override
+    public void onClick(GuiClickEvent event) {
+        if (inCombat(event.player())) {
+            event.setCancelled(true);
+        }
+    }
+});
+```
+
+---
 
 ## Modes
 

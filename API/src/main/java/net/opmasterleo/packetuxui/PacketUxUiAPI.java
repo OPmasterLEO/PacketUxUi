@@ -24,7 +24,7 @@ import net.opmasterleo.packetuxui.service.MenuService;
 
 public final class PacketUxUiAPI {
 
-    public static final String VERSION = "0.11";
+    public static final String VERSION = "0.12";
 
     private static final AtomicInteger RETAIN = new AtomicInteger();
     private static final Set<JavaPlugin> CLIENTS = new LinkedHashSet<>();
@@ -64,6 +64,11 @@ public final class PacketUxUiAPI {
     public static PlatformScheduler getScheduler() {
         checkInitialized();
         return scheduler;
+    }
+
+    public static net.opmasterleo.packetuxui.event.GuiEventManager getEventManager() {
+        checkInitialized();
+        return service.events();
     }
 
     public static java.util.List<String> getPipelineHandlers(Player player) {
@@ -218,6 +223,9 @@ public final class PacketUxUiAPI {
         }
         if (host != null) {
             Bukkit.getServicesManager().unregisterAll(host);
+        }
+        if (service != null) {
+            service.events().clear();
         }
         initialized = false;
         RETAIN.set(0);

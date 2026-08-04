@@ -21,6 +21,11 @@ import org.bukkit.inventory.PlayerInventory;
 import net.kyori.adventure.text.Component;
 import net.opmasterleo.packetuxui.dto.AccumulatedDrag;
 import net.opmasterleo.packetuxui.dto.CooldownComponent;
+import net.opmasterleo.packetuxui.event.GuiClickEvent;
+import net.opmasterleo.packetuxui.event.GuiClickPostEvent;
+import net.opmasterleo.packetuxui.event.GuiCloseEvent;
+import net.opmasterleo.packetuxui.event.GuiEventManager;
+import net.opmasterleo.packetuxui.event.GuiOpenEvent;
 import net.opmasterleo.packetuxui.nms.ClickPacket;
 import net.opmasterleo.packetuxui.nms.NmsAdapter;
 import net.opmasterleo.packetuxui.nms.WindowClickType;
@@ -48,6 +53,7 @@ public final class MenuService {
     private final ConcurrentHashMap<UUID, String> lastClickDecision = new ConcurrentHashMap<>();
     private final CopyOnWriteArrayList<Predicate<UxItem>> takeablePredicates = new CopyOnWriteArrayList<>();
     private final AtomicLong transitionSequence = new AtomicLong();
+    private final GuiEventManager events = new GuiEventManager();
     private volatile GuiScopeListener scopeListener;
     private volatile long clickDebounceNanos = 100_000_000L;
     private volatile boolean reclaimCursorOnClose = true;
@@ -58,6 +64,10 @@ public final class MenuService {
     public MenuService(NmsAdapter adapter, PlatformScheduler scheduler) {
         this.adapter = adapter;
         this.scheduler = scheduler;
+    }
+
+    public GuiEventManager events() {
+        return events;
     }
 
     private static UUID id(Player player) {
@@ -182,7 +192,7 @@ public final class MenuService {
         MenuSession session = new MenuSession(copy, windowId);
         session.setPhase(SessionPhase.OPENING);
         sessions.put(id(player), session);
-        fireScope(player, true, session.topSlotCount());
+        fireScope(player, true, session);
         if (copy.type().supportsChestBind()) {
             adapter.packets().bindServerContainer(
                     player,
@@ -348,16 +358,30 @@ public final class MenuService {
         carriedItem.remove(id(player));
         clearBottomHeld(player);
         clearAccumulatedDrag(player);
-        fireScope(player, false, top);
+        fireScope(player, false, session, top);
     }
 
-    private void fireScope(Player player, boolean open, int topSlotCount) {
+    private void fireScope(Player player, boolean open, MenuSession session) {
+        fireScope(player, open, session, session.topSlotCount());
+    }
+
+    private void fireScope(Player player, boolean open, MenuSession session, int topSlotCount) {
         GuiScopeListener listener = scopeListener;
-        if (listener == null) {
+        if (listener != null) {
+            try {
+                listener.onScopeChanged(player, open, topSlotCount);
+            } catch (Throwable ignored) {
+            }
+        }
+        if (session == null) {
             return;
         }
         try {
-            listener.onScopeChanged(player, open, topSlotCount);
+            if (open) {
+                events.fireOpen(new GuiOpenEvent(player, session.menu(), session.windowId(), topSlotCount));
+            } else {
+                events.fireClose(new GuiCloseEvent(player, session.menu(), session.windowId(), topSlotCount));
+            }
         } catch (Throwable ignored) {
         }
     }
@@ -432,23 +456,72 @@ public final class MenuService {
         session.markClick(now);
 
         ClickData clickData = getClickType(packet);
+        UxItem carried = activeCursor(player);
+        GuiClickEvent pre = new GuiClickEvent(
+                player,
+                session.menu(),
+                session.windowId(),
+                session.topSlotCount(),
+                packet,
+                clickData.clickType(),
+                clickData.buttonType(),
+                carried
+        );
+        events.fireClick(pre);
+        if (pre.isCancelled()) {
+            emitDecision(player, packet, SlotKind.DECORATIVE, false, false, "listener_cancelled");
+            resyncFull(player, session, packet.stateId(), session.menu().mode() != MenuMode.EDITABLE);
+            fireClickPost(player, session, packet, clickData, carried, "listener_cancelled");
+            return;
+        }
+
         if (clickData.clickType() == ClickType.DRAG_START || clickData.clickType() == ClickType.DRAG_ADD) {
             accumulateDrag(player, packet, clickData.clickType());
             if (session.menu().mode() != MenuMode.EDITABLE) {
                 resyncDirtySlots(player, session, packet, UxItem.EMPTY);
                 carriedItem.remove(id(player));
             }
+            fireClickPost(player, session, packet, clickData, carried, "drag_accumulate");
             return;
         }
         if (session.menu().mode() == MenuMode.EDITABLE) {
             handleEditableClick(player, session, clickData, packet);
+            fireClickPost(player, session, packet, clickData, activeCursor(player),
+                    lastClickDecision.getOrDefault(id(player), "editable"));
             return;
         }
         if (isMenuClick(packet, clickData.clickType(), player)) {
             handleClickMenu(player, session, clickData, packet);
+            fireClickPost(player, session, packet, clickData, UxItem.EMPTY,
+                    lastClickDecision.getOrDefault(id(player), "readonly"));
             return;
         }
         settleReadOnlyOutside(player, session, packet);
+        fireClickPost(player, session, packet, clickData, UxItem.EMPTY, "readonly_outside");
+    }
+
+    private void fireClickPost(
+            Player player,
+            MenuSession session,
+            ClickPacket packet,
+            ClickData clickData,
+            UxItem carried,
+            String decision
+    ) {
+        try {
+            events.fireClickPost(new GuiClickPostEvent(
+                    player,
+                    session.menu(),
+                    session.windowId(),
+                    session.topSlotCount(),
+                    packet,
+                    clickData.clickType(),
+                    clickData.buttonType(),
+                    carried,
+                    decision
+            ));
+        } catch (Throwable ignored) {
+        }
     }
 
     private boolean isValidClickSlot(MenuSession session, ClickPacket packet) {
@@ -883,7 +956,15 @@ public final class MenuService {
             execute = button.execute();
         }
         if (execute != null) {
-            execute.accept(new ExecuteComponent(player, clickData.buttonType(), packet.slot(), cursor));
+            execute.accept(new ExecuteComponent(
+                    player,
+                    clickData.buttonType(),
+                    clickData.clickType(),
+                    packet.slot(),
+                    cursor,
+                    cursor,
+                    session.topSlotCount()
+            ));
         }
     }
 
@@ -1096,7 +1177,18 @@ public final class MenuService {
         }
         if (execute != null) {
             emitDecision(player, packet, SlotKind.ACTION, true, false, "readonly_execute");
-            execute.accept(new ExecuteComponent(player, clickData.buttonType(), slot, UxItem.EMPTY));
+            UxItem at = slot >= 0 && slot < session.menu().items().size()
+                    ? session.menu().items().get(slot)
+                    : UxItem.EMPTY;
+            execute.accept(new ExecuteComponent(
+                    player,
+                    clickData.buttonType(),
+                    clickData.clickType(),
+                    slot,
+                    at,
+                    UxItem.EMPTY,
+                    session.topSlotCount()
+            ));
         } else {
             emitDecision(player, packet, SlotKind.ACTION, true, false, "readonly_cooldown_block");
         }

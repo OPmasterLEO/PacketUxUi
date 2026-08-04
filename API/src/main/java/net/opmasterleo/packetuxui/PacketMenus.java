@@ -3,6 +3,8 @@ package net.opmasterleo.packetuxui;
 import org.bukkit.entity.Player;
 
 import net.kyori.adventure.text.Component;
+import net.opmasterleo.packetuxui.event.GuiEventManager;
+import net.opmasterleo.packetuxui.event.GuiListener;
 import net.opmasterleo.packetuxui.manager.MenuBuild;
 import net.opmasterleo.packetuxui.manager.PacketGuiManager;
 import net.opmasterleo.packetuxui.nms.item.UxHeadItemBuilder;
@@ -25,6 +27,18 @@ public final class PacketMenus {
 
     public static MenuService service() {
         return PacketUxUiAPI.getService();
+    }
+
+    public static GuiEventManager events() {
+        return PacketUxUiAPI.getEventManager();
+    }
+
+    public static void registerListener(GuiListener listener) {
+        events().register(listener);
+    }
+
+    public static void unregisterListener(GuiListener listener) {
+        events().unregister(listener);
     }
 
     public static PacketGuiManager gui() {
