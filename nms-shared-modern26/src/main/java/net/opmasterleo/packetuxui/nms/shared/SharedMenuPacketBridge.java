@@ -130,6 +130,30 @@ public final class SharedMenuPacketBridge implements MenuPacketBridge {
     }
 
     @Override
+    public boolean sendBoundAuthority(Player player, int stateId, boolean clearCursor) {
+        ServerPlayer sp = nms(player);
+        PacketUxBoundMenu menu = bound(player);
+        if (sp == null || menu == null) {
+            return false;
+        }
+        int size = menu.slots.size();
+        NonNullList<ItemStack> list = NonNullList.withSize(size, ItemStack.EMPTY);
+        for (int i = 0; i < size; i++) {
+            list.set(i, menu.slots.get(i).getItem());
+        }
+        if (clearCursor) {
+            menu.setCarried(ItemStack.EMPTY);
+        }
+        ItemStack carried = clearCursor ? ItemStack.EMPTY : menu.getCarried();
+        sp.connection.send(new ClientboundContainerSetContentPacket(
+                menu.containerId, stateId, list, carried));
+        if (clearCursor) {
+            sp.connection.send(new ClientboundSetCursorItemPacket(ItemStack.EMPTY));
+        }
+        return true;
+    }
+
+    @Override
     public void sendWindowItems(Player player, int windowId, int stateId, List<UxItem> uxItems, UxItem carried) {
         ServerPlayer sp = nms(player);
         if (sp == null) {

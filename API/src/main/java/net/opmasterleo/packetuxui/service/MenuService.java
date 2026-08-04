@@ -153,13 +153,11 @@ public final class MenuService {
     }
 
     public boolean debugLogging() {
-        return debugLogging
-                || Boolean.getBoolean("packetuxui.debug")
-                || "true".equalsIgnoreCase(System.getenv("PACKETUXUI_DEBUG"));
+        return debugLogging;
     }
 
     public void debug(Player player, String message) {
-        if (!debugLogging()) {
+        if (!debugLogging) {
             return;
         }
         String who = player == null ? "?" : player.getName();
@@ -210,6 +208,7 @@ public final class MenuService {
         session.setPhase(SessionPhase.OPENING);
         sessions.put(id(player), session);
         fireScope(player, true, session, session.topSlotCount(), GuiCloseReason.UNKNOWN, null);
+        boolean bound = false;
         if (copy.type().supportsChestBind()) {
             adapter.packets().bindServerContainer(
                     player,
@@ -217,25 +216,34 @@ public final class MenuService {
                     copy.type().id(),
                     Math.max(1, copy.type().protocolTopSize() / 9)
             );
+            adapter.packets().mirrorTopSlots(player, copy.items());
+            bound = adapter.packets().ownsBoundContainer(player);
         }
-        refreshBottomCache(player);
         int stateId = protocolState(player, session, 0);
         adapter.packets().sendOpenWindow(player, windowId, copy.type().id(), copy.name());
-        adapter.packets().sendWindowItems(player, windowId, stateId, fullContents(player, copy), null);
+        if (bound && adapter.packets().sendBoundAuthority(player, stateId, true)) {
+            // Direct NMS slots — no Bukkit inventory snapshot / UxItem bottom convert.
+        } else {
+            List<UxItem> bottom = snapshotBottom(player);
+            bottomCache.put(id(player), bottom);
+            List<UxItem> contents = assembleContents(copy, bottom);
+            adapter.packets().sendWindowItems(player, windowId, stateId, contents, null);
+        }
         adapter.packets().sendCursorItem(player, UxItem.EMPTY);
         session.setPhase(SessionPhase.OPEN);
-        debug(player, "OPEN windowId=" + windowId
-                + " type=" + copy.type()
-                + " mode=" + copy.mode()
-                + " stateId=" + stateId
-                + " top=" + session.topSlotCount()
-                + " bound=" + adapter.packets().ownsBoundContainer(player));
+        if (debugLogging) {
+            debug(player, "OPEN windowId=" + windowId
+                    + " type=" + copy.type()
+                    + " mode=" + copy.mode()
+                    + " stateId=" + stateId
+                    + " top=" + session.topSlotCount()
+                    + " bound=" + bound);
+        }
         ensurePipeline(player);
     }
 
     public void present(Player player, Menu menu) {
         scheduler.runForPlayer(player, () -> {
-            ensurePipeline(player);
             MenuSession existing = sessions.get(id(player));
             if (existing != null
                     && existing.menu().type() == menu.type()
@@ -244,6 +252,7 @@ public final class MenuService {
                 applyMenuDifferential(player, existing, menu);
                 return;
             }
+            ensurePipeline(player);
             openMenuSync(player, menu);
         });
     }
@@ -434,9 +443,9 @@ public final class MenuService {
     }
 
     private void applyMenuDifferential(Player player, MenuSession session, Menu next) {
-        refreshBottomCache(player);
         Menu current = session.menu();
-        if (!current.name().equals(next.name())) {
+        boolean titleChanged = !current.name().equals(next.name());
+        if (titleChanged) {
             current.setName(next.name());
             session.setTitle(next.name());
             adapter.packets().sendOpenWindow(player, session.windowId(), next.type().id(), next.name());
@@ -446,32 +455,52 @@ public final class MenuService {
         List<UxItem> before = current.items();
         List<UxItem> after = next.items();
         current.setItems(after);
-        Map<Integer, UxItem> dirty = new HashMap<>();
         int size = next.type().size();
+        int dirtyCount = 0;
+        // Prefer SetSlot for sparse updates; avoid HashMap alloc when possible.
+        int[] dirtySlots = null;
+        UxItem[] dirtyItems = null;
         for (int i = 0; i < size; i++) {
             UxItem a = i < before.size() ? before.get(i) : UxItem.EMPTY;
             UxItem b = i < after.size() ? after.get(i) : UxItem.EMPTY;
-            if (!a.equals(b)) {
-                dirty.put(i, b);
+            if (a == b || (a != null && a.equals(b))) {
+                continue;
             }
+            if (dirtySlots == null) {
+                dirtySlots = new int[Math.min(16, size)];
+                dirtyItems = new UxItem[dirtySlots.length];
+            } else if (dirtyCount == dirtySlots.length) {
+                int grow = Math.min(size, dirtySlots.length * 2);
+                dirtySlots = java.util.Arrays.copyOf(dirtySlots, grow);
+                dirtyItems = java.util.Arrays.copyOf(dirtyItems, grow);
+            }
+            dirtySlots[dirtyCount] = i;
+            dirtyItems[dirtyCount] = b == null ? UxItem.EMPTY : b;
+            dirtyCount++;
         }
-        if (dirty.isEmpty() && current.name().equals(next.name())) {
+        if (dirtyCount == 0 && !titleChanged) {
             return;
         }
-        if (!dirty.isEmpty()) {
+        if (titleChanged || dirtyCount > 24) {
+            // OpenWindow requires a full content follow-up; dense redraws too.
             int stateId = protocolState(player, session);
-            int windowId = session.windowId();
-            for (Map.Entry<Integer, UxItem> entry : dirty.entrySet()) {
-                adapter.packets().sendSetSlot(player, windowId, stateId, entry.getKey(), entry.getValue());
+            adapter.packets().mirrorTopSlots(player, after);
+            if (!adapter.packets().sendBoundAuthority(player, stateId,
+                    session.menu().mode() != MenuMode.EDITABLE)) {
+                adapter.packets().sendWindowItems(
+                        player,
+                        session.windowId(),
+                        stateId,
+                        contentsForOpen(player, current),
+                        carriedItem.get(id(player))
+                );
             }
         } else {
-            adapter.packets().sendWindowItems(
-                    player,
-                    session.windowId(),
-                    protocolState(player, session),
-                    contentsForOpen(player, current),
-                    carriedItem.get(id(player))
-            );
+            int stateId = protocolState(player, session);
+            int windowId = session.windowId();
+            for (int i = 0; i < dirtyCount; i++) {
+                adapter.packets().sendSetSlot(player, windowId, stateId, dirtySlots[i], dirtyItems[i]);
+            }
         }
         session.bumpGeneration();
     }
@@ -1165,6 +1194,9 @@ public final class MenuService {
             carriedItem.remove(id(player));
             clearBottomHeld(player);
         }
+        if (adapter.packets().sendBoundAuthority(player, stateId, clearCursor)) {
+            return;
+        }
         UxItem cursor = clearCursor ? UxItem.EMPTY : activeCursor(player);
         adapter.packets().sendWindowItems(
                 player,
@@ -1179,20 +1211,29 @@ public final class MenuService {
     }
 
     /**
-     * Immediate server→client authority (safe on Netty). Full window contents from
-     * menu top + cached bottom — stops Lunar/vanilla free-move prediction.
+     * Immediate server→client authority (Netty-safe). Prefers direct NMS bound-slot sync.
      */
     public void suppressClientPrediction(Player player, ClickPacket packet) {
         MenuSession session = sessions.get(id(player));
         if (session == null || session.phase() != SessionPhase.OPEN) {
             return;
         }
-        int windowId = session.windowId();
         int clientState = packet == null ? 0 : Math.max(0, packet.stateId());
         int provisional = Math.max(session.stateId(), clientState) + 1;
-        adapter.packets().sendWindowItems(player, windowId, provisional, nettySafeContents(player, session), null);
-        adapter.packets().sendCursorItem(player, UxItem.EMPTY);
-        if (session.menu().mode() != MenuMode.EDITABLE) {
+        boolean clearCursor = session.menu().mode() != MenuMode.EDITABLE;
+        if (!adapter.packets().sendBoundAuthority(player, provisional, clearCursor)) {
+            adapter.packets().sendWindowItems(
+                    player,
+                    session.windowId(),
+                    provisional,
+                    nettySafeContents(player, session),
+                    null
+            );
+            if (clearCursor) {
+                adapter.packets().sendCursorItem(player, UxItem.EMPTY);
+            }
+        }
+        if (clearCursor) {
             carriedItem.remove(id(player));
         }
         if (packet != null) {
@@ -1212,26 +1253,40 @@ public final class MenuService {
         if (session == null || session.phase() != SessionPhase.OPEN) {
             return;
         }
-        refreshBottomCache(player);
         boolean clearCursor = session.menu().mode() != MenuMode.EDITABLE;
         resyncFull(player, session, session.stateId(), clearCursor);
-        debug(player, "forceResyncOpen mode=" + session.menu().mode() + " windowId=" + session.windowId());
+        if (debugLogging) {
+            debug(player, "forceResyncOpen mode=" + session.menu().mode() + " windowId=" + session.windowId());
+        }
     }
 
     private void refreshBottomCache(Player player) {
-        bottomCache.put(id(player), List.copyOf(snapshotBottom(player)));
+        bottomCache.put(id(player), snapshotBottom(player));
     }
 
     private List<UxItem> nettySafeContents(Player player, MenuSession session) {
-        int top = session.menu().type().protocolTopSize();
+        List<UxItem> bottom = bottomCache.get(id(player));
+        if (bottom == null || bottom.size() != 36) {
+            bottom = emptyBottom();
+        }
+        return assembleContents(session.menu(), bottom);
+    }
+
+    private static List<UxItem> emptyBottom() {
+        UxItem[] arr = new UxItem[36];
+        java.util.Arrays.fill(arr, UxItem.EMPTY);
+        return java.util.Arrays.asList(arr);
+    }
+
+    private List<UxItem> assembleContents(Menu menu, List<UxItem> bottom) {
+        int top = menu.type().protocolTopSize();
         List<UxItem> contents = new ArrayList<>(top + 36);
-        List<UxItem> items = session.menu().items();
+        List<UxItem> items = menu.items();
         for (int i = 0; i < top; i++) {
             UxItem item = i < items.size() ? items.get(i) : null;
             contents.add(item == null ? UxItem.EMPTY : item);
         }
-        List<UxItem> bottom = bottomCache.get(id(player));
-        if (bottom == null || bottom.size() != 36) {
+        if (bottom == null || bottom.size() < 36) {
             for (int i = 0; i < 36; i++) {
                 contents.add(UxItem.EMPTY);
             }
@@ -1258,14 +1313,12 @@ public final class MenuService {
     }
 
     private List<UxItem> fullContents(Player player, Menu menu) {
-        int top = menu.type().protocolTopSize();
-        List<UxItem> contents = new ArrayList<>(top + 36);
-        List<UxItem> items = menu.items();
-        for (int i = 0; i < top; i++) {
-            contents.add(i < items.size() ? items.get(i) : UxItem.EMPTY);
+        List<UxItem> bottom = bottomCache.get(id(player));
+        if (bottom == null || bottom.size() != 36) {
+            bottom = snapshotBottom(player);
+            bottomCache.put(id(player), bottom);
         }
-        contents.addAll(snapshotBottom(player));
-        return contents;
+        return assembleContents(menu, bottom);
     }
 
     private List<UxItem> snapshotBottom(Player player) {
@@ -1299,8 +1352,14 @@ public final class MenuService {
         Menu menu = session.menu();
         int slot = packet.slot();
         Button button = slot >= 0 ? menu.buttons().get(slot) : null;
-        // Full resync beats client optimistic pickup + stateId races on read-only packet menus.
-        resyncFull(player, session, packet.stateId(), true);
+        // Netty already sent bound authority for this client stateId — skip duplicate SetContent.
+        Integer corrected = nettyRoCorrectedForState.get(id(player));
+        if (corrected == null || corrected != packet.stateId()) {
+            resyncFull(player, session, packet.stateId(), true);
+        } else {
+            protocolState(player, session, packet.stateId());
+            carriedItem.remove(id(player));
+        }
         if (button == null) {
             emitDecision(player, packet, SlotKind.DECORATIVE, false, false, "readonly_no_handler");
             return;
@@ -1708,8 +1767,10 @@ public final class MenuService {
 
     private void emitDecision(Player player, ClickPacket packet, SlotKind slotKind, boolean handlerFound, boolean takeable, String result) {
         lastClickDecision.put(id(player), result);
-        debug(player, "click slot=" + packet.slot() + " kind=" + slotKind
-                + " handler=" + handlerFound + " takeable=" + takeable + " -> " + result);
+        if (debugLogging) {
+            debug(player, "click slot=" + packet.slot() + " kind=" + slotKind
+                    + " handler=" + handlerFound + " takeable=" + takeable + " -> " + result);
+        }
     }
 
     private void resyncDirtySlots(Player player, MenuSession session, ClickPacket packet, UxItem carried) {

@@ -61,4 +61,13 @@ public interface MenuPacketBridge {
 
     default void unbindServerContainer(Player player) {
     }
+
+    /**
+     * Server-authoritative full window sync from the bound NMS menu slots (zero UxItem
+     * conversion). Returns {@code false} when no bound menu — caller falls back to
+     * {@link #sendWindowItems}.
+     */
+    default boolean sendBoundAuthority(Player player, int stateId, boolean clearCursor) {
+        return false;
+    }
 }

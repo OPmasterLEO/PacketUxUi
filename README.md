@@ -19,7 +19,7 @@ repositories {
 }
 
 dependencies {
-    implementation("net.opmasterleo:packetuxui:0.12.3")
+    implementation("net.opmasterleo:packetuxui:0.12.4")
 }
 ```
 
@@ -99,7 +99,7 @@ On boot you should see `debug=true` in the PacketUxUi ready line, then `[PacketU
 
 ## Library model
 
-PacketUxUi **supports** pagination, live refresh, filters, custom layouts — it does **not** ship them as builtin widgets. You compose with primitives (same idea as PacketEvents listeners/wrappers).
+PacketUxUi **supports** pagination, live refresh, filters, custom layouts — it does **not** ship them as builtin widgets. You compose with primitives ({@code present}, {@code reopen}, {@code patchSlots}, listeners).
 
 | You want | Use |
 |---|---|

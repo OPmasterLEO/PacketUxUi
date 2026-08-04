@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.12.4
+
+### Hot-path performance (server-authoritative, cheap)
+
+Same free-move guarantee, far less work:
+
+- `sendBoundAuthority`: SetContent from bound NMS slots (no UxItem↔NMS convert on click/resync)
+- Skip duplicate main-thread `resyncFull` when Netty already corrected the same `stateId`
+- Open: mirror top + bound authority (no Bukkit bottom snapshot when bound)
+- Present differential: no bottom re-snapshot; sparse SetSlot; dense/title → bound authority
+- Debug: volatile flag only (no `getBoolean`/`getenv` per call); string concat gated
+
+### Artifact
+`net.opmasterleo:packetuxui:0.12.4`
+
 ## 0.12.3
 
 ### Server-authoritative GUIs (free-move nuclear)
@@ -7,7 +22,7 @@
 Virtual menus must be owned by the server — same failure mode as client-handled GUIs.
 
 - Pipeline inject **before** `packet_handler` first (vanilla never sees session clicks)
-- PacketEvents wrappers: class-name + unwrap (`getNativePacket`) click/close detect
+- Direct NMS {@code instanceof} click/close classify (per-bucket adapters)
 - Bound `ChestMenu` slots: `mayPickup`/`mayPlace`/`remove` locked; empty `clicked()`
 - On every intercepted click: full `SetContent` from menu top + **cached** bottom (Netty-safe) + empty cursor
 - Never leak container click/close to vanilla while a PacketUxUi session is open
@@ -40,7 +55,7 @@ Cancel `GuiClickEvent` / `GuiDragEvent` instead of Bukkit click events for virtu
 ### Robust READ_ONLY / pipeline (free-move fix)
 
 - Pipeline inject **never** `addFirst` (undecoded → leaks to vanilla → client free moves)
-- Prefer after PacketEvents/Via decoder, else **before** `packet_handler`
+- Prefer **before** `packet_handler` (decoded NMS), else after a known decoder
 - `ensureInjected` on every `present` / open
 - While session open: **all** container clicks swallowed (mismatch → force resync)
 - Bukkit `InventoryClickEvent` / `InventoryDragEvent` cancelled while PacketUxUi menu open

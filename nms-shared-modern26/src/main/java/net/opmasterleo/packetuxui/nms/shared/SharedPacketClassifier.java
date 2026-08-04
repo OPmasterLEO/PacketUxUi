@@ -14,6 +14,7 @@ import net.opmasterleo.packetuxui.nms.PacketClassifier;
 import net.opmasterleo.packetuxui.nms.WindowClickType;
 import net.opmasterleo.packetuxui.nms.item.UxItem;
 
+/** Direct NMS classification — {@code instanceof} only, no reflection. */
 public final class SharedPacketClassifier implements PacketClassifier {
 
     private final SharedItemBridge items;
@@ -30,27 +31,12 @@ public final class SharedPacketClassifier implements PacketClassifier {
         if (packet instanceof ServerboundContainerClosePacket) {
             return Kind.CLOSE;
         }
-        Object unwrapped = unwrap(packet);
-        if (unwrapped != null && unwrapped != packet) {
-            return kindOf(unwrapped);
-        }
-        String name = packet.getClass().getName();
-        if (name.contains("ContainerClick") || name.contains("ClickWindow") || name.contains("WindowClick")) {
-            return Kind.CLICK;
-        }
-        if (name.contains("ContainerClose") || name.contains("CloseWindow")) {
-            return Kind.CLOSE;
-        }
         return Kind.OTHER;
     }
 
     @Override
     public int clickWindowId(Object packet) {
         if (packet instanceof ServerboundContainerClickPacket click) {
-            return click.containerId();
-        }
-        Object unwrapped = unwrap(packet);
-        if (unwrapped instanceof ServerboundContainerClickPacket click) {
             return click.containerId();
         }
         return -1;
@@ -61,25 +47,12 @@ public final class SharedPacketClassifier implements PacketClassifier {
         if (packet instanceof ServerboundContainerClosePacket close) {
             return close.getContainerId();
         }
-        Object unwrapped = unwrap(packet);
-        if (unwrapped instanceof ServerboundContainerClosePacket close) {
-            return close.getContainerId();
-        }
         return -1;
     }
 
     @Override
     public ClickPacket readClick(Object packet) {
-        ServerboundContainerClickPacket click = null;
-        if (packet instanceof ServerboundContainerClickPacket direct) {
-            click = direct;
-        } else {
-            Object unwrapped = unwrap(packet);
-            if (unwrapped instanceof ServerboundContainerClickPacket nested) {
-                click = nested;
-            }
-        }
-        if (click == null) {
+        if (!(packet instanceof ServerboundContainerClickPacket click)) {
             return null;
         }
         Int2ObjectMap<HashedStack> slots = click.changedSlots();
@@ -110,25 +83,7 @@ public final class SharedPacketClassifier implements PacketClassifier {
 
     @Override
     public boolean isClose(Object packet) {
-        return kindOf(packet) == Kind.CLOSE;
-    }
-
-    private static Object unwrap(Object packet) {
-        if (packet == null) {
-            return null;
-        }
-        Class<?> c = packet.getClass();
-        for (String getter : new String[]{"getNativePacket", "getPacket", "getWrapper", "getHandle"}) {
-            try {
-                var method = c.getMethod(getter);
-                Object inner = method.invoke(packet);
-                if (inner != null && inner != packet) {
-                    return inner;
-                }
-            } catch (Throwable ignored) {
-            }
-        }
-        return packet;
+        return packet instanceof ServerboundContainerClosePacket;
     }
 
     private static boolean isHashedEmpty(HashedStack stack) {

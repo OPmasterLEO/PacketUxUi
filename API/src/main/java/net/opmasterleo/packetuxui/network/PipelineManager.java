@@ -15,27 +15,26 @@ import net.opmasterleo.packetuxui.scheduler.PlatformScheduler;
 import net.opmasterleo.packetuxui.service.MenuService;
 
 /**
- * Injects {@link MenuInboundHandler} <b>before</b> {@code packet_handler} so virtual-menu
- * clicks never reach vanilla. Prefer after Via/PacketEvents decoder when present.
+ * Injects {@link MenuInboundHandler} immediately <b>before</b> {@code packet_handler}
+ * so decoded NMS play packets are classified with direct {@code instanceof} and never
+ * reach vanilla while a virtual menu is open. Never {@code addFirst} (undecoded bytes).
  */
 public final class PipelineManager {
 
     public static final String HANDLER_NAME_PREFIX = "packetuxui_inbound_";
 
-    /** Decoded-play anchors: inject after these when present. */
-    private static final String[] INJECT_AFTER = {
-            "packetevents_decoder",
-            "pe-decoder",
-            "via-decoder",
-            "via_decoder",
-            "decoder"
-    };
-
-    /** Must stay before these so ServerGamePacketListenerImpl never sees our clicks. */
+    /** Prefer immediately before these (decoded NMS inbound). */
     private static final String[] INJECT_BEFORE = {
             "packet_handler",
             "inbound_config",
             "outbound_config"
+    };
+
+    /** Fallback: after a known decoder if {@code packet_handler} is missing. */
+    private static final String[] INJECT_AFTER = {
+            "decoder",
+            "via-decoder",
+            "via_decoder"
     };
 
     private final NmsAdapter adapter;
@@ -137,8 +136,6 @@ public final class PipelineManager {
             }
             MenuInboundHandler handler = new MenuInboundHandler(player, adapter, menuService, scheduler);
             boolean added = false;
-            // Prefer immediately before packet_handler so vanilla never sees clicks
-            // (server-authoritative GUIs; PE wrappers still intercepted by class-name).
             for (String anchor : INJECT_BEFORE) {
                 if (ChannelOps.get(channel, anchor) != null) {
                     channel.pipeline().addBefore(anchor, handlerName, handler);
@@ -164,7 +161,7 @@ public final class PipelineManager {
                     }
                 }
             }
-            // Never addFirst — undecoded bytes → kind OTHER → leak to vanilla → free client moves.
+            // Never addFirst — undecoded bytes → kind OTHER → leak to vanilla.
             if (!added) {
                 injected.remove(player.getUniqueId());
                 if (menuService.debugLogging()) {
