@@ -41,6 +41,7 @@ public final class MenuService {
     private final WindowIdPool windowIds = new WindowIdPool();
     private final ConcurrentHashMap<UUID, MenuSession> sessions = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<UUID, UxItem> carriedItem = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<UUID, EditableBottomMoves.Held> bottomHeld = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<UUID, List<AccumulatedDrag>> accumulatedDrag = new ConcurrentHashMap<>();
     private final CopyOnWriteArrayList<Predicate<UxItem>> takeablePredicates = new CopyOnWriteArrayList<>();
     private volatile GuiScopeListener scopeListener;
@@ -208,11 +209,13 @@ public final class MenuService {
         if (session == null) {
             windowIds.release(player);
             carriedItem.remove(id(player));
+            clearBottomHeld(player);
             clearAccumulatedDrag(player);
             return;
         }
         session.setPhase(SessionPhase.CLOSING);
         UxItem cursor = carriedItem.getOrDefault(id(player), UxItem.EMPTY);
+        EditableBottomMoves.Held heldBottom = bottomHeld.get(id(player));
         BiConsumer<Player, CloseSnapshot> onClose = session.menu().onClose();
         if (onClose != null) {
             try {
@@ -220,8 +223,13 @@ public final class MenuService {
             } catch (Throwable ignored) {
             }
         }
-        if (reclaim && reclaimCursorOnClose && cursor != null && !cursor.isEmpty()) {
-            CursorReclaim.reclaim(player, adapter.items(), cursor);
+        if (reclaim && reclaimCursorOnClose) {
+            if (cursor != null && !cursor.isEmpty()) {
+                CursorReclaim.reclaim(player, adapter.items(), cursor);
+            }
+            if (heldBottom != null && !heldBottom.isEmpty()) {
+                CursorReclaim.reclaim(player, adapter.items(), heldBottom.item());
+            }
         }
         if (sendClosePacket) {
             adapter.packets().sendCloseWindow(player, session.windowId());
@@ -230,6 +238,7 @@ public final class MenuService {
         sessions.remove(id(player));
         windowIds.release(player);
         carriedItem.remove(id(player));
+        clearBottomHeld(player);
         clearAccumulatedDrag(player);
         fireScope(player, false, top);
     }
@@ -402,12 +411,27 @@ public final class MenuService {
 
         boolean topSlot = packet.slot() >= 0 && packet.slot() <= last;
         if (!topSlot) {
+            if (packet.slot() == -999) {
+                handleEditableOutsideClick(player, session);
+                return;
+            }
             if (type == WindowClickType.QUICK_MOVE && packet.slot() > last) {
+                if (bottomHeld.containsKey(id(player))) {
+                    restoreBottomHeld(player, session);
+                }
                 handleShiftFromBottom(player, session, packet);
+                return;
+            }
+            if (type == WindowClickType.PICKUP) {
+                handleEditableBottomPickup(player, session, packet);
                 return;
             }
             settleEditableBottom(player, session, packet);
             return;
+        }
+
+        if (bottomHeld.containsKey(id(player))) {
+            restoreBottomHeld(player, session);
         }
 
         SlotKind kind = session.slotKind(packet.slot());
@@ -513,8 +537,108 @@ public final class MenuService {
                 adapter.packets().sendSetSlot(player, windowId, stateId, slot, bottom.get(idx));
             }
         }
-        UxItem cursor = carriedItem.getOrDefault(id(player), UxItem.EMPTY);
+        adapter.packets().sendCursorItem(player, activeCursor(player));
+    }
+
+    private void handleEditableBottomPickup(Player player, MenuSession session, ClickPacket packet) {
+        UUID pid = id(player);
+        if (!carriedItem.getOrDefault(pid, UxItem.EMPTY).isEmpty()) {
+            settleEditableBottom(player, session, packet);
+            return;
+        }
+        int topSize = session.menu().type().protocolTopSize();
+        int maxSlot = topSize + 36;
+        int slot = packet.slot();
+        if (slot < topSize || slot >= maxSlot) {
+            settleEditableBottom(player, session, packet);
+            return;
+        }
+        int bottomIndex = slot - topSize;
+        List<UxItem> bottom = snapshotBottom(player);
+        EditableBottomMoves.Held previous = bottomHeld.get(pid);
+        EditableBottomMoves.Outcome outcome = EditableBottomMoves.applyPickup(
+                bottom,
+                previous,
+                bottomIndex,
+                packet.button()
+        );
+        writeBottom(player, outcome.bottom());
+        if (outcome.held() == null || outcome.held().isEmpty()) {
+            bottomHeld.remove(pid);
+        } else {
+            bottomHeld.put(pid, outcome.held());
+        }
+        int windowId = session.windowId();
+        int stateId = session.nextStateId();
+        for (Integer dirty : outcome.dirty()) {
+            if (dirty == null || dirty < 0 || dirty >= outcome.bottom().size()) {
+                continue;
+            }
+            adapter.packets().sendSetSlot(
+                    player,
+                    windowId,
+                    stateId,
+                    topSize + dirty,
+                    outcome.bottom().get(dirty)
+            );
+        }
+        UxItem cursor = outcome.held() == null ? UxItem.EMPTY : outcome.held().item();
         adapter.packets().sendCursorItem(player, cursor);
+    }
+
+    private void handleEditableOutsideClick(Player player, MenuSession session) {
+        UUID pid = id(player);
+        EditableBottomMoves.Held held = bottomHeld.remove(pid);
+        if (held != null && !held.isEmpty()) {
+            ItemStack stack = adapter.items().toBukkit(held.item());
+            if (stack != null && !stack.getType().isAir() && stack.getAmount() > 0 && player.getWorld() != null) {
+                player.getWorld().dropItemNaturally(player.getLocation(), stack);
+            }
+        }
+        UxItem topCursor = carriedItem.getOrDefault(pid, UxItem.EMPTY);
+        if (!topCursor.isEmpty()) {
+            rejectEditable(player, session, syntheticClick(session, -999));
+            return;
+        }
+        adapter.packets().sendCursorItem(player, UxItem.EMPTY);
+    }
+
+    private void restoreBottomHeld(Player player, MenuSession session) {
+        UUID pid = id(player);
+        EditableBottomMoves.Held held = bottomHeld.remove(pid);
+        if (held == null || held.isEmpty()) {
+            adapter.packets().sendCursorItem(player, carriedItem.getOrDefault(pid, UxItem.EMPTY));
+            return;
+        }
+        List<UxItem> before = snapshotBottom(player);
+        List<UxItem> restored = EditableBottomMoves.returnToOrigin(before, held);
+        if (!EditableBottomMoves.fullyReturned(before, restored, held)) {
+            CursorReclaim.reclaim(player, adapter.items(), held.item());
+            restored = snapshotBottom(player);
+        } else {
+            writeBottom(player, restored);
+        }
+        int topSize = session.menu().type().protocolTopSize();
+        int windowId = session.windowId();
+        int stateId = session.nextStateId();
+        int origin = held.originIndex();
+        if (origin >= 0 && origin < restored.size()) {
+            adapter.packets().sendSetSlot(player, windowId, stateId, topSize + origin, restored.get(origin));
+        }
+        adapter.packets().sendCursorItem(player, UxItem.EMPTY);
+    }
+
+    private void clearBottomHeld(Player player) {
+        bottomHeld.remove(id(player));
+    }
+
+    private UxItem activeCursor(Player player) {
+        UUID pid = id(player);
+        EditableBottomMoves.Held held = bottomHeld.get(pid);
+        if (held != null && !held.isEmpty()) {
+            return held.item();
+        }
+        return carriedItem.getOrDefault(pid, UxItem.EMPTY);
     }
 
     private void writeBottom(Player player, List<UxItem> bottom) {
@@ -679,19 +803,43 @@ public final class MenuService {
     private void rejectEditable(Player player, MenuSession session, ClickPacket packet) {
         Menu menu = session.menu();
         int last = menu.type().protocolLastIndex();
+        int topSize = menu.type().protocolTopSize();
+        int maxSlot = topSize + 36;
         int windowId = session.windowId();
         int stateId = session.nextStateId();
-        UxItem cursor = carriedItem.getOrDefault(id(player), UxItem.EMPTY);
+        UxItem cursor = activeCursor(player);
         if (packet.slot() >= 0 && packet.slot() <= last) {
             UxItem item = packet.slot() < menu.items().size() ? menu.items().get(packet.slot()) : UxItem.EMPTY;
             adapter.packets().sendSetSlot(player, windowId, stateId, packet.slot(), item);
+        }
+        if (packet.slot() >= topSize && packet.slot() < maxSlot) {
+            List<UxItem> bottom = snapshotBottom(player);
+            int idx = packet.slot() - topSize;
+            if (idx >= 0 && idx < bottom.size()) {
+                adapter.packets().sendSetSlot(player, windowId, stateId, packet.slot(), bottom.get(idx));
+            }
+        }
+        for (Integer slot : packet.changedSlotIds()) {
+            if (slot == null) {
+                continue;
+            }
+            if (slot >= 0 && slot <= last) {
+                UxItem item = slot < menu.items().size() ? menu.items().get(slot) : UxItem.EMPTY;
+                adapter.packets().sendSetSlot(player, windowId, stateId, slot, item);
+            } else if (slot >= topSize && slot < maxSlot) {
+                List<UxItem> bottom = snapshotBottom(player);
+                int idx = slot - topSize;
+                if (idx >= 0 && idx < bottom.size()) {
+                    adapter.packets().sendSetSlot(player, windowId, stateId, slot, bottom.get(idx));
+                }
+            }
         }
         adapter.packets().sendCursorItem(player, cursor);
     }
 
     private void resyncFull(Player player, MenuSession session) {
         int stateId = session.nextStateId();
-        UxItem cursor = carriedItem.getOrDefault(id(player), UxItem.EMPTY);
+        UxItem cursor = activeCursor(player);
         adapter.packets().sendWindowItems(
                 player,
                 session.windowId(),
