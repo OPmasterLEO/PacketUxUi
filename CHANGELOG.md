@@ -2,12 +2,13 @@
 
 ## 0.12
 
-Composable APIs for plugins — not builtin GUI products (no PaginatedMenu / ConfirmMenu).
+**Supports** pagination / refresh / filters via composable APIs — does **not** ship PaginatedMenu / ConfirmMenu products.
 
 - **Event bus**: `GuiListener` + `GuiClickEvent` (cancelable) / `GuiClickPostEvent` / `GuiOpenEvent` / `GuiCloseEvent` via `PacketMenus.registerListener` / `PacketUxUiAPI.getEventManager()`
 - **`MenuPackets`**: public facade for open / setContent / setSlot / setCursor / close / stateId / bind
 - **`Slots`**: row/col, border, rectangle, top/bottom index helpers
 - **`ExecuteComponent`**: `clickType()`, `carried()`, `isTop()` / `isBottom()`
+- Existing: `present` / `reopen` / `patchSlots` / `refresh` / `closeThen` (plugins build pages on top)
 
 ### Artifact
 `net.opmasterleo:packetuxui:0.12`

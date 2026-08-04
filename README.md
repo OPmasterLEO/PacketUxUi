@@ -91,23 +91,30 @@ Debug: `-Dpacketuxui.debug=true`
 
 ## Library model
 
-Plugins compose; PacketUxUi does not ship paginated shops or confirm dialogs.
+PacketUxUi **supports** pagination, live refresh, filters, custom layouts — it does **not** ship them as builtin widgets. You compose with primitives (same idea as PacketEvents listeners/wrappers).
 
-| Primitive | Use |
+| You want | Use |
 |---|---|
-| `PacketMenus.build()` / `present` | High-level menus |
-| `PacketMenus.registerListener(GuiListener)` | Global click/open/close (cancel clicks) |
-| `MenuPackets` | Advanced setSlot/content/cursor without digging NMS |
-| `Slots` | Row/col, border, rectangle layout math |
-| `ExecuteComponent` | `clickType()`, `carried()`, `isTop()` |
+| Open / update menu | `present` (diff) / `reopen` (force) |
+| Live slot refresh | `patchSlots` / `patchSlotAtomic` / `refresh` / `MenuPackets.setSlot` |
+| Pagination | Your page index + rebuild `MenuBuild` + `present`/`reopen`; nav buttons call your code |
+| Global click filter | `PacketMenus.registerListener` → cancel `GuiClickEvent` |
+| Layout math | `Slots.index` / `border` / `rectangle` |
+| Raw packets | `MenuPackets` (stateId-aware) |
 
 ```java
+void openPage(Player p, int page) {
+    MenuBuild build = PacketMenus.build().title("Items").rows(6);
+    for (int slot : Slots.rectangle(1, 1, 4, 7)) { /* page items */ }
+    build.action(45, prev, x -> openPage(x, page - 1));
+    build.action(53, next, x -> openPage(x, page + 1));
+    PacketMenus.present(p, build.materialize()); // or reopen if size changed
+}
+
 PacketMenus.registerListener(new GuiListener() {
     @Override
     public void onClick(GuiClickEvent event) {
-        if (inCombat(event.player())) {
-            event.setCancelled(true);
-        }
+        if (inCombat(event.player())) event.setCancelled(true);
     }
 });
 ```
