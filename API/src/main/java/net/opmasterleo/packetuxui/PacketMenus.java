@@ -67,8 +67,20 @@ public final class PacketMenus {
         PacketUxUiAPI.close(player);
     }
 
+    public static void closeThen(Player player, Runnable onSettled) {
+        gui().closeThen(player, onSettled);
+    }
+
+    public static void closeThen(Player player, long settleTicks, Runnable onSettled) {
+        gui().closeThen(player, settleTicks, onSettled);
+    }
+
     public static void present(Player player, Menu menu) {
         service().present(player, menu);
+    }
+
+    public static void reopen(Player player, Menu menu) {
+        gui().reopen(player, menu);
     }
 
     public static void updateItem(Player player, int slot, UxItem item) {

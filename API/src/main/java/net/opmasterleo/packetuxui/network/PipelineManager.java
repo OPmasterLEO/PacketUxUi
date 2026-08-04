@@ -14,6 +14,14 @@ public final class PipelineManager {
 
     public static final String HANDLER_NAME_PREFIX = "packetuxui_inbound_";
 
+    private static final String[] INJECT_AFTER = {
+            "via-decoder",
+            "via_decoder",
+            "decoder",
+            "decompress",
+            "decrypt"
+    };
+
     private final NmsAdapter adapter;
     private final MenuService menuService;
     private final PlatformScheduler scheduler;
@@ -43,17 +51,30 @@ public final class PipelineManager {
                 }
                 MenuInboundHandler handler = new MenuInboundHandler(player, adapter, menuService, scheduler);
                 boolean added = false;
-                for (String anchor : adapter.pipeline().injectBeforeNames()) {
+                for (String anchor : INJECT_AFTER) {
                     if (ChannelOps.get(channel, anchor) != null) {
-                        channel.pipeline().addBefore(anchor, handlerName, handler);
+                        channel.pipeline().addAfter(anchor, handlerName, handler);
                         added = true;
                         break;
                     }
                 }
                 if (!added) {
+                    for (String anchor : adapter.pipeline().injectBeforeNames()) {
+                        if (ChannelOps.get(channel, anchor) != null) {
+                            channel.pipeline().addBefore(anchor, handlerName, handler);
+                            added = true;
+                            break;
+                        }
+                    }
+                }
+                if (!added) {
                     channel.pipeline().addFirst(handlerName, handler);
                 }
-            } catch (Throwable ignored) {
+            } catch (Throwable error) {
+                if (menuService.debugLogging()) {
+                    menuService.debug(player, "pipeline inject failed: " + error.getClass().getSimpleName()
+                            + " names=" + ChannelOps.pipelineNames(channel));
+                }
             }
         });
     }
@@ -68,7 +89,10 @@ public final class PipelineManager {
                 if (ChannelOps.get(channel, handlerName) != null) {
                     channel.pipeline().remove(handlerName);
                 }
-            } catch (Throwable ignored) {
+            } catch (Throwable error) {
+                if (menuService.debugLogging()) {
+                    menuService.debug(player, "pipeline remove failed: " + error.getClass().getSimpleName());
+                }
             }
         });
     }

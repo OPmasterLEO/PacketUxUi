@@ -24,7 +24,7 @@ import net.opmasterleo.packetuxui.service.MenuService;
 
 public final class PacketUxUiAPI {
 
-    public static final String VERSION = "1.0.0";
+    public static final String VERSION = "0.9";
 
     private static final AtomicInteger RETAIN = new AtomicInteger();
     private static final Set<JavaPlugin> CLIENTS = new LinkedHashSet<>();
@@ -106,6 +106,11 @@ public final class PacketUxUiAPI {
         scheduler = new PlatformScheduler(plugin);
         service = new MenuService(adapter, scheduler);
         pipelineManager = new PipelineManager(plugin, adapter, service, scheduler);
+        service.setPipelineReassert(pipelineManager::inject);
+        if (Boolean.getBoolean("packetuxui.debug")
+                || "true".equalsIgnoreCase(System.getenv("PACKETUXUI_DEBUG"))) {
+            service.setDebugLogging(true);
+        }
         LifecycleListeners.register(plugin, service, pipelineManager, scheduler);
         for (Player player : Bukkit.getOnlinePlayers()) {
             pipelineManager.inject(player);
@@ -158,6 +163,14 @@ public final class PacketUxUiAPI {
 
     public static void close(Player player) {
         getService().closeMenu(player);
+    }
+
+    public static void closeThen(Player player, Runnable onSettled) {
+        getService().closeThen(player, onSettled);
+    }
+
+    public static void closeThen(Player player, long settleTicks, Runnable onSettled) {
+        getService().closeThen(player, settleTicks, onSettled);
     }
 
     public static MenuBuilder menu(Component title, net.opmasterleo.packetuxui.types.InventoryType type) {

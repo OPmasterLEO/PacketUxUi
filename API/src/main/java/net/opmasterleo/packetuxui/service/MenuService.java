@@ -54,6 +54,8 @@ public final class MenuService {
     private volatile long clickDebounceNanos = 100_000_000L;
     private volatile boolean reclaimCursorOnClose = true;
     private volatile BiConsumer<Player, String> openFailedHandler;
+    private volatile Consumer<Player> pipelineReassert;
+    private volatile boolean debugLogging;
 
     public MenuService(NmsAdapter adapter, PlatformScheduler scheduler) {
         this.adapter = adapter;
@@ -136,6 +138,26 @@ public final class MenuService {
         this.openFailedHandler = handler;
     }
 
+    public void setPipelineReassert(Consumer<Player> reassert) {
+        this.pipelineReassert = reassert;
+    }
+
+    public void setDebugLogging(boolean enabled) {
+        this.debugLogging = enabled;
+    }
+
+    public boolean debugLogging() {
+        return debugLogging;
+    }
+
+    public void debug(Player player, String message) {
+        if (!debugLogging) {
+            return;
+        }
+        String who = player == null ? "?" : player.getName();
+        System.out.println("[PacketUxUi/debug] " + who + ": " + message);
+    }
+
     public int getWindowId(Player player) {
         MenuSession session = sessions.get(id(player));
         return session == null ? -1 : session.windowId();
@@ -180,10 +202,24 @@ public final class MenuService {
         sessions.put(id(player), session);
         fireScope(player, true, session.topSlotCount());
         int stateId = session.nextStateId();
+        adapter.packets().bindServerContainer(
+                player,
+                windowId,
+                copy.type().id(),
+                Math.max(1, copy.type().protocolTopSize() / 9)
+        );
         adapter.packets().sendOpenWindow(player, windowId, copy.type().id(), copy.name());
         adapter.packets().sendWindowItems(player, windowId, stateId, fullContents(player, copy), null);
         adapter.packets().sendCursorItem(player, UxItem.EMPTY);
         session.setPhase(SessionPhase.OPEN);
+        Consumer<Player> reassert = pipelineReassert;
+        if (reassert != null) {
+            try {
+                reassert.accept(player);
+            } catch (Throwable error) {
+                debug(player, "pipeline reassert failed: " + error.getClass().getSimpleName());
+            }
+        }
     }
 
     public void present(Player player, Menu menu) {
@@ -198,6 +234,56 @@ public final class MenuService {
             }
             openMenuSync(player, menu);
         });
+    }
+
+    /** Force close+open even when type/mode match (size/type changes, SignGUI handoff prep, etc.). */
+    public void reopen(Player player, Menu menu) {
+        openMenu(player, menu);
+    }
+
+    /**
+     * Fully settles the packet menu (cursor empty, close packet, unbind, session gone), waits
+     * {@code settleTicks}, then runs {@code onSettled}. Use this before opening SignGUI or any
+     * external UI. Client close packets during the settle window are suppressed via a transition token.
+     */
+    public void closeThen(Player player, Runnable onSettled) {
+        closeThen(player, 1L, onSettled);
+    }
+
+    public void closeThen(Player player, long settleTicks, Runnable onSettled) {
+        java.util.Objects.requireNonNull(player, "player");
+        long delay = Math.max(1L, settleTicks);
+        scheduler.runForPlayer(player, () -> {
+            TransitionToken token = beginTransition(player);
+            try {
+                closeCurrent(player, true, true);
+            } catch (Throwable error) {
+                endTransition(player, token);
+                debug(player, "closeThen close failed: " + error.getClass().getSimpleName());
+                throw error;
+            }
+            scheduler.runLaterForPlayer(player, settled -> {
+                endTransition(settled, token);
+                if (onSettled == null || !settled.isOnline()) {
+                    return;
+                }
+                try {
+                    onSettled.run();
+                } catch (Throwable error) {
+                    debug(settled, "closeThen onSettled failed: " + error.getClass().getSimpleName());
+                }
+            }, delay);
+        });
+    }
+
+    public java.util.concurrent.CompletableFuture<Void> closeAsync(Player player) {
+        return closeAsync(player, 1L);
+    }
+
+    public java.util.concurrent.CompletableFuture<Void> closeAsync(Player player, long settleTicks) {
+        java.util.concurrent.CompletableFuture<Void> future = new java.util.concurrent.CompletableFuture<>();
+        closeThen(player, settleTicks, () -> future.complete(null));
+        return future;
     }
 
     public void updateTitle(Player player, Component title) {
@@ -271,6 +357,7 @@ public final class MenuService {
         if (sendClosePacket) {
             adapter.packets().sendCloseWindow(player, session.windowId());
         }
+        adapter.packets().unbindServerContainer(player);
         int top = session.topSlotCount();
         sessions.remove(id(player));
         windowIds.release(player);
@@ -340,12 +427,12 @@ public final class MenuService {
         }
         if (!isValidClickSlot(session, packet)) {
             emitDecision(player, packet, SlotKind.DECORATIVE, false, false, "invalid_slot_resync_full");
-            resyncFull(player, session);
+            resyncFull(player, session, packet.stateId(), true);
             return;
         }
         if (session.phase() != SessionPhase.OPEN) {
             emitDecision(player, packet, SlotKind.DECORATIVE, false, false, "phase_mismatch_resync_full");
-            resyncFull(player, session);
+            resyncFull(player, session, packet.stateId(), true);
             return;
         }
         long now = System.nanoTime();
@@ -355,8 +442,9 @@ public final class MenuService {
                 emitDecision(player, packet, SlotKind.DECORATIVE, false, false, "debounce_reject_editable");
                 rejectEditable(player, session, packet);
             } else {
+                // Still correct cursor/slots; only the handler is dropped.
                 emitDecision(player, packet, SlotKind.DECORATIVE, false, false, "debounce_resync_full");
-                resyncFull(player, session);
+                resyncFull(player, session, packet.stateId(), true);
             }
             return;
         }
@@ -913,8 +1001,8 @@ public final class MenuService {
     }
 
     /**
-     * Netty-thread-safe correction for read-only menus: push a full content + empty cursor
-     * resync immediately so the client cannot keep an optimistic button pickup.
+     * Netty-thread-safe correction for read-only menus. Only touches in-memory menu state and
+     * outbound packets — never Bukkit inventory APIs (unsafe off the region/main thread).
      */
     public void correctReadOnlyClick(Player player, ClickPacket packet) {
         MenuSession session = sessions.get(id(player));
@@ -924,7 +1012,25 @@ public final class MenuService {
         if (session.menu().mode() != MenuMode.READ_ONLY) {
             return;
         }
-        resyncFull(player, session, packet.stateId(), true);
+        int stateId = session.nextStateIdAbove(packet.stateId());
+        int windowId = session.windowId();
+        int top = session.menu().type().protocolTopSize();
+        List<UxItem> items = session.menu().items();
+
+        int slot = packet.slot();
+        if (slot >= 0 && slot < top) {
+            UxItem item = slot < items.size() ? items.get(slot) : UxItem.EMPTY;
+            adapter.packets().sendSetSlot(player, windowId, stateId, slot, item == null ? UxItem.EMPTY : item);
+        }
+        for (Integer changed : packet.changedSlotIds()) {
+            if (changed == null || changed == slot || changed < 0 || changed >= top) {
+                continue;
+            }
+            UxItem item = changed < items.size() ? items.get(changed) : UxItem.EMPTY;
+            adapter.packets().sendSetSlot(player, windowId, stateId, changed, item == null ? UxItem.EMPTY : item);
+        }
+        adapter.packets().sendCursorItem(player, UxItem.EMPTY);
+        carriedItem.remove(id(player));
     }
 
     private List<UxItem> contentsForOpen(Player player, Menu menu) {

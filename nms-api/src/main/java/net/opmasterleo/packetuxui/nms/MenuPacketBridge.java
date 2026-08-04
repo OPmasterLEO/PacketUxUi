@@ -20,4 +20,10 @@ public interface MenuPacketBridge {
     void sendCursorItem(Player player, UxItem item);
 
     void injectClick(Player player, ClickPacket click);
+
+    default void bindServerContainer(Player player, int windowId, int typeId, int rows) {
+    }
+
+    default void unbindServerContainer(Player player) {
+    }
 }

@@ -24,7 +24,7 @@ repositories {
 }
 
 dependencies {
-    implementation("net.opmasterleo:packetuxui:0.7")
+    implementation("net.opmasterleo:packetuxui:0.9")
 }
 ```
 
@@ -40,7 +40,7 @@ repositories {
 }
 
 dependencies {
-    implementation 'net.opmasterleo:packetuxui:0.7'
+    implementation 'net.opmasterleo:packetuxui:0.9'
 }
 ```
 
@@ -57,7 +57,7 @@ dependencies {
 <dependency>
   <groupId>net.opmasterleo</groupId>
   <artifactId>packetuxui</artifactId>
-  <version>0.7</version>
+  <version>0.9</version>
 </dependency>
 ```
 
@@ -112,11 +112,15 @@ MenuBuild page = PacketMenus.build()
         .editableSlot(13, ItemStack.empty())
         .onClose(p -> save(p));
 
-gui.present(player, page);                          // same size → dirty Set Slot; else reopen
+gui.present(player, page);                          // same type+mode → dirty Set Slot; else reopen
+gui.reopen(player, smallerPage);                    // force close+open (54→27, etc.)
 gui.presentAsync(player, () -> buildHeavyPage());
 gui.updateTitle(player, Component.text("Shop (2/3)")); // same window id
 gui.patchSlots(player, Map.of(13, stack));
 gui.close(player);
+// After packet menu → SignGUI / chat / other UI:
+gui.closeThen(player, () -> signGui.open(player));
+// or: gui.closeAsync(player).thenRun(() -> signGui.open(player));
 
 int windowId = gui.getWindowId(player);     // 100–126 while open, else -1
 int topCount = gui.getTopSlotCount(player); // overlays skip plugin top slots
@@ -179,6 +183,44 @@ Virtual window ids are pooled **100–126** per player (`BitSet` reclaim). Exhau
 3. Works for both menu modes
 
 Anti-dupe: clicks ignored while `OPENING` / `CLOSING`; ~100ms debounce (configurable).
+
+### Transitions / close → SignGUI / size changes (0.9+)
+
+| API | When |
+|---|---|
+| `present(player, menu)` | Same inventory type + mode → differential dirty Set Slot. Different type/mode/size → force reopen. |
+| `reopen(player, menu)` | Always close+open. Use for 54→27, anvil↔chest, etc. |
+| `close(player)` | Empty cursor, close packet, unbind server container, clear session. |
+| `closeThen(player, runnable)` | `close` + 1 tick settle, then run. **Use before SignGUI / chat UIs.** |
+| `closeAsync(player)` | Same settle as `closeThen`, as `CompletableFuture`. |
+| `beginTransition` / `endTransition` | Suppresses client close handling during manual swaps. Prefer `closeThen` for external UIs. |
+
+**Core migration**
+
+```java
+// Before (racy)
+gui.close(player);
+Bukkit.getScheduler().runTaskLater(plugin, () -> signGui.open(player), 2L);
+
+// After
+PacketMenus.gui().closeThen(player, () -> signGui.open(player));
+
+// Size change
+PacketMenus.gui().reopen(player, smallMenu); // not present()
+
+// Same-size sort/filter refresh (keep differential)
+PacketMenus.gui().present(player, refreshedSameType);
+```
+
+Do **not** open SignGUI from `onClose` while also calling `closeThen` — pick one path. Prefer library transitions over Core `suppressCloseNavigation` hacks.
+
+### 26.x cursor + anticheat
+
+- Read-only clicks: netty-thread `sendSetSlot` + `ClientboundSetCursorItemPacket(EMPTY)` using `nextStateIdAbove(clientStateId)`, then player-thread full resync + handler.
+- Virtual window clicks/closes are never `fireChannelRead`'d into vanilla.
+- Modern 21.5+ / 26.x bind an inert `ChestMenu` (`containerMenu`) with matching virtual window id so Grim/Vulcan see a real container size; clicks still stay in PacketUxUi.
+- Pipeline injects **after** Via/decoder when present (before typical AC `addBefore("packet_handler")` handlers). Re-asserted on menu open.
+- Debug: `-Dpacketuxui.debug=true` or `PACKETUXUI_DEBUG=true`.
 
 ### Production migration APIs
 

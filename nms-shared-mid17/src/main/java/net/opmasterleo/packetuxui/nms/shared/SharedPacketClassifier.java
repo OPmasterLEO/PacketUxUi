@@ -43,6 +43,14 @@ public final class SharedPacketClassifier implements PacketClassifier {
     }
 
     @Override
+    public int closeWindowId(Object packet) {
+        if (packet instanceof ServerboundContainerClosePacket close) {
+            return close.getContainerId();
+        }
+        return -1;
+    }
+
+    @Override
     public ClickPacket readClick(Object packet) {
         if (!(packet instanceof ServerboundContainerClickPacket click)) {
             return null;

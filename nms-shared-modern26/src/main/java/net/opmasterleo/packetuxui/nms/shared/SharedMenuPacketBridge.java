@@ -21,6 +21,10 @@ import net.minecraft.network.protocol.game.ClientboundOpenScreenPacket;
 import net.minecraft.network.protocol.game.ClientboundSetCursorItemPacket;
 import net.minecraft.network.protocol.game.ServerboundContainerClickPacket;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.SimpleContainer;
+import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.world.inventory.ChestMenu;
 import net.minecraft.world.inventory.ContainerInput;
 import net.minecraft.world.inventory.MenuType;
 import net.minecraft.world.item.ItemStack;
@@ -136,6 +140,53 @@ public final class SharedMenuPacketBridge implements MenuPacketBridge {
                 HashedStack.create(items.toMinecraft(click.carried()), HASH)
         );
         sp.connection.handleContainerClick(packet);
+    }
+
+    @Override
+    public void bindServerContainer(Player player, int windowId, int typeId, int rows) {
+        ServerPlayer sp = nms(player);
+        if (sp == null) {
+            return;
+        }
+        int safeRows = Math.max(1, Math.min(6, rows));
+        int top = safeRows * 9;
+        SimpleContainer container = new SimpleContainer(top);
+        Inventory inv = sp.getInventory();
+        MenuType<?> type = menuType(typeId);
+        ChestMenu menu = new ChestMenu(type, windowId, inv, container, safeRows) {
+            @Override
+            public boolean stillValid(net.minecraft.world.entity.player.Player viewer) {
+                return true;
+            }
+
+            @Override
+            public void clicked(int slotId, int buttonId, ContainerInput clickType, net.minecraft.world.entity.player.Player viewer) {
+                // PacketUxUi owns click handling; keep the bound container inert for AC validity only.
+            }
+
+            @Override
+            public ItemStack quickMoveStack(net.minecraft.world.entity.player.Player viewer, int index) {
+                return ItemStack.EMPTY;
+            }
+        };
+        sp.containerMenu = menu;
+    }
+
+    @Override
+    public void unbindServerContainer(Player player) {
+        ServerPlayer sp = nms(player);
+        if (sp == null) {
+            return;
+        }
+        AbstractContainerMenu open = sp.containerMenu;
+        if (open == null || open == sp.inventoryMenu) {
+            return;
+        }
+        int id = open.containerId;
+        // Only reclaim menus we bound for virtual windows (ids 100-126).
+        if (id >= 100 && id <= 126) {
+            sp.containerMenu = sp.inventoryMenu;
+        }
     }
 
     private static ContainerInput toNmsClickType(WindowClickType type) {

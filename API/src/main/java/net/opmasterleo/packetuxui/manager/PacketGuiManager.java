@@ -78,6 +78,26 @@ public final class PacketGuiManager {
         service.closeMenu(player);
     }
 
+    /**
+     * Close the packet menu, wait one tick (cursor empty / unbound / session gone), then run
+     * {@code onSettled}. Prefer this over delayed Bukkit tasks before SignGUI / chat UIs.
+     */
+    public void closeThen(Player player, Runnable onSettled) {
+        service.closeThen(player, onSettled);
+    }
+
+    public void closeThen(Player player, long settleTicks, Runnable onSettled) {
+        service.closeThen(player, settleTicks, onSettled);
+    }
+
+    public CompletableFuture<Void> closeAsync(Player player) {
+        return service.closeAsync(player);
+    }
+
+    public CompletableFuture<Void> closeAsync(Player player, long settleTicks) {
+        return service.closeAsync(player, settleTicks);
+    }
+
     public void present(Player player, Menu menu) {
         service.present(player, menu);
     }
@@ -91,6 +111,14 @@ public final class PacketGuiManager {
             }
         }
         service.present(player, menu);
+    }
+
+    public void reopen(Player player, Menu menu) {
+        service.reopen(player, menu);
+    }
+
+    public void reopen(Player player, MenuBuild build) {
+        reopen(player, build.materialize());
     }
 
     public void present(Player player, MenuBuild build) {

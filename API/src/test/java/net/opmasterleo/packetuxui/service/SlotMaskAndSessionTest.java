@@ -55,12 +55,20 @@ class SlotMaskAndSessionTest {
     }
 
     @Test
-    void uxItemEqualsSkipsIdenticalDifferential() {
-        UxItem a = UxItem.builder("minecraft:diamond").amount(3).build();
-        UxItem b = UxItem.builder("minecraft:diamond").amount(3).build();
-        UxItem c = UxItem.builder("minecraft:diamond").amount(4).build();
-        assertEquals(a, b);
-        assertTrue(a.equals(b));
-        assertFalse(a.equals(c));
+    void nextStateIdAboveBeatsClientPrediction() {
+        Menu menu = new Menu(
+                Component.text("t"),
+                InventoryType.GENERIC9X1,
+                java.util.Map.of(),
+                new net.opmasterleo.packetuxui.dto.CooldownComponent(),
+                MenuMode.READ_ONLY
+        );
+        MenuSession session = new MenuSession(menu, 100);
+        assertEquals(1, session.nextStateId());
+        assertEquals(2, session.nextStateId());
+        // Client predicted ahead of us — correction must be strictly greater.
+        assertEquals(10, session.nextStateIdAbove(9));
+        assertEquals(11, session.nextStateIdAbove(5));
+        assertEquals(12, session.nextStateIdAbove(-1));
     }
 }

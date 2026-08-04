@@ -38,8 +38,15 @@ public final class MenuInboundHandler extends ChannelInboundHandlerAdapter {
             case CLOSE -> {
                 boolean hadVirtualMenu = menuService.hasOpen(player.getUniqueId());
                 int closeId = classifier.closeWindowId(msg);
+                boolean virtualClose = WindowIdPool.isVirtual(closeId);
+                if (menuService.debugLogging()) {
+                    menuService.debug(player, "CLOSE closeId=" + closeId
+                            + " hadVirtual=" + hadVirtualMenu
+                            + " transition=" + menuService.isTransitionActive(player));
+                }
                 scheduler.runForPlayer(player, () -> menuService.onCloseMenu(player));
-                if (hadVirtualMenu || WindowIdPool.isVirtual(closeId)) {
+                // Never leak virtual-window closes into vanilla / anticheat.
+                if (hadVirtualMenu || virtualClose || menuService.isTransitionActive(player)) {
                     return;
                 }
                 ctx.fireChannelRead(msg);
@@ -70,7 +77,9 @@ public final class MenuInboundHandler extends ChannelInboundHandlerAdapter {
                 // on the cursor for one or more frames (or forever if stateId is stale).
                 try {
                     menuService.correctReadOnlyClick(player, click);
-                } catch (Throwable ignored) {
+                } catch (Throwable error) {
+                    menuService.debug(player, "correctReadOnlyClick failed: " + error.getClass().getSimpleName()
+                            + " slot=" + click.slot() + " stateId=" + click.stateId());
                 }
                 scheduler.runForPlayer(player, () -> menuService.handleIncomingClick(player, click));
             }
