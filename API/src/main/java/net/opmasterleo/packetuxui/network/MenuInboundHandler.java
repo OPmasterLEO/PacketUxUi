@@ -53,6 +53,13 @@ public final class MenuInboundHandler extends ChannelInboundHandlerAdapter {
             case CLOSE -> {
                 int closeId = classifier.closeWindowId(msg);
                 boolean oursClose = menuService.isOursWindow(playerId, closeId);
+                if (menuService.shouldIgnoreInboundClose(playerId)) {
+                    if (menuService.debugLogging()) {
+                        menuService.debug(player, "CLOSE_IGNORED_STALE closeId=" + closeId
+                                + " (type-swap grace)");
+                    }
+                    return;
+                }
                 if (menuService.debugLogging()) {
                     menuService.debug(player, "CLOSE closeId=" + closeId
                             + " hadVirtual=" + sessionOpen

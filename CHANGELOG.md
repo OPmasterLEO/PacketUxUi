@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.13.10
+
+### Fix: silent type swap (no close+open)
+
+`present` with a different inventory type/size/mode while a menu is already open always uses OpenScreen-only swap (same window id). Mode mismatch no longer forces CloseWindow + reopen.
+
+Also ignores the client's stale CloseWindow echo after a type change (grace while session stays OPEN), which previously tore the session down mid-swap.
+
+### Artifact
+`net.opmasterleo:packetuxui:0.13.10`
+
 ## 0.13.9
 
 ### Chore: single `nms-shared` variant tree

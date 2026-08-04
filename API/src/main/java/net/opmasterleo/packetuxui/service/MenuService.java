@@ -67,6 +67,12 @@ public final class MenuService {
     private final java.util.Set<UUID> closingPlayers = java.util.concurrent.ConcurrentHashMap.newKeySet();
     /** Open requested while {@link #closingPlayers} — applied after close finally. */
     private final ConcurrentHashMap<UUID, Menu> pendingPresent = new ConcurrentHashMap<>();
+    /**
+     * After a silent type swap, the client often echoes {@code ServerboundContainerClosePacket}
+     * for the previous screen. Ignore those while the session stays OPEN for a short grace.
+     */
+    private final ConcurrentHashMap<UUID, Long> ignoreInboundCloseUntilNanos = new ConcurrentHashMap<>();
+    private static final long TYPE_SWAP_CLOSE_GRACE_NANOS = 500_000_000L; // 500ms
     /** Soft book-viewer tracking (client book screen has no container close packet). */
     private final java.util.Set<UUID> bookViewers = java.util.concurrent.ConcurrentHashMap.newKeySet();
     private final ConcurrentHashMap<UUID, java.util.function.Consumer<Player>> bookOnClose =
@@ -223,6 +229,27 @@ public final class MenuService {
     }
 
     /**
+     * Drop stale client CloseWindow after {@link #replaceMenuInPlace} while the virtual
+     * session is still OPEN. Real Esc after the grace still closes normally.
+     */
+    public boolean shouldIgnoreInboundClose(UUID playerId) {
+        Long until = ignoreInboundCloseUntilNanos.get(playerId);
+        if (until == null) {
+            return false;
+        }
+        if (System.nanoTime() > until) {
+            ignoreInboundCloseUntilNanos.remove(playerId, until);
+            return false;
+        }
+        MenuSession session = sessions.get(playerId);
+        return session != null && session.phase() == SessionPhase.OPEN;
+    }
+
+    private void armTypeSwapCloseIgnore(UUID playerId) {
+        ignoreInboundCloseUntilNanos.put(playerId, System.nanoTime() + TYPE_SWAP_CLOSE_GRACE_NANOS);
+    }
+
+    /**
      * Hard-reset all menu tracking for a player (stale session, stranded transition, etc.).
      * Safe to call from join/quit or after a desync.
      */
@@ -307,9 +334,9 @@ public final class MenuService {
     }
 
     /**
-     * Swap menu type/size (hopper↔chest, 27↔54, …) without CloseWindow or session teardown.
-     * Same window id; OpenScreen + SetContent only. Cursor preserved when staying EDITABLE.
-     * No {@code onClose} / GuiCloseEvent — refresh-like, not a reopen.
+     * Swap menu type/size/mode (hopper↔chest, 27↔54, READ_ONLY↔EDITABLE, …) without
+     * CloseWindow or session teardown. Same window id; OpenScreen + SetContent only.
+     * Cursor preserved when staying EDITABLE. No {@code onClose} / GuiCloseEvent.
      */
     private void replaceMenuInPlace(Player player, MenuSession existing, Menu menu) {
         Menu copy = menu.copy();
@@ -326,6 +353,8 @@ public final class MenuService {
         existing.setPhase(SessionPhase.OPEN);
         clearAccumulatedDrag(player);
         nettyRoCorrectedForState.remove(id(player));
+        // Client often echoes CloseWindow when OpenScreen changes type — do not tear down.
+        armTypeSwapCloseIgnore(id(player));
 
         adapter.packets().unbindServerContainer(player);
         adapter.items().preload(copy.items());
@@ -659,6 +688,7 @@ public final class MenuService {
         nettyRoCorrectedForState.remove(pid);
         bottomCache.remove(pid);
         lastClickDecision.remove(pid);
+        ignoreInboundCloseUntilNanos.remove(pid);
     }
 
     /** Clear top slots client-side so CloseWindow cannot dump virtual items into the inv. */
@@ -2217,11 +2247,9 @@ public final class MenuService {
                     owner.applyMenuDifferential(player, existing, menu);
                     return;
                 }
-                // Same mode, different type/size → silent type swap (OpenScreen only, no teardown).
-                if (existing.menu().mode() == menu.mode()) {
-                    owner.replaceMenuInPlace(player, existing, menu);
-                    return;
-                }
+                // Any other change while open (type, size, mode) → OpenScreen only, no CloseWindow.
+                owner.replaceMenuInPlace(player, existing, menu);
+                return;
             }
             owner.ensurePipeline(player);
             owner.openMenuSync(player, menu);
