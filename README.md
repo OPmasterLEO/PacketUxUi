@@ -21,7 +21,7 @@ repositories {
 }
 
 dependencies {
-    implementation("net.opmasterleo:packetuxui:0.13.9")
+    implementation("net.opmasterleo:packetuxui:0.13.10")
 }
 ```
 
@@ -116,7 +116,7 @@ gui.present(player, PacketMenus.build()
 
 | Call | Behavior |
 | --- | --- |
-| `present` | Diff update if same type; silent type swap if same mode, different size; else open |
+| `present` | Diff if same type+mode; else **silent OpenScreen swap** (any type/size/mode) while open; else open |
 | `reopen` | Force close + open |
 | `patchSlots` / `refresh` / `updateTitle` | In-place changes |
 | `close` | Clear cursor, close packet, drop session |
@@ -128,9 +128,12 @@ gui.present(player, refreshedSameType);          // differential
 gui.patchSlots(player, Map.of(11, newItem));
 gui.refresh(player);
 gui.present(player, differentSizeSameMode);      // silent replace (no CloseWindow)
+gui.present(player, differentTypeOrMode);        // also OpenScreen-only while already open
 gui.reopen(player, menu);                        // hard reopen
 gui.closeThen(player, () -> otherUi.open(player));
 ```
+
+Hard CloseWindow + reopen only when nothing is open yet, or you call `reopen` / `open`.
 
 ### Modes
 
