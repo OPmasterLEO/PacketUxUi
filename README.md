@@ -15,7 +15,6 @@ repositories {
     mavenCentral()
     maven {
         url = uri("http://repo.mastersmp.net/releases")
-        isAllowInsecureProtocol = true
     }
 }
 
@@ -25,12 +24,6 @@ dependencies {
 ```
 
 Shade into your plugin; if you `minimize()`, exclude `net.opmasterleo:packetuxui`.
-
-```bash
-./gradlew publish          # releases
-./gradlew publishSnapshot  # snapshots
-./gradlew publishToMavenLocal
-```
 
 ---
 
@@ -67,50 +60,62 @@ gui.reopen(player, smallerMenu);
 gui.closeThen(player, () -> signGui.open(player));
 ```
 
-| API | Role |
-|---|---|
-| `present` | Open, or dirty Set Slot if same type+mode |
-| `reopen` | Force close+open (54→27, etc.) |
-| `close` | Empty cursor, close packet, unbind, clear session |
-| `closeThen` | `close` + 1 tick, then runnable |
-| `presentAsync` | Build off-thread, then `present` |
-| `patchSlots` / `patchSlotAtomic` / `refresh` / `updateTitle` | In-place mutators |
+
+| API                                                          | Role                                              |
+| ------------------------------------------------------------ | ------------------------------------------------- |
+| `present`                                                    | Open, or dirty Set Slot if same type+mode         |
+| `reopen`                                                     | Force close+open (54→27, etc.)                    |
+| `close`                                                      | Empty cursor, close packet, unbind, clear session |
+| `closeThen`                                                  | `close` + 1 tick, then runnable                   |
+| `presentAsync`                                               | Build off-thread, then `present`                  |
+| `patchSlots` / `patchSlotAtomic` / `refresh` / `updateTitle` | In-place mutators                                 |
+
 
 Virtual window ids use vanilla `nextContainerCounter()` (**1–100**). Pipeline injects after Via/decoder. Modern 21.5+/26.x bind a real `ChestMenu` (9xN only) and own `stateId` via `incrementStateId`; top stacks are mirrored into the bound container.
 
 ### Protocol
 
-| Rule | Behavior |
-|---|---|
-| Window id | Vanilla 1..100; tracked per player (`isOurs`) |
-| stateId | Bound menu `incrementStateId` (session mirrors last sent) |
-| READ_ONLY click | Netty: SetCursorItem(EMPTY). Main: one SetContent + handler |
-| EDITABLE click | Simulate → mirror → one bumped SetSlot(s) + SetCursorItem |
-| Bind | Generic 9xN chests only — no wrong-size bind for hopper/anvil |
+
+| Rule            | Behavior                                                      |
+| --------------- | ------------------------------------------------------------- |
+| Window id       | Vanilla 1..100; tracked per player (`isOurs`)                 |
+| stateId         | Bound menu `incrementStateId` (session mirrors last sent)     |
+| READ_ONLY click | Netty: SetCursorItem(EMPTY). Main: one SetContent + handler   |
+| EDITABLE click  | Simulate → mirror → one bumped SetSlot(s) + SetCursorItem     |
+| Bind            | Generic 9xN chests only — no wrong-size bind for hopper/anvil |
+
 
 Debug: `-Dpacketuxui.debug=true`
 
 ---
 
+
+
 ## Modes
 
-| | READ_ONLY | EDITABLE |
-|---|---|---|
-| Top | Cancel + handlers | Place/take on EDITABLE slots; ACTION buttons |
-| Bottom | Light settle | Light settle; shift-from-bottom into EDITABLE tops |
-| Cursor on close | Cleared | Reclaimed |
+
+|                 | READ_ONLY         | EDITABLE                                           |
+| --------------- | ----------------- | -------------------------------------------------- |
+| Top             | Cancel + handlers | Place/take on EDITABLE slots; ACTION buttons       |
+| Bottom          | Light settle      | Light settle; shift-from-bottom into EDITABLE tops |
+| Cursor on close | Cleared           | Reclaimed                                          |
+
 
 `.editable()` menus: `item(...)` defaults to movable. Use `action(...)` / `decorative(...)` when locked.
 
 ---
 
+
+
 ## Modules
 
-| Module | Role |
-|---|---|
-| root fat jar | `net.opmasterleo:packetuxui` — API + all NMS |
-| `API` | Public API |
-| `nms-api` / `nms:*` | Bridges + adapters |
+
+| Module              | Role                                         |
+| ------------------- | -------------------------------------------- |
+| root fat jar        | `net.opmasterleo:packetuxui` — API + all NMS |
+| `API`               | Public API                                   |
+| `nms-api` / `nms:*` | Bridges + adapters                           |
+
 
 JDK **21** for Gradle; JDK **25** auto for 26.x modules.
 
