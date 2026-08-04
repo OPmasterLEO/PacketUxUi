@@ -6,17 +6,22 @@ import net.opmasterleo.packetuxui.nms.ClickPacket;
 import net.opmasterleo.packetuxui.nms.item.UxItem;
 import net.opmasterleo.packetuxui.service.Menu;
 import net.opmasterleo.packetuxui.types.ButtonType;
+import net.opmasterleo.packetuxui.types.ClickData;
 import net.opmasterleo.packetuxui.types.ClickType;
 
-/** Fired after PacketUxUi finished handling a click (handler ran or settle completed). */
+/** Fired after PacketUxUi finished handling a click. */
 public final class GuiClickPostEvent extends GuiEvent {
 
+    private final GuiView view;
     private final ClickPacket packet;
+    private final ClickData clickData;
     private final ClickType clickType;
     private final ButtonType buttonType;
+    private final GuiClickAction action;
+    private final GuiSlotType slotType;
     private final int slot;
-    private final boolean top;
-    private final UxItem carried;
+    private final UxItem currentItem;
+    private final UxItem cursor;
     private final String decision;
 
     public GuiClickPostEvent(
@@ -24,24 +29,40 @@ public final class GuiClickPostEvent extends GuiEvent {
             Menu menu,
             int windowId,
             int topSlotCount,
+            int stateId,
             ClickPacket packet,
-            ClickType clickType,
-            ButtonType buttonType,
-            UxItem carried,
+            ClickData clickData,
+            UxItem cursor,
             String decision
     ) {
         super(player, menu, windowId, topSlotCount);
+        this.view = new GuiView(windowId, menu, topSlotCount, stateId);
         this.packet = packet;
-        this.clickType = clickType == null ? ClickType.UNDEFINED : clickType;
-        this.buttonType = buttonType == null ? ButtonType.LEFT : buttonType;
+        this.clickData = clickData;
+        this.clickType = clickData == null || clickData.clickType() == null
+                ? ClickType.UNDEFINED
+                : clickData.clickType();
+        this.buttonType = clickData == null || clickData.buttonType() == null
+                ? ButtonType.LEFT
+                : clickData.buttonType();
         this.slot = packet.slot();
-        this.top = this.slot >= 0 && this.slot < topSlotCount;
-        this.carried = carried == null ? UxItem.EMPTY : carried;
+        this.slotType = GuiClickMapper.slotType(this.slot, topSlotCount);
+        this.currentItem = GuiClickMapper.currentItem(menu, this.slot, topSlotCount);
+        this.cursor = cursor == null ? UxItem.EMPTY : cursor;
+        this.action = GuiClickMapper.action(packet, clickData, this.currentItem, this.cursor);
         this.decision = decision == null ? "" : decision;
+    }
+
+    public GuiView view() {
+        return view;
     }
 
     public ClickPacket packet() {
         return packet;
+    }
+
+    public ClickData clickData() {
+        return clickData;
     }
 
     public ClickType clickType() {
@@ -52,19 +73,36 @@ public final class GuiClickPostEvent extends GuiEvent {
         return buttonType;
     }
 
+    public GuiClickAction action() {
+        return action;
+    }
+
+    public GuiSlotType slotType() {
+        return slotType;
+    }
+
     public int slot() {
         return slot;
     }
 
     public boolean isTop() {
-        return top;
+        return slotType == GuiSlotType.CONTAINER;
     }
 
+    public UxItem currentItem() {
+        return currentItem;
+    }
+
+    public UxItem cursor() {
+        return cursor;
+    }
+
+    /** @deprecated use {@link #cursor()} */
+    @Deprecated
     public UxItem carried() {
-        return carried;
+        return cursor;
     }
 
-    /** Last internal decision tag (debug / observability). */
     public String decision() {
         return decision;
     }

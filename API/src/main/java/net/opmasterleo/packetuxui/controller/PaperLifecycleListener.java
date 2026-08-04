@@ -11,6 +11,7 @@ import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerKickEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 
+import net.opmasterleo.packetuxui.event.GuiCloseReason;
 import net.opmasterleo.packetuxui.network.PipelineManager;
 import net.opmasterleo.packetuxui.scheduler.PlatformScheduler;
 import net.opmasterleo.packetuxui.service.MenuService;
@@ -43,7 +44,7 @@ public final class PaperLifecycleListener implements Listener {
 
     @EventHandler
     public void onQuit(PlayerQuitEvent event) {
-        forceClose(event.getPlayer());
+        forceClose(event.getPlayer(), GuiCloseReason.QUIT);
         pipelineManager.remove(event.getPlayer());
     }
 
@@ -51,20 +52,20 @@ public final class PaperLifecycleListener implements Listener {
     public void onKick(PlayerKickEvent event) {
         Player player = event.getPlayer();
         if (scheduler.isOwnedByCurrentRegion(player)) {
-            forceClose(player);
+            forceClose(player, GuiCloseReason.KICK);
             return;
         }
-        scheduler.runForPlayer(player, () -> forceClose(player));
+        scheduler.runForPlayer(player, () -> forceClose(player, GuiCloseReason.KICK));
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void onDeath(PlayerDeathEvent event) {
         Player player = event.getEntity();
         if (scheduler.isOwnedByCurrentRegion(player)) {
-            forceClose(player);
+            forceClose(player, GuiCloseReason.DEATH);
             return;
         }
-        scheduler.runForPlayer(player, () -> forceClose(player));
+        scheduler.runForPlayer(player, () -> forceClose(player, GuiCloseReason.DEATH));
     }
 
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = false)
@@ -87,9 +88,9 @@ public final class PaperLifecycleListener implements Listener {
         }
     }
 
-    private void forceClose(Player player) {
+    private void forceClose(Player player, GuiCloseReason reason) {
         try {
-            service.onCloseMenu(player);
+            service.onCloseMenu(player, reason);
         } catch (Throwable ignored) {
         }
     }

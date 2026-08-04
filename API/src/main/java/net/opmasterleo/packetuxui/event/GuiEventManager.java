@@ -69,6 +69,15 @@ public final class GuiEventManager {
         }
     }
 
+    public void fireDrag(GuiDragEvent event) {
+        for (GuiListener listener : ordered()) {
+            try {
+                listener.onDrag(event);
+            } catch (Throwable ignored) {
+            }
+        }
+    }
+
     private List<GuiListener> ordered() {
         ArrayList<GuiListener> copy = new ArrayList<>(listeners);
         copy.sort(BY_PRIORITY);

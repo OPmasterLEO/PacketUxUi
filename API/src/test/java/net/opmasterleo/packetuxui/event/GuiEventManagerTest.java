@@ -16,8 +16,7 @@ import net.opmasterleo.packetuxui.nms.WindowClickType;
 import net.opmasterleo.packetuxui.nms.item.UxItem;
 import net.opmasterleo.packetuxui.service.Menu;
 import net.opmasterleo.packetuxui.service.MenuMode;
-import net.opmasterleo.packetuxui.types.ButtonType;
-import net.opmasterleo.packetuxui.types.ClickType;
+import net.opmasterleo.packetuxui.types.ClickData;
 import net.opmasterleo.packetuxui.types.InventoryType;
 
 class GuiEventManagerTest {
@@ -62,12 +61,14 @@ class GuiEventManagerTest {
         );
         ClickPacket packet = new ClickPacket(1, 1, 0, 0, 0, WindowClickType.PICKUP, Map.of(), UxItem.EMPTY);
         GuiClickEvent event = new GuiClickEvent(
-                null, menu, 1, 9, packet, ClickType.PICKUP, ButtonType.LEFT, UxItem.EMPTY
+                null, menu, 1, 9, 1, packet, ClickData.LEFT_PICKUP, UxItem.EMPTY
         );
         manager.fireClick(event);
 
         assertEquals(List.of("low", "high"), order);
         assertTrue(event.isCancelled());
         assertTrue(cancelledSeen.get());
+        assertEquals(GuiClickAction.NOTHING, event.action()); // empty slot pickup
+        assertEquals(GuiSlotType.CONTAINER, event.slotType());
     }
 }

@@ -41,20 +41,20 @@ public class BukkitLifecycleListener implements Listener {
         scheduler.runForPlayer(player, () -> pipelineManager.inject(player));
     }
 
-    @EventHandler
-    public void onQuit(PlayerQuitEvent event) {
-        forceClose(event.getPlayer());
-        pipelineManager.remove(event.getPlayer());
-    }
-
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onKick(PlayerKickEvent event) {
-        forceClose(event.getPlayer());
+        forceClose(event.getPlayer(), net.opmasterleo.packetuxui.event.GuiCloseReason.KICK);
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void onDeath(PlayerDeathEvent event) {
-        forceClose(event.getEntity());
+        forceClose(event.getEntity(), net.opmasterleo.packetuxui.event.GuiCloseReason.DEATH);
+    }
+
+    @EventHandler
+    public void onQuit(PlayerQuitEvent event) {
+        forceClose(event.getPlayer(), net.opmasterleo.packetuxui.event.GuiCloseReason.QUIT);
+        pipelineManager.remove(event.getPlayer());
     }
 
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = false)
@@ -77,9 +77,9 @@ public class BukkitLifecycleListener implements Listener {
         }
     }
 
-    private void forceClose(Player player) {
+    private void forceClose(Player player, net.opmasterleo.packetuxui.event.GuiCloseReason reason) {
         try {
-            service.onCloseMenu(player);
+            service.onCloseMenu(player, reason);
         } catch (Throwable ignored) {
         }
     }

@@ -24,6 +24,9 @@ import net.opmasterleo.packetuxui.dto.CooldownComponent;
 import net.opmasterleo.packetuxui.event.GuiClickEvent;
 import net.opmasterleo.packetuxui.event.GuiClickPostEvent;
 import net.opmasterleo.packetuxui.event.GuiCloseEvent;
+import net.opmasterleo.packetuxui.event.GuiCloseReason;
+import net.opmasterleo.packetuxui.event.GuiDragEvent;
+import net.opmasterleo.packetuxui.event.GuiDragPhase;
 import net.opmasterleo.packetuxui.event.GuiEventManager;
 import net.opmasterleo.packetuxui.event.GuiOpenEvent;
 import net.opmasterleo.packetuxui.nms.ClickPacket;
@@ -198,13 +201,13 @@ public final class MenuService {
     }
 
     public void openMenuSync(Player player, Menu menu) {
-        closeCurrent(player, true, true);
+        closeCurrent(player, true, true, GuiCloseReason.REPLACE);
         Menu copy = menu.copy();
         int windowId = windowIds.allocate(player, () -> adapter.packets().allocateWindowId(player));
         MenuSession session = new MenuSession(copy, windowId);
         session.setPhase(SessionPhase.OPENING);
         sessions.put(id(player), session);
-        fireScope(player, true, session);
+        fireScope(player, true, session, session.topSlotCount(), GuiCloseReason.UNKNOWN, null);
         if (copy.type().supportsChestBind()) {
             adapter.packets().bindServerContainer(
                     player,
@@ -262,7 +265,7 @@ public final class MenuService {
         scheduler.runForPlayer(player, () -> {
             TransitionToken token = beginTransition(player);
             try {
-                closeCurrent(player, true, true);
+                closeCurrent(player, true, true, GuiCloseReason.API);
             } catch (Throwable error) {
                 endTransition(player, token);
                 debug(player, "closeThen close failed: " + error.getClass().getSimpleName());
@@ -320,17 +323,25 @@ public final class MenuService {
     }
 
     public void onCloseMenu(Player player) {
+        onCloseMenu(player, GuiCloseReason.PLAYER);
+    }
+
+    public void onCloseMenu(Player player, GuiCloseReason reason) {
         if (isTransitionActive(player)) {
             return;
         }
-        closeCurrent(player, false, true);
+        closeCurrent(player, false, true, reason == null ? GuiCloseReason.PLAYER : reason);
     }
 
     public void closeMenu(Player player) {
-        scheduler.runForPlayer(player, () -> closeCurrent(player, true, true));
+        scheduler.runForPlayer(player, () -> closeCurrent(player, true, true, GuiCloseReason.API));
     }
 
     private void closeCurrent(Player player, boolean sendClosePacket, boolean reclaim) {
+        closeCurrent(player, sendClosePacket, reclaim, GuiCloseReason.API);
+    }
+
+    private void closeCurrent(Player player, boolean sendClosePacket, boolean reclaim, GuiCloseReason reason) {
         MenuSession session = sessions.get(id(player));
         if (session == null) {
             windowIds.release(player);
@@ -341,11 +352,12 @@ public final class MenuService {
         }
         session.setPhase(SessionPhase.CLOSING);
         UxItem cursor = carriedItem.getOrDefault(id(player), UxItem.EMPTY);
+        CloseSnapshot snapshot = new CloseSnapshot(session.menu().items(), cursor);
         EditableBottomMoves.Held heldBottom = bottomHeld.get(id(player));
         BiConsumer<Player, CloseSnapshot> onClose = session.menu().onClose();
         if (onClose != null) {
             try {
-                onClose.accept(player, new CloseSnapshot(session.menu().items(), cursor));
+                onClose.accept(player, snapshot);
             } catch (Throwable ignored) {
             }
         }
@@ -357,8 +369,6 @@ public final class MenuService {
                 CursorReclaim.reclaim(player, adapter.items(), heldBottom.item());
             }
         }
-        // Always clear the client cursor before close. Optimistic pickups from the last click
-        // otherwise survive into the player inventory when the virtual window disappears.
         adapter.packets().sendCursorItem(player, UxItem.EMPTY);
         if (sendClosePacket) {
             adapter.packets().sendCloseWindow(player, session.windowId());
@@ -372,15 +382,19 @@ public final class MenuService {
         clearBottomHeld(player);
         clearAccumulatedDrag(player);
         nettyRoCorrectedForState.remove(id(player));
-        debug(player, "CLOSE windowId=" + windowId + " sendPacket=" + sendClosePacket + " reclaim=" + reclaim);
-        fireScope(player, false, session, top);
+        debug(player, "CLOSE windowId=" + windowId + " sendPacket=" + sendClosePacket
+                + " reclaim=" + reclaim + " reason=" + reason);
+        fireScope(player, false, session, top, reason, snapshot);
     }
 
-    private void fireScope(Player player, boolean open, MenuSession session) {
-        fireScope(player, open, session, session.topSlotCount());
-    }
-
-    private void fireScope(Player player, boolean open, MenuSession session, int topSlotCount) {
+    private void fireScope(
+            Player player,
+            boolean open,
+            MenuSession session,
+            int topSlotCount,
+            GuiCloseReason closeReason,
+            CloseSnapshot snapshot
+    ) {
         GuiScopeListener listener = scopeListener;
         if (listener != null) {
             try {
@@ -393,9 +407,23 @@ public final class MenuService {
         }
         try {
             if (open) {
-                events.fireOpen(new GuiOpenEvent(player, session.menu(), session.windowId(), topSlotCount));
+                events.fireOpen(new GuiOpenEvent(
+                        player,
+                        session.menu(),
+                        session.windowId(),
+                        topSlotCount,
+                        session.stateId()
+                ));
             } else {
-                events.fireClose(new GuiCloseEvent(player, session.menu(), session.windowId(), topSlotCount));
+                events.fireClose(new GuiCloseEvent(
+                        player,
+                        session.menu(),
+                        session.windowId(),
+                        topSlotCount,
+                        session.stateId(),
+                        closeReason,
+                        snapshot
+                ));
             }
         } catch (Throwable ignored) {
         }
@@ -477,9 +505,9 @@ public final class MenuService {
                 session.menu(),
                 session.windowId(),
                 session.topSlotCount(),
+                session.stateId(),
                 packet,
-                clickData.clickType(),
-                clickData.buttonType(),
+                clickData,
                 carried
         );
         events.fireClick(pre);
@@ -490,14 +518,48 @@ public final class MenuService {
             return;
         }
 
-        if (clickData.clickType() == ClickType.DRAG_START || clickData.clickType() == ClickType.DRAG_ADD) {
-            accumulateDrag(player, packet, clickData.clickType());
-            if (session.menu().mode() != MenuMode.EDITABLE) {
-                resyncDirtySlots(player, session, packet, UxItem.EMPTY);
-                carriedItem.remove(id(player));
+        if (clickData.clickType() == ClickType.DRAG_START
+                || clickData.clickType() == ClickType.DRAG_ADD
+                || clickData.clickType() == ClickType.DRAG_END) {
+            GuiDragPhase phase = switch (clickData.clickType()) {
+                case DRAG_START -> GuiDragPhase.START;
+                case DRAG_END -> GuiDragPhase.END;
+                default -> GuiDragPhase.ADD;
+            };
+            Set<Integer> dragSlots = new HashSet<>();
+            if (packet.slot() >= 0) {
+                dragSlots.add(packet.slot());
             }
-            fireClickPost(player, session, packet, clickData, carried, "drag_accumulate");
-            return;
+            dragSlots.addAll(packet.changedSlotIds());
+            GuiDragEvent drag = new GuiDragEvent(
+                    player,
+                    session.menu(),
+                    session.windowId(),
+                    session.topSlotCount(),
+                    session.stateId(),
+                    packet,
+                    clickData,
+                    phase,
+                    dragSlots,
+                    carried
+            );
+            events.fireDrag(drag);
+            if (drag.isCancelled()) {
+                clearAccumulatedDrag(player);
+                resyncFull(player, session, packet.stateId(), session.menu().mode() != MenuMode.EDITABLE);
+                fireClickPost(player, session, packet, clickData, carried, "drag_cancelled");
+                return;
+            }
+            if (phase == GuiDragPhase.START || phase == GuiDragPhase.ADD) {
+                accumulateDrag(player, packet, clickData.clickType());
+                if (session.menu().mode() != MenuMode.EDITABLE) {
+                    resyncDirtySlots(player, session, packet, UxItem.EMPTY);
+                    carriedItem.remove(id(player));
+                }
+                fireClickPost(player, session, packet, clickData, carried, "drag_accumulate");
+                return;
+            }
+            // DRAG_END falls through to editable/readonly handlers below
         }
         if (session.menu().mode() == MenuMode.EDITABLE) {
             handleEditableClick(player, session, clickData, packet);
@@ -529,9 +591,9 @@ public final class MenuService {
                     session.menu(),
                     session.windowId(),
                     session.topSlotCount(),
+                    session.stateId(),
                     packet,
-                    clickData.clickType(),
-                    clickData.buttonType(),
+                    clickData,
                     carried,
                     decision
             ));

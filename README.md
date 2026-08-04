@@ -19,7 +19,7 @@ repositories {
 }
 
 dependencies {
-    implementation("net.opmasterleo:packetuxui:0.12.1")
+    implementation("net.opmasterleo:packetuxui:0.12.2")
 }
 ```
 
@@ -107,6 +107,8 @@ PacketUxUi **supports** pagination, live refresh, filters, custom layouts — it
 | Live slot refresh | `patchSlots` / `patchSlotAtomic` / `refresh` / `MenuPackets.setSlot` |
 | Pagination | Your page index + rebuild `MenuBuild` + `present`/`reopen`; nav buttons call your code |
 | Global click filter | `PacketMenus.registerListener` → cancel `GuiClickEvent` |
+| Bukkit-like click metadata | `action()` / `slotType()` / `currentItem()` / `cursor()` / `view()` |
+| Drag | `onDrag(GuiDragEvent)` START/ADD/END |
 | Layout math | `Slots.index` / `border` / `rectangle` |
 | Raw packets | `MenuPackets` (stateId-aware) |
 
@@ -122,7 +124,16 @@ void openPage(Player p, int page) {
 PacketMenus.registerListener(new GuiListener() {
     @Override
     public void onClick(GuiClickEvent event) {
-        if (inCombat(event.player())) event.setCancelled(true);
+        if (event.action() == GuiClickAction.MOVE_TO_OTHER_INVENTORY) {
+            event.setCancelled(true); // like cancelling InventoryClickEvent
+        }
+    }
+
+    @Override
+    public void onDrag(GuiDragEvent event) {
+        if (event.phase() == GuiDragPhase.END) {
+            // inspect event.slots()
+        }
     }
 });
 ```
