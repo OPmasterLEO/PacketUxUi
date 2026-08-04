@@ -125,6 +125,14 @@ public final class PacketMenus {
         gui().setScopeListener(listener);
     }
 
+    public static void setDebugLogging(boolean enabled) {
+        service().setDebugLogging(enabled);
+    }
+
+    public static boolean debugLogging() {
+        return service().debugLogging();
+    }
+
     public static MenuMode readOnly() {
         return MenuMode.READ_ONLY;
     }

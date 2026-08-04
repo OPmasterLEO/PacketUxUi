@@ -147,15 +147,26 @@ public final class MenuService {
     }
 
     public boolean debugLogging() {
-        return debugLogging;
+        return debugLogging
+                || Boolean.getBoolean("packetuxui.debug")
+                || "true".equalsIgnoreCase(System.getenv("PACKETUXUI_DEBUG"));
     }
 
     public void debug(Player player, String message) {
-        if (!debugLogging) {
+        if (!debugLogging()) {
             return;
         }
         String who = player == null ? "?" : player.getName();
-        System.out.println("[PacketUxUi/debug] " + who + ": " + message);
+        String line = "[PacketUxUi/debug] " + who + ": " + message;
+        try {
+            org.bukkit.plugin.java.JavaPlugin host = net.opmasterleo.packetuxui.PacketUxUiAPI.host();
+            if (host != null) {
+                host.getLogger().info(line);
+                return;
+            }
+        } catch (Throwable ignored) {
+        }
+        System.out.println(line);
     }
 
     public int getWindowId(Player player) {
@@ -206,6 +217,12 @@ public final class MenuService {
         adapter.packets().sendWindowItems(player, windowId, stateId, fullContents(player, copy), null);
         adapter.packets().sendCursorItem(player, UxItem.EMPTY);
         session.setPhase(SessionPhase.OPEN);
+        debug(player, "OPEN windowId=" + windowId
+                + " type=" + copy.type()
+                + " mode=" + copy.mode()
+                + " stateId=" + stateId
+                + " top=" + session.topSlotCount()
+                + " bound=" + adapter.packets().ownsBoundContainer(player));
         Consumer<Player> reassert = pipelineReassert;
         if (reassert != null) {
             try {
@@ -353,11 +370,13 @@ public final class MenuService {
         }
         adapter.packets().unbindServerContainer(player);
         int top = session.topSlotCount();
+        int windowId = session.windowId();
         sessions.remove(id(player));
         windowIds.release(player);
         carriedItem.remove(id(player));
         clearBottomHeld(player);
         clearAccumulatedDrag(player);
+        debug(player, "CLOSE windowId=" + windowId + " sendPacket=" + sendClosePacket + " reclaim=" + reclaim);
         fireScope(player, false, session, top);
     }
 

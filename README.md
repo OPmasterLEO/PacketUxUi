@@ -85,7 +85,15 @@ Virtual window ids use vanilla `nextContainerCounter()` (**1–100**). Pipeline 
 | Bind            | Generic 9xN chests only — no wrong-size bind for hopper/anvil |
 
 
-Debug: `-Dpacketuxui.debug=true`
+Debug (server JVM, not plugin.yml):
+
+```text
+java -Dpacketuxui.debug=true -jar paper.jar
+```
+
+Or env `PACKETUXUI_DEBUG=true`, or at runtime `PacketUxUiAPI.getService().setDebugLogging(true)`.
+
+On boot you should see `debug=true` in the PacketUxUi ready line, then `[PacketUxUi/debug]` on open/close/click.
 
 ---
 

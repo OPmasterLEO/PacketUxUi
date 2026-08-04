@@ -135,8 +135,12 @@ public final class PacketUxUiAPI {
                         + ", protocol " + adapter.minProtocol() + ".." + adapter.maxProtocol()
                         + ", scheduler " + scheduler.kind()
                         + (scheduler.isFolia() ? "/folia" : "")
+                        + ", debug=" + service.debugLogging()
                         + ")"
         );
+        if (service.debugLogging()) {
+            plugin.getLogger().info("PacketUxUi debug logging is ON (-Dpacketuxui.debug=true or PACKETUXUI_DEBUG)");
+        }
     }
 
     public static synchronized void terminate(JavaPlugin plugin) {
