@@ -1,6 +1,7 @@
 package net.opmasterleo.packetuxui.nms.shared;
 
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
 
@@ -21,6 +22,11 @@ import net.opmasterleo.packetuxui.nms.ItemBridge;
 import net.opmasterleo.packetuxui.nms.item.UxItem;
 
 public final class SharedItemBridge implements ItemBridge {
+
+    private static final int CACHE_SIZE = 512;
+
+    private final Map<UxItem, org.bukkit.inventory.ItemStack> bukkitCache = lruCache();
+    private final Map<UxItem, ItemStack> nmsCache = lruCache();
 
     @Override
     public Object toNms(UxItem item) {
@@ -49,8 +55,19 @@ public final class SharedItemBridge implements ItemBridge {
         if (item == null || item.isEmpty()) {
             return ItemStack.EMPTY;
         }
-        org.bukkit.inventory.ItemStack bukkit = toBukkit(item);
-        return CraftItemStack.asNMSCopy(bukkit);
+        ItemStack cached;
+        synchronized (nmsCache) {
+            cached = nmsCache.get(item);
+        }
+        if (cached != null) {
+            return cached.copy();
+        }
+        org.bukkit.inventory.ItemStack bukkit = createBukkit(item);
+        ItemStack nms = CraftItemStack.asNMSCopy(bukkit);
+        synchronized (nmsCache) {
+            nmsCache.put(item, nms.copy());
+        }
+        return nms;
     }
 
     public UxItem fromMinecraft(ItemStack stack) {
@@ -64,6 +81,21 @@ public final class SharedItemBridge implements ItemBridge {
         if (item == null || item.isEmpty()) {
             return new org.bukkit.inventory.ItemStack(Material.AIR);
         }
+        org.bukkit.inventory.ItemStack cached;
+        synchronized (bukkitCache) {
+            cached = bukkitCache.get(item);
+        }
+        if (cached != null) {
+            return cached.clone();
+        }
+        org.bukkit.inventory.ItemStack created = createBukkit(item);
+        synchronized (bukkitCache) {
+            bukkitCache.put(item, created.clone());
+        }
+        return created;
+    }
+
+    private org.bukkit.inventory.ItemStack createBukkit(UxItem item) {
         Material material = resolveMaterial(item.materialKey());
         org.bukkit.inventory.ItemStack stack = new org.bukkit.inventory.ItemStack(material, Math.max(1, item.amount()));
         ItemMeta meta = stack.getItemMeta();
@@ -99,6 +131,15 @@ public final class SharedItemBridge implements ItemBridge {
         }
         stack.setItemMeta(meta);
         return stack;
+    }
+
+    private static <T> Map<UxItem, T> lruCache() {
+        return new LinkedHashMap<>(CACHE_SIZE, 0.75f, true) {
+            @Override
+            protected boolean removeEldestEntry(Map.Entry<UxItem, T> eldest) {
+                return size() > CACHE_SIZE;
+            }
+        };
     }
 
     public UxItem fromBukkit(org.bukkit.inventory.ItemStack stack) {

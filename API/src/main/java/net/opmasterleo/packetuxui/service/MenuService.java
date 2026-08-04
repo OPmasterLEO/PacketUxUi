@@ -808,12 +808,13 @@ public final class MenuService {
         int windowId = session.windowId();
         int stateId = session.nextStateId();
         UxItem cursor = activeCursor(player);
+        List<UxItem> bottom = null;
         if (packet.slot() >= 0 && packet.slot() <= last) {
             UxItem item = packet.slot() < menu.items().size() ? menu.items().get(packet.slot()) : UxItem.EMPTY;
             adapter.packets().sendSetSlot(player, windowId, stateId, packet.slot(), item);
         }
         if (packet.slot() >= topSize && packet.slot() < maxSlot) {
-            List<UxItem> bottom = snapshotBottom(player);
+            bottom = snapshotBottom(player);
             int idx = packet.slot() - topSize;
             if (idx >= 0 && idx < bottom.size()) {
                 adapter.packets().sendSetSlot(player, windowId, stateId, packet.slot(), bottom.get(idx));
@@ -827,7 +828,9 @@ public final class MenuService {
                 UxItem item = slot < menu.items().size() ? menu.items().get(slot) : UxItem.EMPTY;
                 adapter.packets().sendSetSlot(player, windowId, stateId, slot, item);
             } else if (slot >= topSize && slot < maxSlot) {
-                List<UxItem> bottom = snapshotBottom(player);
+                if (bottom == null) {
+                    bottom = snapshotBottom(player);
+                }
                 int idx = slot - topSize;
                 if (idx >= 0 && idx < bottom.size()) {
                     adapter.packets().sendSetSlot(player, windowId, stateId, slot, bottom.get(idx));
@@ -924,7 +927,9 @@ public final class MenuService {
         int slot = packet.slot();
         Button button = slot >= 0 ? menu.buttons().get(slot) : null;
         resyncDirtySlots(player, session, packet, UxItem.EMPTY);
-        settleBottomSlots(player, session, packet);
+        if (touchesBottomSlots(packet, menu.type().protocolTopSize())) {
+            settleBottomSlots(player, session, packet);
+        }
         carriedItem.remove(id(player));
         if (button == null) {
             return;
@@ -1202,6 +1207,18 @@ public final class MenuService {
     private static boolean touchesTopSlots(ClickPacket packet, int last) {
         for (Integer slot : packet.changedSlotIds()) {
             if (slot != null && slot >= 0 && slot <= last) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean touchesBottomSlots(ClickPacket packet, int topSize) {
+        if (packet.slot() >= topSize) {
+            return true;
+        }
+        for (Integer slot : packet.changedSlotIds()) {
+            if (slot != null && slot >= topSize) {
                 return true;
             }
         }

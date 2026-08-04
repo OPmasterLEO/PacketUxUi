@@ -1,6 +1,7 @@
 package net.opmasterleo.packetuxui.nms.shared;
 
 import java.util.List;
+import java.util.HashMap;
 import java.util.Map;
 
 import org.bukkit.craftbukkit.entity.CraftPlayer;
@@ -68,10 +69,23 @@ public final class SharedMenuPacketBridge implements MenuPacketBridge {
             return;
         }
         NonNullList<ItemStack> list = NonNullList.withSize(uxItems.size(), ItemStack.EMPTY);
+        Map<UxItem, ItemStack> converted = new HashMap<>();
         for (int i = 0; i < uxItems.size(); i++) {
-            list.set(i, items.toMinecraft(uxItems.get(i)));
+            UxItem ux = uxItems.get(i);
+            ItemStack nms = converted.get(ux);
+            if (nms == null) {
+                nms = items.toMinecraft(ux);
+                converted.put(ux, nms);
+            }
+            list.set(i, nms.copy());
         }
-        ItemStack carriedNms = carried == null ? ItemStack.EMPTY : items.toMinecraft(carried);
+        ItemStack carriedNms;
+        if (carried == null || carried.isEmpty()) {
+            carriedNms = ItemStack.EMPTY;
+        } else {
+            ItemStack cached = converted.get(carried);
+            carriedNms = cached == null ? items.toMinecraft(carried) : cached.copy();
+        }
         sp.connection.send(new ClientboundContainerSetContentPacket(windowId, stateId, list, carriedNms));
     }
 
