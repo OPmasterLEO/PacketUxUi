@@ -136,11 +136,13 @@ public final class PacketUxUiAPI {
                         + ", protocol " + adapter.minProtocol() + ".." + adapter.maxProtocol()
                         + ", scheduler " + scheduler.kind()
                         + (scheduler.isFolia() ? "/folia" : "")
-                        + ", menuWorkers=" + scheduler.menuWorkers().threadCount()
+                        + ", menuWorkers=" + scheduler.menuWorkers().coreThreadCount()
+                        + ".." + scheduler.menuWorkers().maxThreadCount()
                         + ", debug=" + service.debugLogging()
                         + ")"
         );
         if (service.debugLogging()) {
+            plugin.getLogger().info("PacketUxUi menu pool " + scheduler.menuWorkers().diagnostics());
             plugin.getLogger().info("PacketUxUi debug logging is ON (-Dpacketuxui.debug=true or PACKETUXUI_DEBUG)");
         }
     }

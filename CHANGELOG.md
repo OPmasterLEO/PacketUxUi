@@ -2,13 +2,16 @@
 
 ## 0.12.9
 
-### Dedicated menu worker pool (Paper / Folia / Spigot)
+### Dedicated elastic menu worker pool (Paper / Folia / Spigot)
 
-- `MenuWorkerPool`: bounded fixed daemon pool (2..8 threads) for menu build/materialize/preload
-- `PlatformScheduler.runMenuAsync` / `menuExecutor` / `supplyMenuAsync` — isolated from shared Bukkit/Paper async
-- `presentAsync` / `presentAsyncFuture` use the menu pool, then hop to entity/player scheduler
-- Item bridge preload runs on the worker before present (less work on the region/tick thread)
-- Pool shut down on API terminate; Folia-safe as long as builders do not touch world/entity state
+- `MenuWorkerPool`: CPU-derived sizing (core≈cpus/4, max≈75% of cores, hard cap 16); idle threads reclaim to **0** in 15s
+- Scaling queue handoff so workers grow under load (not fill a fat queue first)
+- Plugin ClassLoader only while a task runs; idle daemon threads use system CCL (reload-safe)
+- Idempotent shutdown: interrupt, drain, purge — no retained runnables / player closures
+- Saturate → reject (never `CallerRuns` on tick/entity threads)
+- `presentAsync` / `presentAsyncFuture` use the pool + preload, then hop to entity/player scheduler
+- Overrides: `-Dpacketuxui.menuWorkers.max|core|queue`
+- Debug boot line logs `menuWorkers=core..max` and full diagnostics when debug is on
 
 ### Artifact
 `net.opmasterleo:packetuxui:0.12.9`

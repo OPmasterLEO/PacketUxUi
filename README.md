@@ -101,7 +101,7 @@ gui.present(p, PacketMenus.build().title("Spawner").rows(3).editable()
 
 Virtual window ids use vanilla `nextContainerCounter()` (**1–100**). Pipeline injects before `packet_handler`. Modern 21.5+/26.x bind a real `ChestMenu` (9xN only) and own `stateId` via `incrementStateId`; top stacks are mirrored into the bound container.
 
-Threading: entity/region schedulers for player work (Paper + Folia). A dedicated **menu worker pool** (2–8 daemon threads) runs `presentAsync` build/materialize/preload — not the shared Bukkit/Paper async scheduler. Builders must not touch world/entity state on that pool.
+Threading: entity/region schedulers for player work (Paper + Folia). A dedicated **elastic menu worker pool** (CPU-sized, idle threads reclaim to 0 in 15s, leak-safe shutdown) runs `presentAsync` build/materialize/preload. Overrides: `-Dpacketuxui.menuWorkers.max`, `.core`, `.queue`. Builders must not touch world/entity state on that pool.
 
 ### Protocol
 

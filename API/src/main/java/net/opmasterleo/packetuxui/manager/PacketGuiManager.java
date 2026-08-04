@@ -162,7 +162,16 @@ public final class PacketGuiManager {
 
     public void presentAsync(Player player, Supplier<MenuBuild> builder, Consumer<Throwable> onError) {
         Objects.requireNonNull(builder, "builder");
+        if (!scheduler.menuWorkers().isAvailable()) {
+            if (onError != null) {
+                onError.accept(new IllegalStateException("menu worker pool closed"));
+            }
+            return;
+        }
         scheduler.runMenuAsync(() -> {
+            if (!scheduler.menuWorkers().isAvailable()) {
+                return;
+            }
             Menu menu;
             try {
                 MenuBuild build = builder.get();
@@ -177,6 +186,9 @@ public final class PacketGuiManager {
                 }
                 return;
             }
+            if (!scheduler.menuWorkers().isAvailable()) {
+                return;
+            }
             scheduler.runForPlayer(player, () -> {
                 if (player.isOnline()) {
                     present(player, menu);
@@ -186,32 +198,38 @@ public final class PacketGuiManager {
     }
 
     public CompletableFuture<Void> presentAsyncFuture(Player player, Supplier<MenuBuild> builder) {
-        CompletableFuture<Void> future = new CompletableFuture<>();
         Objects.requireNonNull(builder, "builder");
-        scheduler.runMenuAsync(() -> {
-            Menu menu;
-            try {
-                MenuBuild build = builder.get();
-                if (build == null) {
-                    future.completeExceptionally(new IllegalStateException("builder returned null"));
-                    return;
-                }
-                menu = build.materialize();
-                PacketUxUiAPI.getAdapter().items().preload(menu.items());
-            } catch (Throwable error) {
-                future.completeExceptionally(error);
-                return;
+        if (!scheduler.menuWorkers().isAvailable()) {
+            return CompletableFuture.failedFuture(new IllegalStateException("menu worker pool closed"));
+        }
+        return scheduler.supplyMenuAsync(() -> {
+            MenuBuild build = builder.get();
+            if (build == null) {
+                throw new IllegalStateException("builder returned null");
             }
-            scheduler.runForPlayer(player, () -> {
-                if (!player.isOnline()) {
-                    future.completeExceptionally(new IllegalStateException("player offline"));
-                    return;
-                }
-                present(player, menu);
-                future.complete(null);
-            });
+            Menu menu = build.materialize();
+            PacketUxUiAPI.getAdapter().items().preload(menu.items());
+            return menu;
+        }).thenCompose(menu -> {
+            CompletableFuture<Void> done = new CompletableFuture<>();
+            scheduler.runForPlayer(
+                    player,
+                    () -> {
+                        if (!player.isOnline()) {
+                            done.completeExceptionally(new IllegalStateException("player offline"));
+                            return;
+                        }
+                        try {
+                            present(player, menu);
+                            done.complete(null);
+                        } catch (Throwable error) {
+                            done.completeExceptionally(error);
+                        }
+                    },
+                    () -> done.completeExceptionally(new IllegalStateException("player retired"))
+            );
+            return done;
         });
-        return future;
     }
 
     public Menu getOpen(Player player) {

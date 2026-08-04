@@ -157,10 +157,7 @@ public final class PlatformScheduler {
     }
 
     public <T> CompletableFuture<T> supplyMenuAsync(Supplier<T> supplier) {
-        return CompletableFuture.supplyAsync(
-                Objects.requireNonNull(supplier, "supplier"),
-                menuWorkers.executor()
-        );
+        return menuWorkers.supplyAsync(Objects.requireNonNull(supplier, "supplier"));
     }
 
     public void runSync(Runnable task) {
