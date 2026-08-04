@@ -46,6 +46,10 @@ public final class SharedItemBridge implements ItemBridge {
         if (item == null || item.isEmpty()) {
             return ItemStack.EMPTY;
         }
+        if (item.hasNativeBukkit()) {
+            org.bukkit.inventory.ItemStack nativeStack = item.nativeBukkitClone();
+            return nativeStack == null ? ItemStack.EMPTY : CraftItemStack.asNMSCopy(nativeStack);
+        }
         return CraftItemStack.asNMSCopy(toBukkit(item));
     }
 
@@ -56,9 +60,16 @@ public final class SharedItemBridge implements ItemBridge {
         return fromBukkit(CraftItemStack.asBukkitCopy(stack));
     }
 
+    @Override
     public org.bukkit.inventory.ItemStack toBukkit(UxItem item) {
         if (item == null || item.isEmpty()) {
             return new org.bukkit.inventory.ItemStack(Material.AIR);
+        }
+        if (item.hasNativeBukkit()) {
+            org.bukkit.inventory.ItemStack nativeStack = item.nativeBukkitClone();
+            return nativeStack == null
+                    ? new org.bukkit.inventory.ItemStack(Material.AIR)
+                    : nativeStack;
         }
         Material material = resolveMaterial(item.materialKey());
         org.bukkit.inventory.ItemStack stack = new org.bukkit.inventory.ItemStack(material, Math.max(1, item.amount()));
@@ -89,6 +100,7 @@ public final class SharedItemBridge implements ItemBridge {
         return stack;
     }
 
+    @Override
     public UxItem fromBukkit(org.bukkit.inventory.ItemStack stack) {
         if (stack == null || stack.getType() == Material.AIR || stack.getAmount() <= 0) {
             return UxItem.EMPTY;
@@ -98,6 +110,7 @@ public final class SharedItemBridge implements ItemBridge {
         Component name = null;
         List<Component> lore = List.of();
         Map<String, Integer> enchants = new HashMap<>();
+        boolean hideEnchants = false;
         if (meta != null) {
             if (meta.hasDisplayName()) {
                 name = LegacyComponentSerializer.legacySection().deserialize(meta.getDisplayName());
@@ -112,8 +125,9 @@ public final class SharedItemBridge implements ItemBridge {
             for (Map.Entry<Enchantment, Integer> entry : meta.getEnchants().entrySet()) {
                 enchants.put(entry.getKey().getName().toLowerCase(), entry.getValue());
             }
+            hideEnchants = meta.hasItemFlag(ItemFlag.HIDE_ENCHANTS);
         }
-        return new UxItem(key, stack.getAmount(), name, lore, enchants, true, null, null);
+        return new UxItem(key, stack.getAmount(), name, lore, enchants, hideEnchants, null, null, stack.clone());
     }
 
     private static Material resolveMaterial(String key) {

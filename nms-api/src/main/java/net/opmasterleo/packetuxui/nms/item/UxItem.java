@@ -4,8 +4,16 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
+import org.bukkit.inventory.ItemStack;
+
 import net.kyori.adventure.text.Component;
 
+/**
+ * Menu item view. Field-based data is used for builder-created items and similarity.
+ * When created from a real {@link ItemStack} ({@link #hasNativeBukkit()}), the cloned
+ * Bukkit stack is preferred for packet conversion so enchantments, lore, NBT/DataComponents,
+ * attributes, potions, etc. are preserved.
+ */
 public final class UxItem {
 
     public static final UxItem EMPTY = new UxItem(
@@ -15,6 +23,7 @@ public final class UxItem {
             List.of(),
             Map.of(),
             true,
+            null,
             null,
             null
     );
@@ -27,6 +36,8 @@ public final class UxItem {
     private final boolean hideEnchantments;
     private final Integer customModelData;
     private final String headTextureBase64;
+    /** Full Bukkit clone; excluded from equals/hashCode (cache keys stay field-based). */
+    private final ItemStack nativeBukkit;
     private final boolean empty;
 
     public UxItem(
@@ -39,6 +50,30 @@ public final class UxItem {
             Integer customModelData,
             String headTextureBase64
     ) {
+        this(
+                materialKey,
+                amount,
+                name,
+                lore,
+                enchantments,
+                hideEnchantments,
+                customModelData,
+                headTextureBase64,
+                null
+        );
+    }
+
+    public UxItem(
+            String materialKey,
+            int amount,
+            Component name,
+            List<Component> lore,
+            Map<String, Integer> enchantments,
+            boolean hideEnchantments,
+            Integer customModelData,
+            String headTextureBase64,
+            ItemStack nativeBukkit
+    ) {
         this.materialKey = materialKey == null ? "minecraft:air" : materialKey;
         this.amount = Math.max(0, amount);
         this.name = name;
@@ -47,6 +82,9 @@ public final class UxItem {
         this.hideEnchantments = hideEnchantments;
         this.customModelData = customModelData;
         this.headTextureBase64 = headTextureBase64;
+        this.nativeBukkit = nativeBukkit == null || nativeBukkit.getType().isAir()
+                ? null
+                : nativeBukkit.clone();
         this.empty = this.amount <= 0
                 || this.materialKey.equals("minecraft:air")
                 || this.materialKey.equals("air")
@@ -85,6 +123,26 @@ public final class UxItem {
         return headTextureBase64;
     }
 
+    /** True when this item carries a full Bukkit stack (NBT/components intact). */
+    public boolean hasNativeBukkit() {
+        return nativeBukkit != null;
+    }
+
+    /**
+     * Cloned native Bukkit stack with {@link #amount()} applied, or {@code null}.
+     */
+    public ItemStack nativeBukkitClone() {
+        if (nativeBukkit == null) {
+            return null;
+        }
+        ItemStack clone = nativeBukkit.clone();
+        int amt = Math.max(1, amount);
+        if (clone.getAmount() != amt) {
+            clone.setAmount(amt);
+        }
+        return clone;
+    }
+
     public boolean isEmpty() {
         return empty;
     }
@@ -96,6 +154,11 @@ public final class UxItem {
         if (newAmount == amount) {
             return this;
         }
+        ItemStack nativeCopy = null;
+        if (nativeBukkit != null) {
+            nativeCopy = nativeBukkit.clone();
+            nativeCopy.setAmount(newAmount);
+        }
         return new UxItem(
                 materialKey,
                 newAmount,
@@ -104,7 +167,8 @@ public final class UxItem {
                 enchantments,
                 hideEnchantments,
                 customModelData,
-                headTextureBase64
+                headTextureBase64,
+                nativeCopy
         );
     }
 
@@ -120,6 +184,10 @@ public final class UxItem {
         }
         if (empty || other.empty) {
             return false;
+        }
+        // Prefer native identity when both carry full stacks (potions, etc.).
+        if (nativeBukkit != null && other.nativeBukkit != null) {
+            return nativeBukkit.isSimilar(other.nativeBukkit);
         }
         return hideEnchantments == other.hideEnchantments
                 && materialKey.equals(other.materialKey)
@@ -153,11 +221,23 @@ public final class UxItem {
         if (empty && other.empty) {
             return true;
         }
+        if (nativeBukkit != null || other.nativeBukkit != null) {
+            // Native-bearing items: amount + similar native (avoid cache collisions).
+            return amount == other.amount && isSimilar(other);
+        }
         return amount == other.amount && isSimilar(other);
     }
 
     @Override
     public int hashCode() {
+        if (nativeBukkit != null) {
+            int result = nativeBukkit.getType().hashCode();
+            result = 31 * result + amount;
+            ItemStack probe = nativeBukkit.clone();
+            probe.setAmount(1);
+            result = 31 * result + probe.hashCode();
+            return result;
+        }
         int result = materialKey.hashCode();
         result = 31 * result + amount;
         result = 31 * result + (name == null ? 0 : name.hashCode());

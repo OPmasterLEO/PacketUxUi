@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.13.7
+
+### Full item NBT / components preserved
+
+Items ingested from Bukkit (`fromBukkit` / menu fillers / player stacks) now keep an opaque Bukkit clone on `UxItem`. Packet conversion prefers that clone so enchantments, custom lore, potions, attributes, custom model data, skull textures, and other NBT/DataComponents survive and display correctly on the client.
+
+Builder-created items still use the field DTO path (name, lore, enchants, CMD, head texture). `hideEnchantments` is read from `ItemFlag.HIDE_ENCHANTS` instead of always forced on.
+
+### Artifact
+`net.opmasterleo:packetuxui:0.13.7`
+
 ## 0.13.6
 
 ### Live NMS limits (no hardcoded vanilla copies)

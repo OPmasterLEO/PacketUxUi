@@ -2,9 +2,7 @@ package net.opmasterleo.packetuxui.nms.shared;
 
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
-import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.craftbukkit.inventory.CraftItemStack;
@@ -12,19 +10,19 @@ import org.bukkit.enchantments.Enchantment;
 import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.SkullMeta;
-import org.bukkit.profile.PlayerProfile;
-import org.bukkit.profile.PlayerTextures;
 
 import net.kyori.adventure.text.Component;
 import net.minecraft.world.item.ItemStack;
 import net.opmasterleo.packetuxui.nms.ItemBridge;
+import net.opmasterleo.packetuxui.nms.item.SkullTextures;
 import net.opmasterleo.packetuxui.nms.item.UxItem;
 import net.opmasterleo.packetuxui.nms.map.BukkitKeyMaps;
 import net.opmasterleo.packetuxui.nms.map.ConversionCache;
 
 /**
- * Item conversion with runtime mapping caches: material/enchant keys and UxItem→stack
- * prototypes are resolved once, then copied on the hot path.
+ * Item conversion with runtime mapping caches. Native Bukkit stacks (from
+ * {@link #fromBukkit}) are sent as-is so enchantments, lore, NBT/DataComponents,
+ * attributes, potions, etc. round-trip. Builder-only UxItems still use the field path.
  */
 public final class SharedItemBridge implements ItemBridge {
 
@@ -77,6 +75,10 @@ public final class SharedItemBridge implements ItemBridge {
         if (item == null || item.isEmpty()) {
             return ItemStack.EMPTY;
         }
+        if (item.hasNativeBukkit()) {
+            org.bukkit.inventory.ItemStack nativeStack = item.nativeBukkitClone();
+            return nativeStack == null ? ItemStack.EMPTY : CraftItemStack.asNMSCopy(nativeStack);
+        }
         ItemStack cached = nmsPrototype(item);
         return cached.isEmpty() ? ItemStack.EMPTY : cached.copy();
     }
@@ -87,6 +89,9 @@ public final class SharedItemBridge implements ItemBridge {
     public ItemStack nmsPrototype(UxItem item) {
         if (item == null || item.isEmpty()) {
             return ItemStack.EMPTY;
+        }
+        if (item.hasNativeBukkit()) {
+            return toMinecraft(item);
         }
         ItemStack cached = nmsCache.get(item);
         return cached == null ? ItemStack.EMPTY : cached;
@@ -104,6 +109,12 @@ public final class SharedItemBridge implements ItemBridge {
         if (item == null || item.isEmpty()) {
             return new org.bukkit.inventory.ItemStack(Material.AIR);
         }
+        if (item.hasNativeBukkit()) {
+            org.bukkit.inventory.ItemStack nativeStack = item.nativeBukkitClone();
+            return nativeStack == null
+                    ? new org.bukkit.inventory.ItemStack(Material.AIR)
+                    : nativeStack;
+        }
         org.bukkit.inventory.ItemStack cached = bukkitCache.get(item);
         return cached == null
                 ? new org.bukkit.inventory.ItemStack(Material.AIR)
@@ -116,14 +127,13 @@ public final class SharedItemBridge implements ItemBridge {
             return;
         }
         for (UxItem item : items) {
-            if (item == null || item.isEmpty()) {
+            if (item == null || item.isEmpty() || item.hasNativeBukkit()) {
                 continue;
             }
             BukkitKeyMaps.material(item.materialKey());
             for (String enchantKey : item.enchantments().keySet()) {
                 BukkitKeyMaps.enchant(enchantKey);
             }
-            // Bukkit first so NMS build reuses it.
             bukkitCache.get(item);
             nmsCache.get(item);
         }
@@ -136,10 +146,7 @@ public final class SharedItemBridge implements ItemBridge {
     }
 
     private ItemStack buildMinecraft(UxItem item) {
-        org.bukkit.inventory.ItemStack bukkit = bukkitCache.get(item);
-        if (bukkit == null) {
-            bukkit = buildBukkit(item);
-        }
+        org.bukkit.inventory.ItemStack bukkit = buildBukkit(item);
         return CraftItemStack.asNMSCopy(bukkit);
     }
 
@@ -171,12 +178,7 @@ public final class SharedItemBridge implements ItemBridge {
         }
         if (item.headTextureBase64() != null && !item.headTextureBase64().isEmpty()
                 && meta instanceof SkullMeta skull) {
-            try {
-                PlayerProfile profile = Bukkit.createProfile(UUID.randomUUID(), "packetuxui");
-                PlayerTextures textures = profile.getTextures();
-                skull.setOwnerProfile(profile);
-            } catch (Throwable ignored) {
-            }
+            SkullTextures.applyBase64(skull, item.headTextureBase64());
         }
         stack.setItemMeta(meta);
         return stack;
@@ -197,7 +199,23 @@ public final class SharedItemBridge implements ItemBridge {
                 enchants.put(entry.getKey().getKey().toString(), entry.getValue());
             }
         }
+        boolean hideEnchants = meta != null && meta.hasItemFlag(ItemFlag.HIDE_ENCHANTS);
         Integer cmd = meta != null && meta.hasCustomModelData() ? meta.getCustomModelData() : null;
-        return new UxItem(key.toString(), stack.getAmount(), name, lore, enchants, true, cmd, null);
+        String head = null;
+        if (meta instanceof SkullMeta skull) {
+            head = SkullTextures.extractBase64(skull);
+        }
+        // Keep a full clone so NBT/DataComponents survive packet send + writeBack.
+        return new UxItem(
+                key.toString(),
+                stack.getAmount(),
+                name,
+                lore,
+                enchants,
+                hideEnchants,
+                cmd,
+                head,
+                stack.clone()
+        );
     }
 }
