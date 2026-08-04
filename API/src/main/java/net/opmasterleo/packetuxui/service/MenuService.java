@@ -208,6 +208,7 @@ public final class MenuService {
         session.setPhase(SessionPhase.OPENING);
         sessions.put(id(player), session);
         fireScope(player, true, session, session.topSlotCount(), GuiCloseReason.UNKNOWN, null);
+        adapter.items().preload(copy.items());
         boolean bound = false;
         if (copy.type().supportsChestBind()) {
             adapter.packets().bindServerContainer(
@@ -455,6 +456,7 @@ public final class MenuService {
         List<UxItem> before = current.items();
         List<UxItem> after = next.items();
         current.setItems(after);
+        adapter.items().preload(after);
         int size = next.type().size();
         int dirtyCount = 0;
         // Prefer SetSlot for sparse updates; avoid HashMap alloc when possible.

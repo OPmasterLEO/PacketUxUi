@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.12.5
+
+### Own runtime mapping caches
+
+PacketUxUi mapping tables (not third-party):
+
+- `BukkitKeyMaps` — material/enchant keys resolved once (`ConcurrentHashMap`)
+- `ConversionCache` — lock-free UxItem→stack prototypes (replaces synchronized LRU)
+- `OrdinalMaps` — click-type enum → NMS ordinal tables built at class init
+- `ItemBridge.preload` on open/present so converts hit cache before first send
+- Default material warmup at API init
+
+Hot path stays direct NMS `instanceof` + cached converts — no reflective packet unwrap.
+
+### Artifact
+`net.opmasterleo:packetuxui:0.12.5`
+
 ## 0.12.4
 
 ### Hot-path performance (server-authoritative, cheap)

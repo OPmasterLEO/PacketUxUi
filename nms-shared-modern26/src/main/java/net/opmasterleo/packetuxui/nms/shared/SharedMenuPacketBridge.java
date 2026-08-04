@@ -34,11 +34,28 @@ import net.opmasterleo.packetuxui.nms.ClickPacket;
 import net.opmasterleo.packetuxui.nms.MenuPacketBridge;
 import net.opmasterleo.packetuxui.nms.WindowClickType;
 import net.opmasterleo.packetuxui.nms.item.UxItem;
+import net.opmasterleo.packetuxui.nms.map.OrdinalMaps;
 
 public final class SharedMenuPacketBridge implements MenuPacketBridge {
 
     private static final HashedPatchMap.HashGenerator HASH =
             (TypedDataComponent<?> component) -> component.hashCode();
+
+    private static final ContainerInput[] TO_INPUT;
+
+    static {
+        TO_INPUT = new ContainerInput[WindowClickType.values().length];
+        OrdinalMaps.fill(WindowClickType.values(), TO_INPUT, type -> switch (type) {
+            case PICKUP -> ContainerInput.PICKUP;
+            case QUICK_MOVE -> ContainerInput.QUICK_MOVE;
+            case SWAP -> ContainerInput.SWAP;
+            case CLONE -> ContainerInput.CLONE;
+            case THROW -> ContainerInput.THROW;
+            case QUICK_CRAFT -> ContainerInput.QUICK_CRAFT;
+            case PICKUP_ALL -> ContainerInput.PICKUP_ALL;
+            default -> ContainerInput.PICKUP;
+        });
+    }
 
     private final SharedItemBridge items;
 
@@ -281,16 +298,14 @@ public final class SharedMenuPacketBridge implements MenuPacketBridge {
     }
 
     private static ContainerInput toNmsClickType(WindowClickType type) {
-        return switch (type) {
-            case PICKUP -> ContainerInput.PICKUP;
-            case QUICK_MOVE -> ContainerInput.QUICK_MOVE;
-            case SWAP -> ContainerInput.SWAP;
-            case CLONE -> ContainerInput.CLONE;
-            case THROW -> ContainerInput.THROW;
-            case QUICK_CRAFT -> ContainerInput.QUICK_CRAFT;
-            case PICKUP_ALL -> ContainerInput.PICKUP_ALL;
-            default -> ContainerInput.PICKUP;
-        };
+        if (type == null) {
+            return ContainerInput.PICKUP;
+        }
+        int i = type.ordinal();
+        if (i >= 0 && i < TO_INPUT.length && TO_INPUT[i] != null) {
+            return TO_INPUT[i];
+        }
+        return ContainerInput.PICKUP;
     }
 
     private static final MenuType<?>[] MENU_TYPES = {

@@ -33,11 +33,28 @@ import net.opmasterleo.packetuxui.nms.ClickPacket;
 import net.opmasterleo.packetuxui.nms.MenuPacketBridge;
 import net.opmasterleo.packetuxui.nms.WindowClickType;
 import net.opmasterleo.packetuxui.nms.item.UxItem;
+import net.opmasterleo.packetuxui.nms.map.OrdinalMaps;
 
 public final class SharedMenuPacketBridge implements MenuPacketBridge {
 
     private static final HashedPatchMap.HashGenerator HASH =
             (TypedDataComponent<?> component) -> component.hashCode();
+
+    private static final ClickType[] TO_CLICK;
+
+    static {
+        TO_CLICK = new ClickType[WindowClickType.values().length];
+        OrdinalMaps.fill(WindowClickType.values(), TO_CLICK, type -> switch (type) {
+            case PICKUP -> ClickType.PICKUP;
+            case QUICK_MOVE -> ClickType.QUICK_MOVE;
+            case SWAP -> ClickType.SWAP;
+            case CLONE -> ClickType.CLONE;
+            case THROW -> ClickType.THROW;
+            case QUICK_CRAFT -> ClickType.QUICK_CRAFT;
+            case PICKUP_ALL -> ClickType.PICKUP_ALL;
+            default -> ClickType.PICKUP;
+        });
+    }
 
     private final SharedItemBridge items;
 
@@ -266,16 +283,14 @@ public final class SharedMenuPacketBridge implements MenuPacketBridge {
     }
 
     private static ClickType toNmsClickType(WindowClickType type) {
-        return switch (type) {
-            case PICKUP -> ClickType.PICKUP;
-            case QUICK_MOVE -> ClickType.QUICK_MOVE;
-            case SWAP -> ClickType.SWAP;
-            case CLONE -> ClickType.CLONE;
-            case THROW -> ClickType.THROW;
-            case QUICK_CRAFT -> ClickType.QUICK_CRAFT;
-            case PICKUP_ALL -> ClickType.PICKUP_ALL;
-            default -> ClickType.PICKUP;
-        };
+        if (type == null) {
+            return ClickType.PICKUP;
+        }
+        int i = type.ordinal();
+        if (i >= 0 && i < TO_CLICK.length && TO_CLICK[i] != null) {
+            return TO_CLICK[i];
+        }
+        return ClickType.PICKUP;
     }
 
     private static final MenuType<?>[] MENU_TYPES = {

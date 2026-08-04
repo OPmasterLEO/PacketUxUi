@@ -17,4 +17,15 @@ public interface ItemBridge {
     UxItem empty();
 
     boolean isEmpty(UxItem item);
+
+    /**
+     * Warm conversion caches for items that will be sent soon (open/present).
+     * No-op default for adapters without a cache.
+     */
+    default void preload(Iterable<UxItem> items) {
+    }
+
+    /** Drop conversion caches (reload / memory pressure). */
+    default void clearCaches() {
+    }
 }

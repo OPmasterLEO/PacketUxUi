@@ -13,9 +13,26 @@ import net.opmasterleo.packetuxui.nms.ClickPacket;
 import net.opmasterleo.packetuxui.nms.PacketClassifier;
 import net.opmasterleo.packetuxui.nms.WindowClickType;
 import net.opmasterleo.packetuxui.nms.item.UxItem;
+import net.opmasterleo.packetuxui.nms.map.OrdinalMaps;
 
-/** Direct NMS classification — {@code instanceof} only, no reflection. */
+/** Direct NMS classification — {@code instanceof} only; click-type ordinal map. */
 public final class SharedPacketClassifier implements PacketClassifier {
+
+    private static final WindowClickType[] FROM_CLICK;
+
+    static {
+        FROM_CLICK = new WindowClickType[ClickType.values().length];
+        OrdinalMaps.fill(ClickType.values(), FROM_CLICK, type -> switch (type) {
+            case PICKUP -> WindowClickType.PICKUP;
+            case QUICK_MOVE -> WindowClickType.QUICK_MOVE;
+            case SWAP -> WindowClickType.SWAP;
+            case CLONE -> WindowClickType.CLONE;
+            case THROW -> WindowClickType.THROW;
+            case QUICK_CRAFT -> WindowClickType.QUICK_CRAFT;
+            case PICKUP_ALL -> WindowClickType.PICKUP_ALL;
+            default -> WindowClickType.UNKNOWN;
+        });
+    }
 
     private final SharedItemBridge items;
 
@@ -94,15 +111,10 @@ public final class SharedPacketClassifier implements PacketClassifier {
         if (type == null) {
             return WindowClickType.UNKNOWN;
         }
-        return switch (type) {
-            case PICKUP -> WindowClickType.PICKUP;
-            case QUICK_MOVE -> WindowClickType.QUICK_MOVE;
-            case SWAP -> WindowClickType.SWAP;
-            case CLONE -> WindowClickType.CLONE;
-            case THROW -> WindowClickType.THROW;
-            case QUICK_CRAFT -> WindowClickType.QUICK_CRAFT;
-            case PICKUP_ALL -> WindowClickType.PICKUP_ALL;
-            default -> WindowClickType.UNKNOWN;
-        };
+        int i = type.ordinal();
+        if (i >= 0 && i < FROM_CLICK.length && FROM_CLICK[i] != null) {
+            return FROM_CLICK[i];
+        }
+        return WindowClickType.UNKNOWN;
     }
 }
