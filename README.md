@@ -19,7 +19,7 @@ repositories {
 }
 
 dependencies {
-    implementation("net.opmasterleo:packetuxui:0.12.7")
+    implementation("net.opmasterleo:packetuxui:0.12.8")
 }
 ```
 
@@ -57,8 +57,11 @@ gui.present(player, sameTypeRefresh);
 gui.patchSlots(player, Map.of(11, newItem)); // single/multi slot in place
 gui.refresh(player); // full SetContent, same window
 
-// Size/type/mode change only → reopen (brief close is unavoidable)
-gui.reopen(player, smallerMenu);
+// Different size, same mode (27↔54) → silent replace (no CloseWindow)
+gui.present(player, smallerOrLargerMenu);
+
+// Force hard close+open only when needed (SignGUI handoff, etc.)
+gui.reopen(player, menu);
 
 // Close then SignGUI / chat / anything else
 gui.closeThen(player, () -> signGui.open(player));
@@ -67,8 +70,8 @@ gui.closeThen(player, () -> signGui.open(player));
 
 | API                                                          | Role                                              |
 | ------------------------------------------------------------ | ------------------------------------------------- |
-| `present`                                                    | Open, or dirty Set Slot if same type+mode         |
-| `reopen`                                                     | Force close+open (54→27, etc.)                    |
+| `present`                                                    | Diff if same type; **silent replace** if same mode different size; else open |
+| `reopen`                                                     | Force close+open                                                            |
 | `close`                                                      | Empty cursor, close packet, unbind, clear session |
 | `closeThen`                                                  | `close` + 1 tick, then runnable                   |
 | `presentAsync`                                               | Build off-thread, then `present`                  |
@@ -143,7 +146,7 @@ void openPage(Player p, int page) {
     for (int slot : Slots.rectangle(1, 1, 4, 7)) { /* page items */ }
     build.action(45, prev, x -> openPage(x, page - 1));
     build.action(53, next, x -> openPage(x, page + 1));
-    PacketMenus.present(p, build.materialize()); // or reopen if size changed
+    PacketMenus.present(p, build.materialize()); // size change is fine — silent replace
 }
 
 PacketMenus.registerListener(new GuiListener() {

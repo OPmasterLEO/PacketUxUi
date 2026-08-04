@@ -201,7 +201,47 @@ public final class MenuService {
     }
 
     public void openMenuSync(Player player, Menu menu) {
-        closeCurrent(player, true, true, GuiCloseReason.REPLACE);
+        closeCurrent(player, true, true, GuiCloseReason.REPLACE, true);
+        installOpen(player, menu);
+    }
+
+    public void present(Player player, Menu menu) {
+        scheduler.runForPlayer(player, () -> {
+            MenuSession existing = sessions.get(id(player));
+            if (existing != null && existing.phase() == SessionPhase.OPEN) {
+                if (existing.menu().mode() == menu.mode()
+                        && existing.menu().type() == menu.type()) {
+                    applyMenuDifferential(player, existing, menu);
+                    return;
+                }
+                // Same mode, different size/type — replace screen without CloseWindow flash.
+                if (existing.menu().mode() == menu.mode()) {
+                    replaceMenuInPlace(player, existing, menu);
+                    return;
+                }
+            }
+            ensurePipeline(player);
+            openMenuSync(player, menu);
+        });
+    }
+
+    /**
+     * Swap menu type/size (e.g. 27↔54) while keeping the same window id and skipping
+     * {@code CloseWindow}. Client gets {@code OpenScreen} + contents only — no inventory flash.
+     */
+    private void replaceMenuInPlace(Player player, MenuSession existing, Menu menu) {
+        // Soft teardown: reclaim cursor, fire close, unbind — keep window id assigned.
+        closeCurrent(player, false, true, GuiCloseReason.REPLACE, false);
+        installOpen(player, menu);
+        if (debugLogging) {
+            debug(player, "REPLACE_IN_PLACE windowId=" + getWindowId(player)
+                    + " type=" + menu.type()
+                    + " mode=" + menu.mode());
+        }
+    }
+
+    /** Bind + OpenScreen + contents for a freshly allocated or reused window id. */
+    private void installOpen(Player player, Menu menu) {
         Menu copy = menu.copy();
         int windowId = windowIds.allocate(player, () -> adapter.packets().allocateWindowId(player));
         MenuSession session = new MenuSession(copy, windowId);
@@ -223,7 +263,7 @@ public final class MenuService {
         int stateId = protocolState(player, session, 0);
         adapter.packets().sendOpenWindow(player, windowId, copy.type().id(), copy.name());
         if (bound && adapter.packets().sendBoundAuthority(player, stateId, true)) {
-            // Direct NMS slots — no Bukkit inventory snapshot / UxItem bottom convert.
+            // Direct NMS slots.
         } else {
             List<UxItem> bottom = snapshotBottom(player);
             bottomCache.put(id(player), bottom);
@@ -243,22 +283,7 @@ public final class MenuService {
         ensurePipeline(player);
     }
 
-    public void present(Player player, Menu menu) {
-        scheduler.runForPlayer(player, () -> {
-            MenuSession existing = sessions.get(id(player));
-            if (existing != null
-                    && existing.menu().type() == menu.type()
-                    && existing.menu().mode() == menu.mode()
-                    && existing.phase() == SessionPhase.OPEN) {
-                applyMenuDifferential(player, existing, menu);
-                return;
-            }
-            ensurePipeline(player);
-            openMenuSync(player, menu);
-        });
-    }
-
-    /** Force close+open even when type/mode match (size/type changes, SignGUI handoff prep, etc.). */
+    /** Force close+open even when type/mode match (SignGUI handoff prep, etc.). */
     public void reopen(Player player, Menu menu) {
         openMenu(player, menu);
     }
@@ -356,13 +381,25 @@ public final class MenuService {
     }
 
     private void closeCurrent(Player player, boolean sendClosePacket, boolean reclaim) {
-        closeCurrent(player, sendClosePacket, reclaim, GuiCloseReason.API);
+        closeCurrent(player, sendClosePacket, reclaim, GuiCloseReason.API, true);
     }
 
     private void closeCurrent(Player player, boolean sendClosePacket, boolean reclaim, GuiCloseReason reason) {
+        closeCurrent(player, sendClosePacket, reclaim, reason, true);
+    }
+
+    private void closeCurrent(
+            Player player,
+            boolean sendClosePacket,
+            boolean reclaim,
+            GuiCloseReason reason,
+            boolean releaseWindowId
+    ) {
         MenuSession session = sessions.get(id(player));
         if (session == null) {
-            windowIds.release(player);
+            if (releaseWindowId) {
+                windowIds.release(player);
+            }
             carriedItem.remove(id(player));
             clearBottomHeld(player);
             clearAccumulatedDrag(player);
@@ -395,7 +432,9 @@ public final class MenuService {
         int top = session.topSlotCount();
         int windowId = session.windowId();
         sessions.remove(id(player));
-        windowIds.release(player);
+        if (releaseWindowId) {
+            windowIds.release(player);
+        }
         carriedItem.remove(id(player));
         clearBottomHeld(player);
         clearAccumulatedDrag(player);
@@ -403,7 +442,7 @@ public final class MenuService {
         bottomCache.remove(id(player));
         if (debugLogging) {
             debug(player, "CLOSE windowId=" + windowId + " sendPacket=" + sendClosePacket
-                    + " reclaim=" + reclaim + " reason=" + reason);
+                    + " reclaim=" + reclaim + " releaseId=" + releaseWindowId + " reason=" + reason);
         }
         fireScope(player, false, session, top, reason, snapshot);
     }

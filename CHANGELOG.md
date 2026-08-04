@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.12.8
+
+### Silent size replace (27↔54 without flash)
+
+`present` with same mode but different type/size now **reuses the window id** and skips
+`CloseWindow` — only `OpenScreen` + contents. No inventory flash between 9x3 and 9x6.
+
+- Same type+mode → differential SetSlots (unchanged)
+- Same mode, different size → in-place replace (`REPLACE_IN_PLACE` debug)
+- Mode change / cold open → full close+open
+- `reopen` still forces hard close+open
+
+### Artifact
+`net.opmasterleo:packetuxui:0.12.8`
+
 ## 0.12.7
 
 ### Speed pass (hot paths, bounded caches)
