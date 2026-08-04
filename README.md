@@ -1,5 +1,7 @@
 # PacketUxUi
 
+[![Codacy Badge](https://app.codacy.com/project/badge/Grade/140fdaa9ec6f4aeebf2f45154eec2850)](https://app.codacy.com/gh/OPmasterLEO/PacketUxUi/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)
+
 Virtual inventory GUIs over the Minecraft protocol — **Paper / Spigot / Folia**, **1.8 → 26.2**.
 
 No Bukkit inventory views. Clicks arrive on Netty. Menus can be read-only or allow item moves. Folia-safe.
@@ -10,6 +12,8 @@ Artifact: [Reposilite](http://repo.mastersmp.net/) · `net.opmasterleo:packetuxu
 
 ## Install
 
+**Gradle (Kotlin DSL)**
+
 ```kotlin
 repositories {
     mavenCentral()
@@ -19,6 +23,36 @@ repositories {
 dependencies {
     implementation("net.opmasterleo:packetuxui:0.13.9")
 }
+```
+
+**Gradle (Groovy)**
+
+```gradle
+repositories {
+    mavenCentral()
+    maven { url "http://repo.mastersmp.net/releases" }
+}
+
+dependencies {
+    implementation "net.opmasterleo:packetuxui:0.13.9"
+}
+```
+
+**Maven**
+
+```xml
+<repositories>
+    <repository>
+        <id>mastersmp</id>
+        <url>http://repo.mastersmp.net/releases</url>
+    </repository>
+</repositories>
+
+<dependency>
+    <groupId>net.opmasterleo</groupId>
+    <artifactId>packetuxui</artifactId>
+    <version>0.13.9</version>
+</dependency>
 ```
 
 Shade into your plugin. If you `minimize()`, exclude `net.opmasterleo:packetuxui`.
