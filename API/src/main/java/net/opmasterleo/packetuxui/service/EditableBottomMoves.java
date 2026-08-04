@@ -7,10 +7,11 @@ import java.util.function.Predicate;
 
 import net.opmasterleo.packetuxui.nms.WindowClickType;
 import net.opmasterleo.packetuxui.nms.item.UxItem;
+import net.opmasterleo.packetuxui.util.Predicates;
 
 public final class EditableBottomMoves {
 
-    private static final Predicate<Integer> ANY = slot -> true;
+    private static final Predicate<Integer> ANY = Predicates.ALWAYS_TRUE_INT;
 
     public record Held(UxItem item, int originIndex) {
         public Held {

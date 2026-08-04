@@ -39,7 +39,7 @@ public final class PaperLifecycleListener implements Listener {
             pipelineManager.inject(player);
             return;
         }
-        scheduler.runForPlayer(player, () -> pipelineManager.inject(player));
+        scheduler.runForPlayer(player, new InjectPipelineTask(pipelineManager, player));
     }
 
     @EventHandler
@@ -55,7 +55,7 @@ public final class PaperLifecycleListener implements Listener {
             forceClose(player, GuiCloseReason.KICK);
             return;
         }
-        scheduler.runForPlayer(player, () -> forceClose(player, GuiCloseReason.KICK));
+        scheduler.runForPlayer(player, new ForceCloseTask(this, player, GuiCloseReason.KICK));
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
@@ -65,7 +65,7 @@ public final class PaperLifecycleListener implements Listener {
             forceClose(player, GuiCloseReason.DEATH);
             return;
         }
-        scheduler.runForPlayer(player, () -> forceClose(player, GuiCloseReason.DEATH));
+        scheduler.runForPlayer(player, new ForceCloseTask(this, player, GuiCloseReason.DEATH));
     }
 
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = false)
@@ -92,6 +92,38 @@ public final class PaperLifecycleListener implements Listener {
         try {
             service.onCloseMenu(player, reason);
         } catch (Throwable ignored) {
+        }
+    }
+
+    private static final class InjectPipelineTask implements Runnable {
+        private final PipelineManager pipelineManager;
+        private final Player player;
+
+        private InjectPipelineTask(PipelineManager pipelineManager, Player player) {
+            this.pipelineManager = pipelineManager;
+            this.player = player;
+        }
+
+        @Override
+        public void run() {
+            pipelineManager.inject(player);
+        }
+    }
+
+    private static final class ForceCloseTask implements Runnable {
+        private final PaperLifecycleListener listener;
+        private final Player player;
+        private final GuiCloseReason reason;
+
+        private ForceCloseTask(PaperLifecycleListener listener, Player player, GuiCloseReason reason) {
+            this.listener = listener;
+            this.player = player;
+            this.reason = reason;
+        }
+
+        @Override
+        public void run() {
+            listener.forceClose(player, reason);
         }
     }
 }

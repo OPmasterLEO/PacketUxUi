@@ -260,8 +260,7 @@ public final class MenuBuild {
     public Menu materialize() {
         BiConsumer<Player, CloseSnapshot> close = onClose;
         if (close == null && closePlayerOnly != null) {
-            Consumer<Player> playerOnly = closePlayerOnly;
-            close = (player, snap) -> playerOnly.accept(player);
+            close = new PlayerOnlyClose(closePlayerOnly);
         }
         return new Menu(title, type, buttons, new net.opmasterleo.packetuxui.dto.CooldownComponent(), mode, close);
     }
@@ -363,9 +362,9 @@ public final class MenuBuild {
         }
         IButtonBuilder builder = new ButtonBuilder().item(ux).kind(kind);
         if (typedClick != null) {
-            builder.click((ExecuteComponent ctx) -> typedClick.accept(ctx.player(), toClickType(ctx.buttonType())));
+            builder.click(new TypedClickAdapter(typedClick));
         } else if (click != null) {
-            builder.click((ExecuteComponent ctx) -> click.accept(ctx.player()));
+            builder.click(new PlayerClickAdapter(click));
         }
         buttons.put(slot, builder.build());
         return this;
@@ -380,5 +379,44 @@ public final class MenuBuild {
             case RIGHT -> ClickType.PLACE;
             default -> ClickType.PICKUP;
         };
+    }
+
+    private static final class PlayerOnlyClose implements BiConsumer<Player, CloseSnapshot> {
+        private final Consumer<Player> playerOnly;
+
+        private PlayerOnlyClose(Consumer<Player> playerOnly) {
+            this.playerOnly = playerOnly;
+        }
+
+        @Override
+        public void accept(Player player, CloseSnapshot snap) {
+            playerOnly.accept(player);
+        }
+    }
+
+    private static final class TypedClickAdapter implements Consumer<ExecuteComponent> {
+        private final BiConsumer<Player, ClickType> typedClick;
+
+        private TypedClickAdapter(BiConsumer<Player, ClickType> typedClick) {
+            this.typedClick = typedClick;
+        }
+
+        @Override
+        public void accept(ExecuteComponent ctx) {
+            typedClick.accept(ctx.player(), toClickType(ctx.buttonType()));
+        }
+    }
+
+    private static final class PlayerClickAdapter implements Consumer<ExecuteComponent> {
+        private final Consumer<Player> click;
+
+        private PlayerClickAdapter(Consumer<Player> click) {
+            this.click = click;
+        }
+
+        @Override
+        public void accept(ExecuteComponent ctx) {
+            click.accept(ctx.player());
+        }
     }
 }

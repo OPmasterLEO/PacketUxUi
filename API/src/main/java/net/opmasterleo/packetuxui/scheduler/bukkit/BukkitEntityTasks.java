@@ -95,7 +95,63 @@ public final class BukkitEntityTasks implements EntityTasks {
             return TaskHandle.NOOP;
         }
         AtomicReference<org.bukkit.scheduler.BukkitTask> taskRef = new AtomicReference<>();
-        org.bukkit.scheduler.BukkitTask bukkitTask = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
+        org.bukkit.scheduler.BukkitTask bukkitTask = Bukkit.getScheduler().runTaskTimer(
+                plugin,
+                new EntityTimerTask(entity, task, retired, taskRef),
+                ServerPlatform.periodTicks(initialDelayTicks),
+                ServerPlatform.periodTicks(periodTicks)
+        );
+        taskRef.set(bukkitTask);
+        return BukkitTaskHandles.of(bukkitTask, true);
+    }
+
+    private static Runnable wrap(Entity entity, Runnable task, Runnable retired) {
+        return new EntityWrapTask(entity, task, retired);
+    }
+
+    private static final class EntityWrapTask implements Runnable {
+        private final Entity entity;
+        private final Runnable task;
+        private final Runnable retired;
+
+        private EntityWrapTask(Entity entity, Runnable task, Runnable retired) {
+            this.entity = entity;
+            this.task = task;
+            this.retired = retired;
+        }
+
+        @Override
+        public void run() {
+            if (entity == null || !entity.isValid()) {
+                if (retired != null) {
+                    retired.run();
+                }
+                return;
+            }
+            task.run();
+        }
+    }
+
+    private static final class EntityTimerTask implements Runnable {
+        private final Entity entity;
+        private final Consumer<? super Entity> task;
+        private final Runnable retired;
+        private final AtomicReference<org.bukkit.scheduler.BukkitTask> taskRef;
+
+        private EntityTimerTask(
+                Entity entity,
+                Consumer<? super Entity> task,
+                Runnable retired,
+                AtomicReference<org.bukkit.scheduler.BukkitTask> taskRef
+        ) {
+            this.entity = entity;
+            this.task = task;
+            this.retired = retired;
+            this.taskRef = taskRef;
+        }
+
+        @Override
+        public void run() {
             if (!entity.isValid()) {
                 org.bukkit.scheduler.BukkitTask self = taskRef.get();
                 if (self != null) {
@@ -107,20 +163,6 @@ public final class BukkitEntityTasks implements EntityTasks {
                 return;
             }
             task.accept(entity);
-        }, ServerPlatform.periodTicks(initialDelayTicks), ServerPlatform.periodTicks(periodTicks));
-        taskRef.set(bukkitTask);
-        return BukkitTaskHandles.of(bukkitTask, true);
-    }
-
-    private static Runnable wrap(Entity entity, Runnable task, Runnable retired) {
-        return () -> {
-            if (entity == null || !entity.isValid()) {
-                if (retired != null) {
-                    retired.run();
-                }
-                return;
-            }
-            task.run();
-        };
+        }
     }
 }

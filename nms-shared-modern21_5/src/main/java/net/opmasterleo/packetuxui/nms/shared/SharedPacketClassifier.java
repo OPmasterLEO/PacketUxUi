@@ -3,6 +3,7 @@ package net.opmasterleo.packetuxui.nms.shared;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Supplier;
 
 import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
 import net.minecraft.network.HashedStack;
@@ -19,19 +20,42 @@ import net.opmasterleo.packetuxui.nms.map.OrdinalMaps;
 public final class SharedPacketClassifier implements PacketClassifier {
 
     private static final WindowClickType[] FROM_CLICK;
+    private static final Supplier<Map<Integer, UxItem>> EMPTY_CHANGED = new EmptyChangedSlots();
+    private static final Supplier<UxItem> EMPTY_CARRIED = new EmptyCarried();
 
     static {
         FROM_CLICK = new WindowClickType[ClickType.values().length];
-        OrdinalMaps.fill(ClickType.values(), FROM_CLICK, type -> switch (type) {
-            case PICKUP -> WindowClickType.PICKUP;
-            case QUICK_MOVE -> WindowClickType.QUICK_MOVE;
-            case SWAP -> WindowClickType.SWAP;
-            case CLONE -> WindowClickType.CLONE;
-            case THROW -> WindowClickType.THROW;
-            case QUICK_CRAFT -> WindowClickType.QUICK_CRAFT;
-            case PICKUP_ALL -> WindowClickType.PICKUP_ALL;
-            default -> WindowClickType.UNKNOWN;
-        });
+        OrdinalMaps.fill(ClickType.values(), FROM_CLICK, new FromClickMapper());
+    }
+
+    private static final class FromClickMapper implements OrdinalMaps.EnumMapper<ClickType, WindowClickType> {
+        @Override
+        public WindowClickType map(ClickType type) {
+            return switch (type) {
+                case PICKUP -> WindowClickType.PICKUP;
+                case QUICK_MOVE -> WindowClickType.QUICK_MOVE;
+                case SWAP -> WindowClickType.SWAP;
+                case CLONE -> WindowClickType.CLONE;
+                case THROW -> WindowClickType.THROW;
+                case QUICK_CRAFT -> WindowClickType.QUICK_CRAFT;
+                case PICKUP_ALL -> WindowClickType.PICKUP_ALL;
+                default -> WindowClickType.UNKNOWN;
+            };
+        }
+    }
+
+    private static final class EmptyChangedSlots implements Supplier<Map<Integer, UxItem>> {
+        @Override
+        public Map<Integer, UxItem> get() {
+            return Map.of();
+        }
+    }
+
+    private static final class EmptyCarried implements Supplier<UxItem> {
+        @Override
+        public UxItem get() {
+            return UxItem.EMPTY;
+        }
     }
 
     private final SharedItemBridge items;
@@ -93,8 +117,8 @@ public final class SharedPacketClassifier implements PacketClassifier {
                 fromNms(click.clickType()),
                 ids,
                 carriedEmpty,
-                () -> Map.of(),
-                () -> UxItem.EMPTY
+                EMPTY_CHANGED,
+                EMPTY_CARRIED
         );
     }
 

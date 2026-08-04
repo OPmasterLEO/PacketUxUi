@@ -170,7 +170,7 @@ public final class SharedMenuPacketBridge implements MenuPacketBridge {
         types.add(MenuType.SMOKER);
         types.add(MenuType.CARTOGRAPHY_TABLE);
         types.add(MenuType.STONECUTTER);
-        return types.toArray(MenuType[]::new);
+        return types.toArray(new MenuType<?>[types.size()]);
     }
 
     @SuppressWarnings("unchecked")

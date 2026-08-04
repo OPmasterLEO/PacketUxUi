@@ -34,7 +34,7 @@ public final class PacketGuiManager {
     private volatile Consumer<Player> globalCloseHook;
     private volatile Consumer<Player> defaultClickSound;
     private volatile GuiScopeListener userScopeListener;
-    private final GuiScopeListener dispatchScope = this::dispatchScope;
+    private final GuiScopeListener dispatchScope = new DispatchScope(this);
 
     public PacketGuiManager(MenuService service, PlatformScheduler scheduler) {
         this.service = Objects.requireNonNull(service, "service");
@@ -168,33 +168,7 @@ public final class PacketGuiManager {
             }
             return;
         }
-        scheduler.runMenuAsync(() -> {
-            if (!scheduler.menuWorkers().isAvailable()) {
-                return;
-            }
-            Menu menu;
-            try {
-                MenuBuild build = builder.get();
-                if (build == null) {
-                    return;
-                }
-                menu = build.materialize();
-                PacketUxUiAPI.getAdapter().items().preload(menu.items());
-            } catch (Throwable error) {
-                if (onError != null) {
-                    onError.accept(error);
-                }
-                return;
-            }
-            if (!scheduler.menuWorkers().isAvailable()) {
-                return;
-            }
-            scheduler.runForPlayer(player, () -> {
-                if (player.isOnline()) {
-                    present(player, menu);
-                }
-            });
-        });
+        scheduler.runMenuAsync(new PresentAsyncBuildTask(this, player, builder, onError));
     }
 
     public CompletableFuture<Void> presentAsyncFuture(Player player, Supplier<MenuBuild> builder) {
@@ -202,34 +176,8 @@ public final class PacketGuiManager {
         if (!scheduler.menuWorkers().isAvailable()) {
             return CompletableFuture.failedFuture(new IllegalStateException("menu worker pool closed"));
         }
-        return scheduler.supplyMenuAsync(() -> {
-            MenuBuild build = builder.get();
-            if (build == null) {
-                throw new IllegalStateException("builder returned null");
-            }
-            Menu menu = build.materialize();
-            PacketUxUiAPI.getAdapter().items().preload(menu.items());
-            return menu;
-        }).thenCompose(menu -> {
-            CompletableFuture<Void> done = new CompletableFuture<>();
-            scheduler.runForPlayer(
-                    player,
-                    () -> {
-                        if (!player.isOnline()) {
-                            done.completeExceptionally(new IllegalStateException("player offline"));
-                            return;
-                        }
-                        try {
-                            present(player, menu);
-                            done.complete(null);
-                        } catch (Throwable error) {
-                            done.completeExceptionally(error);
-                        }
-                    },
-                    () -> done.completeExceptionally(new IllegalStateException("player retired"))
-            );
-            return done;
-        });
+        CompletableFuture<Menu> built = scheduler.supplyMenuAsync(new PresentAsyncSupply(builder));
+        return built.thenCompose(new PresentAsyncCompose(this, player));
     }
 
     public Menu getOpen(Player player) {
@@ -300,7 +248,7 @@ public final class PacketGuiManager {
             this.userScopeListener = null;
             return;
         }
-        this.userScopeListener = (player, open, top) -> openClose.accept(player, open);
+        this.userScopeListener = new OpenCloseScopeAdapter(openClose);
     }
 
     public void setClickDebounceMillis(long millis) {
@@ -315,7 +263,7 @@ public final class PacketGuiManager {
         return defaultClickSound;
     }
 
-    private void dispatchScope(Player player, boolean open, int topSlotCount) {
+    void dispatchScope(Player player, boolean open, int topSlotCount) {
         if (!open) {
             Consumer<Player> hook = closeHooks.remove(player.getUniqueId());
             if (hook != null) {
@@ -338,6 +286,182 @@ public final class PacketGuiManager {
                 user.onScopeChanged(player, open, topSlotCount);
             } catch (Throwable ignored) {
             }
+        }
+    }
+
+    private static final class DispatchScope implements GuiScopeListener {
+        private final PacketGuiManager owner;
+
+        private DispatchScope(PacketGuiManager owner) {
+            this.owner = owner;
+        }
+
+        @Override
+        public void onScopeChanged(Player player, boolean open, int topSlotCount) {
+            owner.dispatchScope(player, open, topSlotCount);
+        }
+    }
+
+    private static final class OpenCloseScopeAdapter implements GuiScopeListener {
+        private final BiConsumer<Player, Boolean> openClose;
+
+        private OpenCloseScopeAdapter(BiConsumer<Player, Boolean> openClose) {
+            this.openClose = openClose;
+        }
+
+        @Override
+        public void onScopeChanged(Player player, boolean open, int topSlotCount) {
+            openClose.accept(player, open);
+        }
+    }
+
+    private static final class PresentAsyncBuildTask implements Runnable {
+        private final PacketGuiManager owner;
+        private final Player player;
+        private final Supplier<MenuBuild> builder;
+        private final Consumer<Throwable> onError;
+
+        private PresentAsyncBuildTask(
+                PacketGuiManager owner,
+                Player player,
+                Supplier<MenuBuild> builder,
+                Consumer<Throwable> onError
+        ) {
+            this.owner = owner;
+            this.player = player;
+            this.builder = builder;
+            this.onError = onError;
+        }
+
+        @Override
+        public void run() {
+            if (!owner.scheduler.menuWorkers().isAvailable()) {
+                return;
+            }
+            Menu menu;
+            try {
+                MenuBuild build = builder.get();
+                if (build == null) {
+                    return;
+                }
+                menu = build.materialize();
+                PacketUxUiAPI.getAdapter().items().preload(menu.items());
+            } catch (Throwable error) {
+                if (onError != null) {
+                    onError.accept(error);
+                }
+                return;
+            }
+            if (!owner.scheduler.menuWorkers().isAvailable()) {
+                return;
+            }
+            owner.scheduler.runForPlayer(player, new PresentOnlineTask(owner, player, menu));
+        }
+    }
+
+    private static final class PresentOnlineTask implements Runnable {
+        private final PacketGuiManager owner;
+        private final Player player;
+        private final Menu menu;
+
+        private PresentOnlineTask(PacketGuiManager owner, Player player, Menu menu) {
+            this.owner = owner;
+            this.player = player;
+            this.menu = menu;
+        }
+
+        @Override
+        public void run() {
+            if (player.isOnline()) {
+                owner.present(player, menu);
+            }
+        }
+    }
+
+    private static final class PresentAsyncSupply implements Supplier<Menu> {
+        private final Supplier<MenuBuild> builder;
+
+        private PresentAsyncSupply(Supplier<MenuBuild> builder) {
+            this.builder = builder;
+        }
+
+        @Override
+        public Menu get() {
+            MenuBuild build = builder.get();
+            if (build == null) {
+                throw new IllegalStateException("builder returned null");
+            }
+            Menu menu = build.materialize();
+            PacketUxUiAPI.getAdapter().items().preload(menu.items());
+            return menu;
+        }
+    }
+
+    private static final class PresentAsyncCompose
+            implements java.util.function.Function<Menu, CompletableFuture<Void>> {
+        private final PacketGuiManager owner;
+        private final Player player;
+
+        private PresentAsyncCompose(PacketGuiManager owner, Player player) {
+            this.owner = owner;
+            this.player = player;
+        }
+
+        @Override
+        public CompletableFuture<Void> apply(Menu menu) {
+            CompletableFuture<Void> done = new CompletableFuture<>();
+            owner.scheduler.runForPlayer(
+                    player,
+                    new PresentFutureTask(owner, player, menu, done),
+                    new PresentRetiredTask(done)
+            );
+            return done;
+        }
+    }
+
+    private static final class PresentFutureTask implements Runnable {
+        private final PacketGuiManager owner;
+        private final Player player;
+        private final Menu menu;
+        private final CompletableFuture<Void> done;
+
+        private PresentFutureTask(
+                PacketGuiManager owner,
+                Player player,
+                Menu menu,
+                CompletableFuture<Void> done
+        ) {
+            this.owner = owner;
+            this.player = player;
+            this.menu = menu;
+            this.done = done;
+        }
+
+        @Override
+        public void run() {
+            if (!player.isOnline()) {
+                done.completeExceptionally(new IllegalStateException("player offline"));
+                return;
+            }
+            try {
+                owner.present(player, menu);
+                done.complete(null);
+            } catch (Throwable error) {
+                done.completeExceptionally(error);
+            }
+        }
+    }
+
+    private static final class PresentRetiredTask implements Runnable {
+        private final CompletableFuture<Void> done;
+
+        private PresentRetiredTask(CompletableFuture<Void> done) {
+            this.done = done;
+        }
+
+        @Override
+        public void run() {
+            done.completeExceptionally(new IllegalStateException("player retired"));
         }
     }
 }

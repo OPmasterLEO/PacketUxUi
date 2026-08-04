@@ -53,7 +53,7 @@ public final class MenuInboundHandler extends ChannelInboundHandlerAdapter {
                             + " hadVirtual=" + sessionOpen);
                 }
                 if (sessionOpen || oursClose || menuService.isTransitionActive(player)) {
-                    scheduler.runForPlayer(player, () -> menuService.onCloseMenu(player));
+                    scheduler.runForPlayer(player, new CloseMenuTask(player, menuService));
                     return;
                 }
                 ctx.fireChannelRead(msg);
@@ -69,8 +69,7 @@ public final class MenuInboundHandler extends ChannelInboundHandlerAdapter {
                 }
                 ClickPacket click = classifier.readClick(msg);
                 if (click == null) {
-                    // Unknown shape for this bucket — still drop so vanilla cannot mutate.
-                    scheduler.runForPlayer(player, () -> menuService.forceResyncOpen(player));
+                    scheduler.runForPlayer(player, new ForceResyncTask(player, menuService));
                     return;
                 }
                 try {
@@ -81,10 +80,56 @@ public final class MenuInboundHandler extends ChannelInboundHandlerAdapter {
                                 + error.getClass().getSimpleName());
                     }
                 }
-                ClickPacket finalClick = click;
-                scheduler.runForPlayer(player, () -> menuService.handleIncomingClick(player, finalClick));
+                scheduler.runForPlayer(player, new IncomingClickTask(player, menuService, click));
             }
             case OTHER -> ctx.fireChannelRead(msg);
+        }
+    }
+
+    private static final class CloseMenuTask implements Runnable {
+        private final Player player;
+        private final MenuService menuService;
+
+        private CloseMenuTask(Player player, MenuService menuService) {
+            this.player = player;
+            this.menuService = menuService;
+        }
+
+        @Override
+        public void run() {
+            menuService.onCloseMenu(player);
+        }
+    }
+
+    private static final class ForceResyncTask implements Runnable {
+        private final Player player;
+        private final MenuService menuService;
+
+        private ForceResyncTask(Player player, MenuService menuService) {
+            this.player = player;
+            this.menuService = menuService;
+        }
+
+        @Override
+        public void run() {
+            menuService.forceResyncOpen(player);
+        }
+    }
+
+    private static final class IncomingClickTask implements Runnable {
+        private final Player player;
+        private final MenuService menuService;
+        private final ClickPacket click;
+
+        private IncomingClickTask(Player player, MenuService menuService, ClickPacket click) {
+            this.player = player;
+            this.menuService = menuService;
+            this.click = click;
+        }
+
+        @Override
+        public void run() {
+            menuService.handleIncomingClick(player, click);
         }
     }
 }

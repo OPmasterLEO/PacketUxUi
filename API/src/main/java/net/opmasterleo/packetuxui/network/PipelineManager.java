@@ -62,7 +62,7 @@ public final class PipelineManager {
         if (scheduler.isOwnedByCurrentRegion(player)) {
             injectOnEntityThread(player);
         } else {
-            scheduler.runForPlayer(player, () -> injectOnEntityThread(player));
+            scheduler.runForPlayer(player, new InjectOnEntityThreadTask(this, player));
         }
     }
 
@@ -74,7 +74,7 @@ public final class PipelineManager {
         if (scheduler.isOwnedByCurrentRegion(player)) {
             ensureOnEntityThread(player);
         } else {
-            scheduler.runForPlayer(player, () -> ensureOnEntityThread(player));
+            scheduler.runForPlayer(player, new EnsureOnEntityThreadTask(this, player));
         }
     }
 
@@ -96,7 +96,7 @@ public final class PipelineManager {
         if (scheduler.isOwnedByCurrentRegion(player)) {
             removeOnEntityThread(player);
         } else {
-            scheduler.runForPlayer(player, () -> removeOnEntityThread(player));
+            scheduler.runForPlayer(player, new RemoveOnEntityThreadTask(this, player));
         }
     }
 
@@ -106,7 +106,7 @@ public final class PipelineManager {
             injected.remove(player.getUniqueId());
             return;
         }
-        ChannelOps.runInEventLoop(channel, () -> install(player, channel, false));
+        ChannelOps.runInEventLoop(channel, new InstallTask(this, player, channel, false));
     }
 
     private void ensureOnEntityThread(Player player) {
@@ -115,14 +115,7 @@ public final class PipelineManager {
             injected.remove(player.getUniqueId());
             return;
         }
-        ChannelOps.runInEventLoop(channel, () -> {
-            ChannelHandler existing = ChannelOps.get(channel, handlerName);
-            if (existing instanceof MenuInboundHandler) {
-                injected.put(player.getUniqueId(), Boolean.TRUE);
-                return;
-            }
-            install(player, channel, true);
-        });
+        ChannelOps.runInEventLoop(channel, new EnsureInstallTask(this, player, channel));
     }
 
     private void removeOnEntityThread(Player player) {
@@ -131,17 +124,7 @@ public final class PipelineManager {
         if (channel == null) {
             return;
         }
-        ChannelOps.runInEventLoop(channel, () -> {
-            try {
-                if (ChannelOps.get(channel, handlerName) != null) {
-                    channel.pipeline().remove(handlerName);
-                }
-            } catch (Throwable error) {
-                if (menuService.debugLogging()) {
-                    menuService.debug(player, "pipeline remove failed: " + error.getClass().getSimpleName());
-                }
-            }
-        });
+        ChannelOps.runInEventLoop(channel, new RemoveHandlerTask(this, player, channel));
     }
 
     public List<String> pipelineHandlers(Player player) {
@@ -234,5 +217,116 @@ public final class PipelineManager {
             return "default";
         }
         return value.toLowerCase(java.util.Locale.ROOT).replaceAll("[^a-z0-9_\\-]", "_");
+    }
+
+    private static final class InjectOnEntityThreadTask implements Runnable {
+        private final PipelineManager manager;
+        private final Player player;
+
+        private InjectOnEntityThreadTask(PipelineManager manager, Player player) {
+            this.manager = manager;
+            this.player = player;
+        }
+
+        @Override
+        public void run() {
+            manager.injectOnEntityThread(player);
+        }
+    }
+
+    private static final class EnsureOnEntityThreadTask implements Runnable {
+        private final PipelineManager manager;
+        private final Player player;
+
+        private EnsureOnEntityThreadTask(PipelineManager manager, Player player) {
+            this.manager = manager;
+            this.player = player;
+        }
+
+        @Override
+        public void run() {
+            manager.ensureOnEntityThread(player);
+        }
+    }
+
+    private static final class RemoveOnEntityThreadTask implements Runnable {
+        private final PipelineManager manager;
+        private final Player player;
+
+        private RemoveOnEntityThreadTask(PipelineManager manager, Player player) {
+            this.manager = manager;
+            this.player = player;
+        }
+
+        @Override
+        public void run() {
+            manager.removeOnEntityThread(player);
+        }
+    }
+
+    private static final class InstallTask implements Runnable {
+        private final PipelineManager manager;
+        private final Player player;
+        private final Channel channel;
+        private final boolean reassert;
+
+        private InstallTask(PipelineManager manager, Player player, Channel channel, boolean reassert) {
+            this.manager = manager;
+            this.player = player;
+            this.channel = channel;
+            this.reassert = reassert;
+        }
+
+        @Override
+        public void run() {
+            manager.install(player, channel, reassert);
+        }
+    }
+
+    private static final class EnsureInstallTask implements Runnable {
+        private final PipelineManager manager;
+        private final Player player;
+        private final Channel channel;
+
+        private EnsureInstallTask(PipelineManager manager, Player player, Channel channel) {
+            this.manager = manager;
+            this.player = player;
+            this.channel = channel;
+        }
+
+        @Override
+        public void run() {
+            ChannelHandler existing = ChannelOps.get(channel, manager.handlerName);
+            if (existing instanceof MenuInboundHandler) {
+                manager.injected.put(player.getUniqueId(), Boolean.TRUE);
+                return;
+            }
+            manager.install(player, channel, true);
+        }
+    }
+
+    private static final class RemoveHandlerTask implements Runnable {
+        private final PipelineManager manager;
+        private final Player player;
+        private final Channel channel;
+
+        private RemoveHandlerTask(PipelineManager manager, Player player, Channel channel) {
+            this.manager = manager;
+            this.player = player;
+            this.channel = channel;
+        }
+
+        @Override
+        public void run() {
+            try {
+                if (ChannelOps.get(channel, manager.handlerName) != null) {
+                    channel.pipeline().remove(manager.handlerName);
+                }
+            } catch (Throwable error) {
+                if (manager.menuService.debugLogging()) {
+                    manager.menuService.debug(player, "pipeline remove failed: " + error.getClass().getSimpleName());
+                }
+            }
+        }
     }
 }

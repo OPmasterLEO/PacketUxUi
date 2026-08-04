@@ -111,14 +111,14 @@ public final class PacketUxUiAPI {
         scheduler = new PlatformScheduler(plugin);
         service = new MenuService(adapter, scheduler);
         pipelineManager = new PipelineManager(plugin, adapter, service, scheduler);
-        service.setPipelineReassert(pipelineManager::ensureInjected);
+        service.setPipelineReassert(new EnsureInjected(pipelineManager));
         if (Boolean.getBoolean("packetuxui.debug")
                 || "true".equalsIgnoreCase(System.getenv("PACKETUXUI_DEBUG"))) {
             service.setDebugLogging(true);
         }
         net.opmasterleo.packetuxui.nms.map.BukkitKeyMaps.warmupDefaults();
         LifecycleListeners.register(plugin, service, pipelineManager, scheduler);
-        scheduler.runForEachOnlinePlayer(pipelineManager::inject);
+        scheduler.runForEachOnlinePlayer(new InjectPipeline(pipelineManager));
         Bukkit.getServicesManager().register(
                 PacketUxUiHolder.class,
                 new PacketUxUiHolder(),
@@ -222,16 +222,7 @@ public final class PacketUxUiAPI {
         PipelineManager pipe = pipelineManager;
         if (sched != null && svc != null && pipe != null) {
             // Entity-thread cleanup before cancelAll — Folia-safe; inline on Paper/Bukkit main.
-            sched.runForEachOnlinePlayer(player -> {
-                try {
-                    svc.closeMenu(player);
-                } catch (Throwable ignored) {
-                }
-                try {
-                    pipe.remove(player);
-                } catch (Throwable ignored) {
-                }
-            });
+            sched.runForEachOnlinePlayer(new ShutdownPlayer(svc, pipe));
         }
         if (host != null) {
             Bukkit.getServicesManager().unregisterAll(host);
@@ -261,6 +252,54 @@ public final class PacketUxUiAPI {
             throw new IllegalStateException(
                     "PacketUxUiAPI is not initialized. Call PacketUxUiAPI.init(plugin) in onEnable."
             );
+        }
+    }
+
+    private static final class EnsureInjected implements java.util.function.Consumer<Player> {
+        private final PipelineManager pipeline;
+
+        private EnsureInjected(PipelineManager pipeline) {
+            this.pipeline = pipeline;
+        }
+
+        @Override
+        public void accept(Player player) {
+            pipeline.ensureInjected(player);
+        }
+    }
+
+    private static final class InjectPipeline implements java.util.function.Consumer<Player> {
+        private final PipelineManager pipeline;
+
+        private InjectPipeline(PipelineManager pipeline) {
+            this.pipeline = pipeline;
+        }
+
+        @Override
+        public void accept(Player player) {
+            pipeline.inject(player);
+        }
+    }
+
+    private static final class ShutdownPlayer implements java.util.function.Consumer<Player> {
+        private final MenuService service;
+        private final PipelineManager pipeline;
+
+        private ShutdownPlayer(MenuService service, PipelineManager pipeline) {
+            this.service = service;
+            this.pipeline = pipeline;
+        }
+
+        @Override
+        public void accept(Player player) {
+            try {
+                service.closeMenu(player);
+            } catch (Throwable ignored) {
+            }
+            try {
+                pipeline.remove(player);
+            } catch (Throwable ignored) {
+            }
         }
     }
 

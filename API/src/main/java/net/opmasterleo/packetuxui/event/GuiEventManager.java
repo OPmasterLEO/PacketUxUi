@@ -11,8 +11,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
  */
 public final class GuiEventManager {
 
-    private static final Comparator<GuiListener> BY_PRIORITY =
-            Comparator.comparingInt(l -> l.priority().ordinal());
+    private static final Comparator<GuiListener> BY_PRIORITY = new PriorityComparator();
     private static final GuiListener[] EMPTY = new GuiListener[0];
 
     private final CopyOnWriteArrayList<GuiListener> listeners = new CopyOnWriteArrayList<>();
@@ -101,6 +100,13 @@ public final class GuiEventManager {
         }
         ArrayList<GuiListener> copy = new ArrayList<>(listeners);
         copy.sort(BY_PRIORITY);
-        ordered = copy.toArray(GuiListener[]::new);
+        ordered = copy.toArray(EMPTY);
+    }
+
+    private static final class PriorityComparator implements Comparator<GuiListener> {
+        @Override
+        public int compare(GuiListener left, GuiListener right) {
+            return Integer.compare(left.priority().ordinal(), right.priority().ordinal());
+        }
     }
 }

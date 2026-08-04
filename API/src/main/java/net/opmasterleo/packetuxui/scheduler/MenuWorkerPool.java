@@ -80,14 +80,7 @@ public final class MenuWorkerPool implements Executor, AutoCloseable {
         ClassLoader taskClassLoader = plugin.getClass().getClassLoader();
 
         ScalingQueue queue = new ScalingQueue(sizing.queueCapacity);
-        ThreadFactory factory = runnable -> {
-            Thread thread = new Thread(runnable, label + "-" + THREAD_SEQ.incrementAndGet());
-            thread.setDaemon(true);
-            thread.setPriority(Thread.NORM_PRIORITY - 1);
-            // Idle workers must not pin the plugin ClassLoader.
-            thread.setContextClassLoader(ClassLoader.getSystemClassLoader());
-            return thread;
-        };
+        ThreadFactory factory = new WorkerThreadFactory(label);
 
         LeakSafeRejection rejection = new LeakSafeRejection(logger, label);
         ThreadPoolExecutor pool = new ThreadPoolExecutor(
@@ -271,17 +264,7 @@ public final class MenuWorkerPool implements Executor, AutoCloseable {
         submitted.incrementAndGet();
         inFlight.incrementAndGet();
         try {
-            executor.execute(wrap(() -> {
-                if (closed.get()) {
-                    future.completeExceptionally(new RejectedExecutionException(label + " closed"));
-                    return;
-                }
-                try {
-                    future.complete(supplier.get());
-                } catch (Throwable error) {
-                    future.completeExceptionally(error);
-                }
-            }));
+            executor.execute(wrap(new SupplyAsyncTask<>(this, future, supplier)));
         } catch (RejectedExecutionException rejected) {
             inFlight.decrementAndGet();
             future.completeExceptionally(rejected);
@@ -293,24 +276,7 @@ public final class MenuWorkerPool implements Executor, AutoCloseable {
     }
 
     private Runnable wrap(Runnable command) {
-        return () -> {
-            Thread thread = Thread.currentThread();
-            ClassLoader previous = thread.getContextClassLoader();
-            try {
-                thread.setContextClassLoader(taskClassLoader);
-                if (!closed.get()) {
-                    command.run();
-                }
-            } catch (Throwable error) {
-                if (logger != null) {
-                    logger.log(Level.SEVERE, "[PacketUxUi] Uncaught error in " + label, error);
-                }
-            } finally {
-                thread.setContextClassLoader(previous != null ? previous : ClassLoader.getSystemClassLoader());
-                inFlight.decrementAndGet();
-                completed.incrementAndGet();
-            }
-        };
+        return new ContextClassLoaderWrap(this, command);
     }
 
     public Executor executor() {
@@ -411,6 +377,79 @@ public final class MenuWorkerPool implements Executor, AutoCloseable {
             executor.getQueue().clear();
             executor.purge();
             inFlight.set(0);
+        }
+    }
+
+    private static final class WorkerThreadFactory implements ThreadFactory {
+        private final String label;
+
+        private WorkerThreadFactory(String label) {
+            this.label = label;
+        }
+
+        @Override
+        public Thread newThread(Runnable runnable) {
+            Thread thread = new Thread(runnable, label + "-" + THREAD_SEQ.incrementAndGet());
+            thread.setDaemon(true);
+            thread.setPriority(Thread.NORM_PRIORITY - 1);
+            // Idle workers must not pin the plugin ClassLoader.
+            thread.setContextClassLoader(ClassLoader.getSystemClassLoader());
+            return thread;
+        }
+    }
+
+    private static final class SupplyAsyncTask<T> implements Runnable {
+        private final MenuWorkerPool pool;
+        private final CompletableFuture<T> future;
+        private final Supplier<T> supplier;
+
+        private SupplyAsyncTask(MenuWorkerPool pool, CompletableFuture<T> future, Supplier<T> supplier) {
+            this.pool = pool;
+            this.future = future;
+            this.supplier = supplier;
+        }
+
+        @Override
+        public void run() {
+            if (pool.closed.get()) {
+                future.completeExceptionally(new RejectedExecutionException(pool.label + " closed"));
+                return;
+            }
+            try {
+                future.complete(supplier.get());
+            } catch (Throwable error) {
+                future.completeExceptionally(error);
+            }
+        }
+    }
+
+    private static final class ContextClassLoaderWrap implements Runnable {
+        private final MenuWorkerPool pool;
+        private final Runnable command;
+
+        private ContextClassLoaderWrap(MenuWorkerPool pool, Runnable command) {
+            this.pool = pool;
+            this.command = command;
+        }
+
+        @Override
+        public void run() {
+            Thread thread = Thread.currentThread();
+            ClassLoader previous = thread.getContextClassLoader();
+            try {
+                thread.setContextClassLoader(pool.taskClassLoader);
+                if (!pool.closed.get()) {
+                    command.run();
+                }
+            } catch (Throwable error) {
+                if (pool.logger != null) {
+                    pool.logger.log(Level.SEVERE, "[PacketUxUi] Uncaught error in " + pool.label, error);
+                }
+            } finally {
+                thread.setContextClassLoader(previous != null ? previous : ClassLoader.getSystemClassLoader());
+                pool.inFlight.decrementAndGet();
+                pool.completed.incrementAndGet();
+            }
         }
     }
 }

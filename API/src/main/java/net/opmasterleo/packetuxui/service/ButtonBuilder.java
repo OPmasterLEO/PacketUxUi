@@ -30,35 +30,13 @@ public final class ButtonBuilder implements IButtonBuilder {
 
     @Override
     public IButtonBuilder executeCommand(String[] command) {
-        this.click = component -> {
-            Player player = component.player();
-            for (String raw : command) {
-                if (raw == null || raw.isBlank()) {
-                    continue;
-                }
-                String parsed = raw
-                        .replace("%player%", player.getName())
-                        .replace("%uuid%", player.getUniqueId().toString());
-                Bukkit.dispatchCommand(Bukkit.getConsoleSender(), parsed);
-            }
-        };
+        this.click = new ConsoleCommandClick(command);
         return this;
     }
 
     @Override
     public IButtonBuilder makePlayerExecuteCommand(String[] command) {
-        this.click = component -> {
-            Player player = component.player();
-            for (String raw : command) {
-                if (raw == null || raw.isBlank()) {
-                    continue;
-                }
-                String parsed = raw
-                        .replace("%player%", player.getName())
-                        .replace("%uuid%", player.getUniqueId().toString());
-                player.performCommand(parsed.startsWith("/") ? parsed.substring(1) : parsed);
-            }
-        };
+        this.click = new PlayerCommandClick(command);
         return this;
     }
 
@@ -103,5 +81,49 @@ public final class ButtonBuilder implements IButtonBuilder {
     @Override
     public Button build() {
         return new Button(item, click, cooldown, kind);
+    }
+
+    private static final class ConsoleCommandClick implements Consumer<ExecuteComponent> {
+        private final String[] command;
+
+        private ConsoleCommandClick(String[] command) {
+            this.command = command;
+        }
+
+        @Override
+        public void accept(ExecuteComponent component) {
+            Player player = component.player();
+            for (String raw : command) {
+                if (raw == null || raw.isBlank()) {
+                    continue;
+                }
+                String parsed = raw
+                        .replace("%player%", player.getName())
+                        .replace("%uuid%", player.getUniqueId().toString());
+                Bukkit.dispatchCommand(Bukkit.getConsoleSender(), parsed);
+            }
+        }
+    }
+
+    private static final class PlayerCommandClick implements Consumer<ExecuteComponent> {
+        private final String[] command;
+
+        private PlayerCommandClick(String[] command) {
+            this.command = command;
+        }
+
+        @Override
+        public void accept(ExecuteComponent component) {
+            Player player = component.player();
+            for (String raw : command) {
+                if (raw == null || raw.isBlank()) {
+                    continue;
+                }
+                String parsed = raw
+                        .replace("%player%", player.getName())
+                        .replace("%uuid%", player.getUniqueId().toString());
+                player.performCommand(parsed.startsWith("/") ? parsed.substring(1) : parsed);
+            }
+        }
     }
 }

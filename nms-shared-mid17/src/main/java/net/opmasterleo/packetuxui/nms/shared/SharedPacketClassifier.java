@@ -4,6 +4,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Supplier;
 
 import org.bukkit.craftbukkit.libs.it.unimi.dsi.fastutil.ints.Int2ObjectMap;
 import net.minecraft.network.protocol.game.ServerboundContainerClickPacket;
@@ -76,8 +77,8 @@ public final class SharedPacketClassifier implements PacketClassifier {
                 fromNms(click.getClickType()),
                 ids,
                 carriedEmpty,
-                () -> decodeChanged(slots),
-                () -> carriedEmpty ? UxItem.EMPTY : items.fromMinecraft(carriedNms)
+                new ChangedSlotsSupplier(slots),
+                new CarriedSupplier(carriedEmpty, carriedNms)
         );
     }
 
@@ -111,5 +112,33 @@ public final class SharedPacketClassifier implements PacketClassifier {
             case PICKUP_ALL -> WindowClickType.PICKUP_ALL;
             default -> WindowClickType.UNKNOWN;
         };
+    }
+
+    private final class ChangedSlotsSupplier implements Supplier<Map<Integer, UxItem>> {
+        private final Int2ObjectMap<ItemStack> slots;
+
+        ChangedSlotsSupplier(Int2ObjectMap<ItemStack> slots) {
+            this.slots = slots;
+        }
+
+        @Override
+        public Map<Integer, UxItem> get() {
+            return decodeChanged(slots);
+        }
+    }
+
+    private final class CarriedSupplier implements Supplier<UxItem> {
+        private final boolean carriedEmpty;
+        private final ItemStack carriedNms;
+
+        CarriedSupplier(boolean carriedEmpty, ItemStack carriedNms) {
+            this.carriedEmpty = carriedEmpty;
+            this.carriedNms = carriedNms;
+        }
+
+        @Override
+        public UxItem get() {
+            return carriedEmpty ? UxItem.EMPTY : items.fromMinecraft(carriedNms);
+        }
     }
 }

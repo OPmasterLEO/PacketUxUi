@@ -12,6 +12,8 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
+import java.util.function.Function;
+import java.util.function.IntSupplier;
 import java.util.function.Predicate;
 
 import org.bukkit.entity.Player;
@@ -38,6 +40,7 @@ import net.opmasterleo.packetuxui.types.ButtonType;
 import net.opmasterleo.packetuxui.types.ClickData;
 import net.opmasterleo.packetuxui.types.ClickType;
 import net.opmasterleo.packetuxui.types.ExecuteComponent;
+import net.opmasterleo.packetuxui.util.Predicates;
 
 public final class MenuService {
 
@@ -66,6 +69,8 @@ public final class MenuService {
     private volatile BiConsumer<Player, String> openFailedHandler;
     private volatile Consumer<Player> pipelineReassert;
     private volatile boolean debugLogging;
+
+    private static final Function<UUID, List<AccumulatedDrag>> NEW_DRAG_LIST = new NewDragList();
 
     public MenuService(NmsAdapter adapter, PlatformScheduler scheduler) {
         this.adapter = adapter;
@@ -127,13 +132,7 @@ public final class MenuService {
         if (predicate == null) {
             return;
         }
-        takeablePredicates.add(ux -> {
-            if (ux == null || ux.isEmpty()) {
-                return false;
-            }
-            ItemStack stack = adapter.items().toBukkit(ux);
-            return stack != null && predicate.test(stack);
-        });
+        takeablePredicates.add(new BukkitTakeablePredicate(this, predicate));
     }
 
     public void clearTakeablePredicates() {
@@ -205,7 +204,7 @@ public final class MenuService {
     }
 
     public void openMenu(Player player, Menu menu) {
-        scheduler.runForPlayer(player, () -> openMenuSync(player, menu));
+        scheduler.runForPlayer(player, new OpenMenuTask(this, player, menu));
     }
 
     public void openMenuSync(Player player, Menu menu) {
@@ -214,23 +213,7 @@ public final class MenuService {
     }
 
     public void present(Player player, Menu menu) {
-        scheduler.runForPlayer(player, () -> {
-            MenuSession existing = sessions.get(id(player));
-            if (existing != null && existing.phase() == SessionPhase.OPEN) {
-                if (existing.menu().mode() == menu.mode()
-                        && existing.menu().type() == menu.type()) {
-                    applyMenuDifferential(player, existing, menu);
-                    return;
-                }
-                // Same mode, different size/type — replace screen without CloseWindow flash.
-                if (existing.menu().mode() == menu.mode()) {
-                    replaceMenuInPlace(player, existing, menu);
-                    return;
-                }
-            }
-            ensurePipeline(player);
-            openMenuSync(player, menu);
-        });
+        scheduler.runForPlayer(player, new PresentTask(this, player, menu));
     }
 
     /**
@@ -251,7 +234,7 @@ public final class MenuService {
     /** Bind + OpenScreen + contents for a freshly allocated or reused window id. */
     private void installOpen(Player player, Menu menu) {
         Menu copy = menu.copy();
-        int windowId = windowIds.allocate(player, () -> adapter.packets().allocateWindowId(player));
+        int windowId = windowIds.allocate(player, new AllocateWindowId(this, player));
         MenuSession session = new MenuSession(copy, windowId);
         session.setPhase(SessionPhase.OPENING);
         sessions.put(id(player), session);
@@ -308,27 +291,7 @@ public final class MenuService {
     public void closeThen(Player player, long settleTicks, Runnable onSettled) {
         java.util.Objects.requireNonNull(player, "player");
         long delay = Math.max(1L, settleTicks);
-        scheduler.runForPlayer(player, () -> {
-            TransitionToken token = beginTransition(player);
-            try {
-                closeCurrent(player, true, true, GuiCloseReason.API);
-            } catch (Throwable error) {
-                endTransition(player, token);
-                debug(player, "closeThen close failed: " + error.getClass().getSimpleName());
-                throw error;
-            }
-            scheduler.runLaterForPlayer(player, settled -> {
-                endTransition(settled, token);
-                if (onSettled == null || !settled.isOnline()) {
-                    return;
-                }
-                try {
-                    onSettled.run();
-                } catch (Throwable error) {
-                    debug(settled, "closeThen onSettled failed: " + error.getClass().getSimpleName());
-                }
-            }, delay);
-        });
+        scheduler.runForPlayer(player, new CloseThenStartTask(this, player, delay, onSettled));
     }
 
     public java.util.concurrent.CompletableFuture<Void> closeAsync(Player player) {
@@ -337,40 +300,12 @@ public final class MenuService {
 
     public java.util.concurrent.CompletableFuture<Void> closeAsync(Player player, long settleTicks) {
         java.util.concurrent.CompletableFuture<Void> future = new java.util.concurrent.CompletableFuture<>();
-        closeThen(player, settleTicks, () -> future.complete(null));
+        closeThen(player, settleTicks, new CompleteFuture(future));
         return future;
     }
 
     public void updateTitle(Player player, Component title) {
-        scheduler.runForPlayer(player, () -> {
-            MenuSession session = sessions.get(id(player));
-            if (session == null || session.phase() != SessionPhase.OPEN) {
-                return;
-            }
-            Component next = title == null ? Component.empty() : title;
-            if (next.equals(session.title())) {
-                return;
-            }
-            session.setTitle(next);
-            adapter.packets().sendOpenWindow(
-                    player,
-                    session.windowId(),
-                    session.menu().type().id(),
-                    next
-            );
-            int stateId = protocolState(player, session);
-            adapter.packets().mirrorTopSlots(player, session.menu().items());
-            if (!adapter.packets().sendBoundAuthority(
-                    player, stateId, session.menu().mode() != MenuMode.EDITABLE)) {
-                adapter.packets().sendWindowItems(
-                        player,
-                        session.windowId(),
-                        stateId,
-                        contentsForOpen(player, session.menu()),
-                        carriedItem.get(id(player))
-                );
-            }
-        });
+        scheduler.runForPlayer(player, new UpdateTitleTask(this, player, title));
     }
 
     public void onCloseMenu(Player player) {
@@ -385,7 +320,7 @@ public final class MenuService {
     }
 
     public void closeMenu(Player player) {
-        scheduler.runForPlayer(player, () -> closeCurrent(player, true, true, GuiCloseReason.API));
+        scheduler.runForPlayer(player, new CloseMenuTask(this, player));
     }
 
     private void closeCurrent(Player player, boolean sendClosePacket, boolean reclaim) {
@@ -798,7 +733,7 @@ public final class MenuService {
             UxItem cursor = carriedItem.getOrDefault(id(player), UxItem.EMPTY);
             boolean taking = cursor.isEmpty() && !at.isEmpty() && isTakeableItem(at);
             if (taking && type == WindowClickType.PICKUP) {
-                Predicate<Integer> allow = slot -> slot == packet.slot();
+                Predicate<Integer> allow = new SingleSlotAllow(packet.slot());
                 VirtualClickSimulator.Result result = VirtualClickSimulator.simulate(
                         menu.items(), cursor, packet.slot(), packet.button(), type, allow
                 );
@@ -833,7 +768,9 @@ public final class MenuService {
         }
 
         UxItem cursor = carriedItem.getOrDefault(id(player), UxItem.EMPTY);
-        Predicate<Integer> allow = cursor.isEmpty() ? session::allowsTake : session::allowsPlace;
+        Predicate<Integer> allow = cursor.isEmpty()
+                ? new SessionAllowTake(session)
+                : new SessionAllowPlace(session);
         if (!cursor.isEmpty() && !session.allowsPlace(packet.slot())) {
             rejectEditable(player, session, packet);
             return;
@@ -877,7 +814,7 @@ public final class MenuService {
                 packet.slot(),
                 packet.button(),
                 type,
-                session::allowsTake
+                new SessionAllowTake(session)
         );
         emitDecision(player, packet, SlotKind.EXTRACTABLE, false, false, "extractable_take");
         applyEditableResult(player, session, result, packet.stateId());
@@ -902,7 +839,8 @@ public final class MenuService {
         }
         top.set(slot, UxItem.EMPTY);
         List<UxItem> bottom = snapshotBottom(player);
-        VirtualClickSimulator.Result inserted = VirtualClickSimulator.shiftInto(bottom, moving, s -> true);
+        VirtualClickSimulator.Result inserted = VirtualClickSimulator.shiftInto(
+                bottom, moving, Predicates.ALWAYS_TRUE_INT);
         menu.setItems(top);
         syncButtonsFromItems(menu, top, Set.of(slot));
         writeBottom(player, inserted.items());
@@ -947,7 +885,7 @@ public final class MenuService {
         VirtualClickSimulator.Result inserted = VirtualClickSimulator.shiftInto(
                 menu.items(),
                 moving,
-                session::allowsPlace
+                new SessionAllowPlace(session)
         );
         UxItem leftover = inserted.cursor();
         menu.setItems(inserted.items());
@@ -1012,7 +950,7 @@ public final class MenuService {
                     bottomIndex,
                     packet.button(),
                     WindowClickType.PICKUP,
-                    s -> true
+                    Predicates.ALWAYS_TRUE_INT
             );
             writeBottom(player, placed.items());
             if (placed.cursor().isEmpty()) {
@@ -1219,7 +1157,7 @@ public final class MenuService {
                 cursor,
                 slots,
                 packet.button(),
-                session::allowsPlace
+                new SessionAllowPlace(session)
         );
         applyEditableResult(player, session, result, packet.stateId());
     }
@@ -1583,204 +1521,27 @@ public final class MenuService {
     }
 
     public void refreshWindow(Player player) {
-        scheduler.runForPlayer(player, () -> {
-            MenuSession session = sessions.get(id(player));
-            if (session == null) {
-                return;
-            }
-            boolean editable = session.menu().mode() == MenuMode.EDITABLE;
-            if (!editable) {
-                carriedItem.remove(id(player));
-            }
-            int stateId = protocolState(player, session);
-            adapter.packets().mirrorTopSlots(player, session.menu().items());
-            if (adapter.packets().sendBoundAuthority(player, stateId, !editable)) {
-                return;
-            }
-            UxItem cursor = editable
-                    ? carriedItem.getOrDefault(id(player), UxItem.EMPTY)
-                    : UxItem.EMPTY;
-            adapter.packets().sendWindowItems(
-                    player,
-                    session.windowId(),
-                    stateId,
-                    fullContents(player, session.menu()),
-                    cursor.isEmpty() ? null : cursor
-            );
-            if (!editable) {
-                adapter.packets().sendCursorItem(player, UxItem.EMPTY);
-            }
-        });
+        scheduler.runForPlayer(player, new RefreshWindowTask(this, player));
     }
 
     public void updateItem(Player player, UxItem item, int slot) {
-        scheduler.runForPlayer(player, () -> {
-            MenuSession session = sessions.get(id(player));
-            if (session == null) {
-                return;
-            }
-            Menu menu = session.menu();
-            if (slot < 0 || slot > menu.type().lastIndex()) {
-                throw new IllegalArgumentException("Slot out of range.");
-            }
-            UxItem next = item == null ? UxItem.EMPTY : item;
-            List<UxItem> items = menu.items();
-            UxItem current = slot < items.size() ? items.get(slot) : UxItem.EMPTY;
-            if (current.equals(next)) {
-                return;
-            }
-            List<UxItem> copy = new ArrayList<>(items);
-            copy.set(slot, next);
-            menu.setItems(copy);
-            adapter.packets().sendSetSlot(player, session.windowId(), protocolState(player, session), slot, next);
-        });
+        scheduler.runForPlayer(player, new UpdateItemTask(this, player, item, slot));
     }
 
     public void updateItems(Player player, Map<Integer, UxItem> newItems) {
-        scheduler.runForPlayer(player, () -> {
-            MenuSession session = sessions.get(id(player));
-            if (session == null) {
-                return;
-            }
-            Menu menu = session.menu();
-            for (Integer slot : newItems.keySet()) {
-                if (slot == null || slot < 0 || slot > menu.type().lastIndex()) {
-                    throw new IllegalArgumentException("Slot out of range.");
-                }
-            }
-            List<UxItem> items = new ArrayList<>(menu.items());
-            Map<Integer, UxItem> dirty = new HashMap<>();
-            for (Map.Entry<Integer, UxItem> entry : newItems.entrySet()) {
-                UxItem next = entry.getValue() == null ? UxItem.EMPTY : entry.getValue();
-                UxItem current = entry.getKey() < items.size() ? items.get(entry.getKey()) : UxItem.EMPTY;
-                if (current.equals(next)) {
-                    continue;
-                }
-                items.set(entry.getKey(), next);
-                dirty.put(entry.getKey(), next);
-            }
-            if (dirty.isEmpty()) {
-                return;
-            }
-            menu.setItems(items);
-            int stateId = protocolState(player, session);
-            for (Map.Entry<Integer, UxItem> entry : dirty.entrySet()) {
-                adapter.packets().sendSetSlot(
-                        player,
-                        session.windowId(),
-                        stateId,
-                        entry.getKey(),
-                        entry.getValue()
-                );
-            }
-        });
+        scheduler.runForPlayer(player, new UpdateItemsTask(this, player, newItems));
     }
 
     public void updateButton(Player player, Button newButton, int slot) {
-        scheduler.runForPlayer(player, () -> {
-            MenuSession session = sessions.get(id(player));
-            if (session == null) {
-                return;
-            }
-            Menu menu = session.menu();
-            if (slot < 0 || slot > menu.type().lastIndex()) {
-                throw new IllegalArgumentException("Slot out of range.");
-            }
-            menu.buttons().put(slot, newButton);
-            UxItem next = newButton.item();
-            List<UxItem> items = menu.items();
-            UxItem current = slot < items.size() ? items.get(slot) : UxItem.EMPTY;
-            if (current.equals(next)) {
-                return;
-            }
-            List<UxItem> copy = new ArrayList<>(items);
-            copy.set(slot, next);
-            menu.setItems(copy);
-            adapter.packets().sendSetSlot(player, session.windowId(), protocolState(player, session), slot, next);
-        });
+        scheduler.runForPlayer(player, new UpdateButtonTask(this, player, newButton, slot));
     }
 
     public void updateButtons(Player player, Map<Integer, Button> newButtons) {
-        scheduler.runForPlayer(player, () -> {
-            MenuSession session = sessions.get(id(player));
-            if (session == null) {
-                return;
-            }
-            Menu menu = session.menu();
-            for (Integer slot : newButtons.keySet()) {
-                if (slot == null || slot < 0 || slot > menu.type().lastIndex()) {
-                    throw new IllegalArgumentException("Slot out of range.");
-                }
-            }
-            menu.buttons().clear();
-            menu.buttons().putAll(newButtons);
-            List<UxItem> items = new ArrayList<>(menu.type().size());
-            List<UxItem> previous = menu.items();
-            Map<Integer, UxItem> dirty = new HashMap<>();
-            for (int index = 0; index < menu.type().size(); index++) {
-                Button button = newButtons.get(index);
-                UxItem next = button != null ? button.item() : UxItem.EMPTY;
-                items.add(next);
-                UxItem current = index < previous.size() ? previous.get(index) : UxItem.EMPTY;
-                if (!current.equals(next)) {
-                    dirty.put(index, next);
-                }
-            }
-            menu.setItems(items);
-            if (dirty.isEmpty()) {
-                return;
-            }
-            int stateId = protocolState(player, session);
-            int windowId = session.windowId();
-            for (Map.Entry<Integer, UxItem> entry : dirty.entrySet()) {
-                adapter.packets().sendSetSlot(player, windowId, stateId, entry.getKey(), entry.getValue());
-            }
-        });
+        scheduler.runForPlayer(player, new UpdateButtonsTask(this, player, newButtons));
     }
 
     public void updateButtonsBySlot(Player player, Map<Integer, Button> patches) {
-        scheduler.runForPlayer(player, () -> {
-            MenuSession session = sessions.get(id(player));
-            if (session == null || patches == null || patches.isEmpty()) {
-                return;
-            }
-            Menu menu = session.menu();
-            for (Integer slot : patches.keySet()) {
-                if (slot == null || slot < 0 || slot > menu.type().lastIndex()) {
-                    throw new IllegalArgumentException("Slot out of range.");
-                }
-            }
-            List<UxItem> items = new ArrayList<>(menu.items());
-            Map<Integer, UxItem> dirty = new HashMap<>();
-            for (Map.Entry<Integer, Button> entry : patches.entrySet()) {
-                int slot = entry.getKey();
-                Button button = entry.getValue();
-                if (button == null) {
-                    menu.buttons().remove(slot);
-                    UxItem current = slot < items.size() ? items.get(slot) : UxItem.EMPTY;
-                    if (!current.isEmpty()) {
-                        items.set(slot, UxItem.EMPTY);
-                        dirty.put(slot, UxItem.EMPTY);
-                    }
-                    continue;
-                }
-                menu.buttons().put(slot, button);
-                UxItem next = button.item();
-                UxItem current = slot < items.size() ? items.get(slot) : UxItem.EMPTY;
-                if (!current.equals(next)) {
-                    items.set(slot, next);
-                    dirty.put(slot, next);
-                }
-            }
-            menu.setItems(items);
-            if (dirty.isEmpty()) {
-                return;
-            }
-            int stateId = protocolState(player, session);
-            for (Map.Entry<Integer, UxItem> entry : dirty.entrySet()) {
-                adapter.packets().sendSetSlot(player, session.windowId(), stateId, entry.getKey(), entry.getValue());
-            }
-        });
+        scheduler.runForPlayer(player, new UpdateButtonsBySlotTask(this, player, patches));
     }
 
     public void clearButtons(Player player, Set<Integer> slots) {
@@ -1795,34 +1556,7 @@ public final class MenuService {
     }
 
     public void patchSlotAtomic(Player player, int slot, UxItem item, Consumer<IButtonBuilder> buttonBuilder, SlotKind slotKind) {
-        scheduler.runForPlayer(player, () -> {
-            MenuSession session = sessions.get(id(player));
-            if (session == null) {
-                return;
-            }
-            Menu menu = session.menu();
-            if (slot < 0 || slot > menu.type().lastIndex()) {
-                throw new IllegalArgumentException("Slot out of range.");
-            }
-            Button button;
-            if (buttonBuilder == null) {
-                button = new Button(item == null ? UxItem.EMPTY : item, null, new CooldownComponent(), slotKind);
-            } else {
-                ButtonBuilder builder = new ButtonBuilder();
-                buttonBuilder.accept(builder);
-                button = builder.kind(slotKind == null ? SlotKind.ACTION : slotKind).item(item == null ? UxItem.EMPTY : item).build();
-            }
-            menu.buttons().put(slot, button);
-            List<UxItem> copy = new ArrayList<>(menu.items());
-            UxItem next = button.item();
-            UxItem current = slot < copy.size() ? copy.get(slot) : UxItem.EMPTY;
-            if (current.equals(next)) {
-                return;
-            }
-            copy.set(slot, next);
-            menu.setItems(copy);
-            adapter.packets().sendSetSlot(player, session.windowId(), protocolState(player, session), slot, next);
-        });
+        scheduler.runForPlayer(player, new PatchSlotAtomicTask(this, player, slot, item, buttonBuilder, slotKind));
     }
 
     public int generation(Player player) {
@@ -1929,7 +1663,7 @@ public final class MenuService {
     }
 
     public void accumulateDrag(Player player, ClickPacket packet, ClickType type) {
-        accumulatedDrag.computeIfAbsent(id(player), key -> new ArrayList<>()).add(new AccumulatedDrag(packet, type));
+        accumulatedDrag.computeIfAbsent(id(player), NEW_DRAG_LIST).add(new AccumulatedDrag(packet, type));
     }
 
     public void clearAccumulatedDrag(Player player) {
@@ -2029,5 +1763,586 @@ public final class MenuService {
             throw new IllegalStateException("Menu under player key not found.");
         }
         return session;
+    }
+
+    private static final class NewDragList implements Function<UUID, List<AccumulatedDrag>> {
+        @Override
+        public List<AccumulatedDrag> apply(UUID key) {
+            return new ArrayList<>();
+        }
+    }
+
+    private static final class BukkitTakeablePredicate implements Predicate<UxItem> {
+        private final MenuService owner;
+        private final Predicate<ItemStack> predicate;
+
+        private BukkitTakeablePredicate(MenuService owner, Predicate<ItemStack> predicate) {
+            this.owner = owner;
+            this.predicate = predicate;
+        }
+
+        @Override
+        public boolean test(UxItem ux) {
+            if (ux == null || ux.isEmpty()) {
+                return false;
+            }
+            ItemStack stack = owner.adapter.items().toBukkit(ux);
+            return stack != null && predicate.test(stack);
+        }
+    }
+
+    private static final class OpenMenuTask implements Runnable {
+        private final MenuService owner;
+        private final Player player;
+        private final Menu menu;
+
+        private OpenMenuTask(MenuService owner, Player player, Menu menu) {
+            this.owner = owner;
+            this.player = player;
+            this.menu = menu;
+        }
+
+        @Override
+        public void run() {
+            owner.openMenuSync(player, menu);
+        }
+    }
+
+    private static final class PresentTask implements Runnable {
+        private final MenuService owner;
+        private final Player player;
+        private final Menu menu;
+
+        private PresentTask(MenuService owner, Player player, Menu menu) {
+            this.owner = owner;
+            this.player = player;
+            this.menu = menu;
+        }
+
+        @Override
+        public void run() {
+            MenuSession existing = owner.sessions.get(id(player));
+            if (existing != null && existing.phase() == SessionPhase.OPEN) {
+                if (existing.menu().mode() == menu.mode()
+                        && existing.menu().type() == menu.type()) {
+                    owner.applyMenuDifferential(player, existing, menu);
+                    return;
+                }
+                if (existing.menu().mode() == menu.mode()) {
+                    owner.replaceMenuInPlace(player, existing, menu);
+                    return;
+                }
+            }
+            owner.ensurePipeline(player);
+            owner.openMenuSync(player, menu);
+        }
+    }
+
+    private static final class AllocateWindowId implements IntSupplier {
+        private final MenuService owner;
+        private final Player player;
+
+        private AllocateWindowId(MenuService owner, Player player) {
+            this.owner = owner;
+            this.player = player;
+        }
+
+        @Override
+        public int getAsInt() {
+            return owner.adapter.packets().allocateWindowId(player);
+        }
+    }
+
+    private static final class CloseThenStartTask implements Runnable {
+        private final MenuService owner;
+        private final Player player;
+        private final long delay;
+        private final Runnable onSettled;
+
+        private CloseThenStartTask(MenuService owner, Player player, long delay, Runnable onSettled) {
+            this.owner = owner;
+            this.player = player;
+            this.delay = delay;
+            this.onSettled = onSettled;
+        }
+
+        @Override
+        public void run() {
+            TransitionToken token = owner.beginTransition(player);
+            try {
+                owner.closeCurrent(player, true, true, GuiCloseReason.API);
+            } catch (Throwable error) {
+                owner.endTransition(player, token);
+                owner.debug(player, "closeThen close failed: " + error.getClass().getSimpleName());
+                throw error;
+            }
+            owner.scheduler.runLaterForPlayer(player, new CloseThenSettled(owner, token, onSettled), delay);
+        }
+    }
+
+    private static final class CloseThenSettled implements Consumer<Player> {
+        private final MenuService owner;
+        private final TransitionToken token;
+        private final Runnable onSettled;
+
+        private CloseThenSettled(MenuService owner, TransitionToken token, Runnable onSettled) {
+            this.owner = owner;
+            this.token = token;
+            this.onSettled = onSettled;
+        }
+
+        @Override
+        public void accept(Player settled) {
+            owner.endTransition(settled, token);
+            if (onSettled == null || !settled.isOnline()) {
+                return;
+            }
+            try {
+                onSettled.run();
+            } catch (Throwable error) {
+                owner.debug(settled, "closeThen onSettled failed: " + error.getClass().getSimpleName());
+            }
+        }
+    }
+
+    private static final class CompleteFuture implements Runnable {
+        private final java.util.concurrent.CompletableFuture<Void> future;
+
+        private CompleteFuture(java.util.concurrent.CompletableFuture<Void> future) {
+            this.future = future;
+        }
+
+        @Override
+        public void run() {
+            future.complete(null);
+        }
+    }
+
+    private static final class UpdateTitleTask implements Runnable {
+        private final MenuService owner;
+        private final Player player;
+        private final Component title;
+
+        private UpdateTitleTask(MenuService owner, Player player, Component title) {
+            this.owner = owner;
+            this.player = player;
+            this.title = title;
+        }
+
+        @Override
+        public void run() {
+            MenuSession session = owner.sessions.get(id(player));
+            if (session == null || session.phase() != SessionPhase.OPEN) {
+                return;
+            }
+            Component next = title == null ? Component.empty() : title;
+            if (next.equals(session.title())) {
+                return;
+            }
+            session.setTitle(next);
+            owner.adapter.packets().sendOpenWindow(
+                    player,
+                    session.windowId(),
+                    session.menu().type().id(),
+                    next
+            );
+            int stateId = owner.protocolState(player, session);
+            owner.adapter.packets().mirrorTopSlots(player, session.menu().items());
+            if (!owner.adapter.packets().sendBoundAuthority(
+                    player, stateId, session.menu().mode() != MenuMode.EDITABLE)) {
+                owner.adapter.packets().sendWindowItems(
+                        player,
+                        session.windowId(),
+                        stateId,
+                        owner.contentsForOpen(player, session.menu()),
+                        owner.carriedItem.get(id(player))
+                );
+            }
+        }
+    }
+
+    private static final class CloseMenuTask implements Runnable {
+        private final MenuService owner;
+        private final Player player;
+
+        private CloseMenuTask(MenuService owner, Player player) {
+            this.owner = owner;
+            this.player = player;
+        }
+
+        @Override
+        public void run() {
+            owner.closeCurrent(player, true, true, GuiCloseReason.API);
+        }
+    }
+
+    private static final class SingleSlotAllow implements Predicate<Integer> {
+        private final int slot;
+
+        private SingleSlotAllow(int slot) {
+            this.slot = slot;
+        }
+
+        @Override
+        public boolean test(Integer value) {
+            return value == slot;
+        }
+    }
+
+    private static final class SessionAllowTake implements Predicate<Integer> {
+        private final MenuSession session;
+
+        private SessionAllowTake(MenuSession session) {
+            this.session = session;
+        }
+
+        @Override
+        public boolean test(Integer slot) {
+            return session.allowsTake(slot);
+        }
+    }
+
+    private static final class SessionAllowPlace implements Predicate<Integer> {
+        private final MenuSession session;
+
+        private SessionAllowPlace(MenuSession session) {
+            this.session = session;
+        }
+
+        @Override
+        public boolean test(Integer slot) {
+            return session.allowsPlace(slot);
+        }
+    }
+
+    private static final class RefreshWindowTask implements Runnable {
+        private final MenuService owner;
+        private final Player player;
+
+        private RefreshWindowTask(MenuService owner, Player player) {
+            this.owner = owner;
+            this.player = player;
+        }
+
+        @Override
+        public void run() {
+            MenuSession session = owner.sessions.get(id(player));
+            if (session == null) {
+                return;
+            }
+            boolean editable = session.menu().mode() == MenuMode.EDITABLE;
+            if (!editable) {
+                owner.carriedItem.remove(id(player));
+            }
+            int stateId = owner.protocolState(player, session);
+            owner.adapter.packets().mirrorTopSlots(player, session.menu().items());
+            if (owner.adapter.packets().sendBoundAuthority(player, stateId, !editable)) {
+                return;
+            }
+            UxItem cursor = editable
+                    ? owner.carriedItem.getOrDefault(id(player), UxItem.EMPTY)
+                    : UxItem.EMPTY;
+            owner.adapter.packets().sendWindowItems(
+                    player,
+                    session.windowId(),
+                    stateId,
+                    owner.fullContents(player, session.menu()),
+                    cursor.isEmpty() ? null : cursor
+            );
+            if (!editable) {
+                owner.adapter.packets().sendCursorItem(player, UxItem.EMPTY);
+            }
+        }
+    }
+
+    private static final class UpdateItemTask implements Runnable {
+        private final MenuService owner;
+        private final Player player;
+        private final UxItem item;
+        private final int slot;
+
+        private UpdateItemTask(MenuService owner, Player player, UxItem item, int slot) {
+            this.owner = owner;
+            this.player = player;
+            this.item = item;
+            this.slot = slot;
+        }
+
+        @Override
+        public void run() {
+            MenuSession session = owner.sessions.get(id(player));
+            if (session == null) {
+                return;
+            }
+            Menu menu = session.menu();
+            if (slot < 0 || slot > menu.type().lastIndex()) {
+                throw new IllegalArgumentException("Slot out of range.");
+            }
+            UxItem next = item == null ? UxItem.EMPTY : item;
+            List<UxItem> items = menu.items();
+            UxItem current = slot < items.size() ? items.get(slot) : UxItem.EMPTY;
+            if (current.equals(next)) {
+                return;
+            }
+            List<UxItem> copy = new ArrayList<>(items);
+            copy.set(slot, next);
+            menu.setItems(copy);
+            owner.adapter.packets().sendSetSlot(
+                    player, session.windowId(), owner.protocolState(player, session), slot, next);
+        }
+    }
+
+    private static final class UpdateItemsTask implements Runnable {
+        private final MenuService owner;
+        private final Player player;
+        private final Map<Integer, UxItem> newItems;
+
+        private UpdateItemsTask(MenuService owner, Player player, Map<Integer, UxItem> newItems) {
+            this.owner = owner;
+            this.player = player;
+            this.newItems = newItems;
+        }
+
+        @Override
+        public void run() {
+            MenuSession session = owner.sessions.get(id(player));
+            if (session == null) {
+                return;
+            }
+            Menu menu = session.menu();
+            for (Integer slot : newItems.keySet()) {
+                if (slot == null || slot < 0 || slot > menu.type().lastIndex()) {
+                    throw new IllegalArgumentException("Slot out of range.");
+                }
+            }
+            List<UxItem> items = new ArrayList<>(menu.items());
+            Map<Integer, UxItem> dirty = new HashMap<>();
+            for (Map.Entry<Integer, UxItem> entry : newItems.entrySet()) {
+                UxItem next = entry.getValue() == null ? UxItem.EMPTY : entry.getValue();
+                UxItem current = entry.getKey() < items.size() ? items.get(entry.getKey()) : UxItem.EMPTY;
+                if (current.equals(next)) {
+                    continue;
+                }
+                items.set(entry.getKey(), next);
+                dirty.put(entry.getKey(), next);
+            }
+            if (dirty.isEmpty()) {
+                return;
+            }
+            menu.setItems(items);
+            int stateId = owner.protocolState(player, session);
+            for (Map.Entry<Integer, UxItem> entry : dirty.entrySet()) {
+                owner.adapter.packets().sendSetSlot(
+                        player,
+                        session.windowId(),
+                        stateId,
+                        entry.getKey(),
+                        entry.getValue()
+                );
+            }
+        }
+    }
+
+    private static final class UpdateButtonTask implements Runnable {
+        private final MenuService owner;
+        private final Player player;
+        private final Button newButton;
+        private final int slot;
+
+        private UpdateButtonTask(MenuService owner, Player player, Button newButton, int slot) {
+            this.owner = owner;
+            this.player = player;
+            this.newButton = newButton;
+            this.slot = slot;
+        }
+
+        @Override
+        public void run() {
+            MenuSession session = owner.sessions.get(id(player));
+            if (session == null) {
+                return;
+            }
+            Menu menu = session.menu();
+            if (slot < 0 || slot > menu.type().lastIndex()) {
+                throw new IllegalArgumentException("Slot out of range.");
+            }
+            menu.buttons().put(slot, newButton);
+            UxItem next = newButton.item();
+            List<UxItem> items = menu.items();
+            UxItem current = slot < items.size() ? items.get(slot) : UxItem.EMPTY;
+            if (current.equals(next)) {
+                return;
+            }
+            List<UxItem> copy = new ArrayList<>(items);
+            copy.set(slot, next);
+            menu.setItems(copy);
+            owner.adapter.packets().sendSetSlot(
+                    player, session.windowId(), owner.protocolState(player, session), slot, next);
+        }
+    }
+
+    private static final class UpdateButtonsTask implements Runnable {
+        private final MenuService owner;
+        private final Player player;
+        private final Map<Integer, Button> newButtons;
+
+        private UpdateButtonsTask(MenuService owner, Player player, Map<Integer, Button> newButtons) {
+            this.owner = owner;
+            this.player = player;
+            this.newButtons = newButtons;
+        }
+
+        @Override
+        public void run() {
+            MenuSession session = owner.sessions.get(id(player));
+            if (session == null) {
+                return;
+            }
+            Menu menu = session.menu();
+            for (Integer slot : newButtons.keySet()) {
+                if (slot == null || slot < 0 || slot > menu.type().lastIndex()) {
+                    throw new IllegalArgumentException("Slot out of range.");
+                }
+            }
+            menu.buttons().clear();
+            menu.buttons().putAll(newButtons);
+            List<UxItem> items = new ArrayList<>(menu.type().size());
+            List<UxItem> previous = menu.items();
+            Map<Integer, UxItem> dirty = new HashMap<>();
+            for (int index = 0; index < menu.type().size(); index++) {
+                Button button = newButtons.get(index);
+                UxItem next = button != null ? button.item() : UxItem.EMPTY;
+                items.add(next);
+                UxItem current = index < previous.size() ? previous.get(index) : UxItem.EMPTY;
+                if (!current.equals(next)) {
+                    dirty.put(index, next);
+                }
+            }
+            menu.setItems(items);
+            if (dirty.isEmpty()) {
+                return;
+            }
+            int stateId = owner.protocolState(player, session);
+            int windowId = session.windowId();
+            for (Map.Entry<Integer, UxItem> entry : dirty.entrySet()) {
+                owner.adapter.packets().sendSetSlot(
+                        player, windowId, stateId, entry.getKey(), entry.getValue());
+            }
+        }
+    }
+
+    private static final class UpdateButtonsBySlotTask implements Runnable {
+        private final MenuService owner;
+        private final Player player;
+        private final Map<Integer, Button> patches;
+
+        private UpdateButtonsBySlotTask(MenuService owner, Player player, Map<Integer, Button> patches) {
+            this.owner = owner;
+            this.player = player;
+            this.patches = patches;
+        }
+
+        @Override
+        public void run() {
+            MenuSession session = owner.sessions.get(id(player));
+            if (session == null || patches == null || patches.isEmpty()) {
+                return;
+            }
+            Menu menu = session.menu();
+            for (Integer slot : patches.keySet()) {
+                if (slot == null || slot < 0 || slot > menu.type().lastIndex()) {
+                    throw new IllegalArgumentException("Slot out of range.");
+                }
+            }
+            List<UxItem> items = new ArrayList<>(menu.items());
+            Map<Integer, UxItem> dirty = new HashMap<>();
+            for (Map.Entry<Integer, Button> entry : patches.entrySet()) {
+                int slot = entry.getKey();
+                Button button = entry.getValue();
+                if (button == null) {
+                    menu.buttons().remove(slot);
+                    UxItem current = slot < items.size() ? items.get(slot) : UxItem.EMPTY;
+                    if (!current.isEmpty()) {
+                        items.set(slot, UxItem.EMPTY);
+                        dirty.put(slot, UxItem.EMPTY);
+                    }
+                    continue;
+                }
+                menu.buttons().put(slot, button);
+                UxItem next = button.item();
+                UxItem current = slot < items.size() ? items.get(slot) : UxItem.EMPTY;
+                if (!current.equals(next)) {
+                    items.set(slot, next);
+                    dirty.put(slot, next);
+                }
+            }
+            menu.setItems(items);
+            if (dirty.isEmpty()) {
+                return;
+            }
+            int stateId = owner.protocolState(player, session);
+            for (Map.Entry<Integer, UxItem> entry : dirty.entrySet()) {
+                owner.adapter.packets().sendSetSlot(
+                        player, session.windowId(), stateId, entry.getKey(), entry.getValue());
+            }
+        }
+    }
+
+    private static final class PatchSlotAtomicTask implements Runnable {
+        private final MenuService owner;
+        private final Player player;
+        private final int slot;
+        private final UxItem item;
+        private final Consumer<IButtonBuilder> buttonBuilder;
+        private final SlotKind slotKind;
+
+        private PatchSlotAtomicTask(
+                MenuService owner,
+                Player player,
+                int slot,
+                UxItem item,
+                Consumer<IButtonBuilder> buttonBuilder,
+                SlotKind slotKind
+        ) {
+            this.owner = owner;
+            this.player = player;
+            this.slot = slot;
+            this.item = item;
+            this.buttonBuilder = buttonBuilder;
+            this.slotKind = slotKind;
+        }
+
+        @Override
+        public void run() {
+            MenuSession session = owner.sessions.get(id(player));
+            if (session == null) {
+                return;
+            }
+            Menu menu = session.menu();
+            if (slot < 0 || slot > menu.type().lastIndex()) {
+                throw new IllegalArgumentException("Slot out of range.");
+            }
+            Button button;
+            if (buttonBuilder == null) {
+                button = new Button(item == null ? UxItem.EMPTY : item, null, new CooldownComponent(), slotKind);
+            } else {
+                ButtonBuilder builder = new ButtonBuilder();
+                buttonBuilder.accept(builder);
+                button = builder.kind(slotKind == null ? SlotKind.ACTION : slotKind)
+                        .item(item == null ? UxItem.EMPTY : item)
+                        .build();
+            }
+            menu.buttons().put(slot, button);
+            List<UxItem> copy = new ArrayList<>(menu.items());
+            UxItem next = button.item();
+            UxItem current = slot < copy.size() ? copy.get(slot) : UxItem.EMPTY;
+            if (current.equals(next)) {
+                return;
+            }
+            copy.set(slot, next);
+            menu.setItems(copy);
+            owner.adapter.packets().sendSetSlot(
+                    player, session.windowId(), owner.protocolState(player, session), slot, next);
+        }
     }
 }

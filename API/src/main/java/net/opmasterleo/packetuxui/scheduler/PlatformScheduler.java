@@ -302,7 +302,7 @@ public final class PlatformScheduler {
     public void runForEachOnlinePlayer(Consumer<Player> task) {
         Objects.requireNonNull(task, "task");
         for (Player player : Bukkit.getOnlinePlayers()) {
-            runForPlayer(player, () -> task.accept(player));
+            runForPlayer(player, TaskAdapters.acceptPlayer(player, task));
         }
     }
 
@@ -311,8 +311,8 @@ public final class PlatformScheduler {
         for (Player player : Bukkit.getOnlinePlayers()) {
             runForPlayer(
                     player,
-                    () -> task.accept(player),
-                    retired == null ? null : () -> retired.accept(player)
+                    TaskAdapters.acceptPlayer(player, task),
+                    retired == null ? null : TaskAdapters.acceptPlayer(player, retired)
             );
         }
     }

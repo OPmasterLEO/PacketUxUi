@@ -30,14 +30,25 @@ public final class BukkitKeyMaps {
         if (cached != null) {
             return cached;
         }
-        return MATERIALS.computeIfAbsent(key, BukkitKeyMaps::resolveMaterial);
+        Material resolved = resolveMaterial(key);
+        Material raced = MATERIALS.putIfAbsent(key, resolved);
+        return raced != null ? raced : resolved;
     }
 
     public static Enchantment enchant(String key) {
         if (key == null || key.isEmpty()) {
             return null;
         }
-        return ENCHANTS.computeIfAbsent(key, BukkitKeyMaps::resolveEnchant);
+        Enchantment cached = ENCHANTS.get(key);
+        if (cached != null) {
+            return cached;
+        }
+        Enchantment resolved = resolveEnchant(key);
+        if (resolved == null) {
+            return null;
+        }
+        Enchantment raced = ENCHANTS.putIfAbsent(key, resolved);
+        return raced != null ? raced : resolved;
     }
 
     /** Eagerly map keys that menus use often (pane fillers, buttons, etc.). */

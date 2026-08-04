@@ -45,7 +45,7 @@ public final class PaperEntityTasks implements EntityTasks {
             return TaskHandle.NOOP;
         }
         return PaperTaskHandles.of(
-                entity.getScheduler().run(plugin, st -> task.run(), retired)
+                entity.getScheduler().run(plugin, PaperConsumers.run(task), retired)
         );
     }
 
@@ -66,11 +66,11 @@ public final class PaperEntityTasks implements EntityTasks {
             }
             // Zero delay off-region: next entity tick with a handle (Folia EntityScheduler.run).
             return PaperTaskHandles.of(
-                    entity.getScheduler().run(plugin, st -> task.run(), retired)
+                    entity.getScheduler().run(plugin, PaperConsumers.run(task), retired)
             );
         }
         return PaperTaskHandles.of(
-                entity.getScheduler().runDelayed(plugin, st -> task.run(), retired, delay)
+                entity.getScheduler().runDelayed(plugin, PaperConsumers.run(task), retired, delay)
         );
     }
 
@@ -91,7 +91,7 @@ public final class PaperEntityTasks implements EntityTasks {
         }
         return PaperTaskHandles.of(entity.getScheduler().runAtFixedRate(
                 plugin,
-                st -> task.accept(entity),
+                PaperConsumers.accept(entity, task),
                 retired,
                 ServerPlatform.periodTicks(initialDelayTicks),
                 ServerPlatform.periodTicks(periodTicks)

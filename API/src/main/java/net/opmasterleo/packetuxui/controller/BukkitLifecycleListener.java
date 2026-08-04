@@ -38,7 +38,7 @@ public class BukkitLifecycleListener implements Listener {
     @EventHandler
     public void onJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
-        scheduler.runForPlayer(player, () -> pipelineManager.inject(player));
+        scheduler.runForPlayer(player, new InjectPipelineTask(pipelineManager, player));
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -81,6 +81,21 @@ public class BukkitLifecycleListener implements Listener {
         try {
             service.onCloseMenu(player, reason);
         } catch (Throwable ignored) {
+        }
+    }
+
+    private static final class InjectPipelineTask implements Runnable {
+        private final PipelineManager pipelineManager;
+        private final Player player;
+
+        private InjectPipelineTask(PipelineManager pipelineManager, Player player) {
+            this.pipelineManager = pipelineManager;
+            this.player = player;
+        }
+
+        @Override
+        public void run() {
+            pipelineManager.inject(player);
         }
     }
 }

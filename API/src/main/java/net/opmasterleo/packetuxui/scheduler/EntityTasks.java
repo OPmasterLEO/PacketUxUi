@@ -47,19 +47,11 @@ public interface EntityTasks {
     }
 
     default TaskHandle runLaterForPlayer(Player player, Consumer<Player> task, long delayTicks) {
-        return runLater(player, () -> {
-            if (player != null && player.isOnline()) {
-                task.accept(player);
-            }
-        }, null, delayTicks);
+        return runLater(player, TaskAdapters.forPlayerOnline(player, task), null, delayTicks);
     }
 
     default TaskHandle runNextTickForPlayer(Player player, Consumer<Player> task) {
-        return runNextTick(player, () -> {
-            if (player != null && player.isOnline()) {
-                task.accept(player);
-            }
-        }, null);
+        return runNextTick(player, TaskAdapters.forPlayerOnline(player, task), null);
     }
 
     default TaskHandle runRepeatingForPlayer(
@@ -68,11 +60,7 @@ public interface EntityTasks {
             long initialDelayTicks,
             long periodTicks
     ) {
-        return runRepeating(player, entity -> {
-            if (entity instanceof Player online && online.isOnline()) {
-                task.accept(online);
-            }
-        }, null, initialDelayTicks, periodTicks);
+        return runRepeating(player, TaskAdapters.forPlayerEntity(task), null, initialDelayTicks, periodTicks);
     }
 
     static EntityTasks bukkit(JavaPlugin plugin) {

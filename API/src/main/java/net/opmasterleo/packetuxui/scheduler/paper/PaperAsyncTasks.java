@@ -20,7 +20,7 @@ public final class PaperAsyncTasks implements AsyncTasks {
     @Override
     public void run(Runnable task) {
         Objects.requireNonNull(task, "task");
-        Bukkit.getAsyncScheduler().runNow(plugin, st -> task.run());
+        Bukkit.getAsyncScheduler().runNow(plugin, PaperConsumers.run(task));
     }
 
     @Override
@@ -28,7 +28,7 @@ public final class PaperAsyncTasks implements AsyncTasks {
         Objects.requireNonNull(task, "task");
         Objects.requireNonNull(unit, "unit");
         return PaperTaskHandles.of(
-                Bukkit.getAsyncScheduler().runDelayed(plugin, st -> task.run(), Math.max(1L, delay), unit)
+                Bukkit.getAsyncScheduler().runDelayed(plugin, PaperConsumers.run(task), Math.max(1L, delay), unit)
         );
     }
 
@@ -38,7 +38,7 @@ public final class PaperAsyncTasks implements AsyncTasks {
         Objects.requireNonNull(unit, "unit");
         return PaperTaskHandles.of(Bukkit.getAsyncScheduler().runAtFixedRate(
                 plugin,
-                st -> task.run(),
+                PaperConsumers.run(task),
                 Math.max(1L, initialDelay),
                 Math.max(1L, period),
                 unit

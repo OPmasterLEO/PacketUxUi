@@ -28,10 +28,27 @@ import net.opmasterleo.packetuxui.nms.map.ConversionCache;
  */
 public final class SharedItemBridge implements ItemBridge {
 
-    private final ConversionCache<UxItem, ItemStack> nmsCache =
-            new ConversionCache<>(1024, this::buildMinecraft);
-    private final ConversionCache<UxItem, org.bukkit.inventory.ItemStack> bukkitCache =
-            new ConversionCache<>(1024, this::buildBukkit);
+    private final ConversionCache<UxItem, ItemStack> nmsCache;
+    private final ConversionCache<UxItem, org.bukkit.inventory.ItemStack> bukkitCache;
+
+    public SharedItemBridge() {
+        this.nmsCache = new ConversionCache<>(1024, new ToMinecraft());
+        this.bukkitCache = new ConversionCache<>(1024, new ToBukkit());
+    }
+
+    private final class ToMinecraft implements java.util.function.Function<UxItem, ItemStack> {
+        @Override
+        public ItemStack apply(UxItem item) {
+            return buildMinecraft(item);
+        }
+    }
+
+    private final class ToBukkit implements java.util.function.Function<UxItem, org.bukkit.inventory.ItemStack> {
+        @Override
+        public org.bukkit.inventory.ItemStack apply(UxItem item) {
+            return buildBukkit(item);
+        }
+    }
 
     @Override
     public Object toNms(UxItem item) {

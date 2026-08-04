@@ -37,23 +37,36 @@ import net.opmasterleo.packetuxui.nms.map.OrdinalMaps;
 
 public final class SharedMenuPacketBridge implements MenuPacketBridge {
 
-    private static final HashedPatchMap.HashGenerator HASH =
-            (TypedDataComponent<?> component) -> component.hashCode();
+    private static final HashedPatchMap.HashGenerator HASH = new ComponentHash();
 
     private static final ClickType[] TO_CLICK;
 
     static {
         TO_CLICK = new ClickType[WindowClickType.values().length];
-        OrdinalMaps.fill(WindowClickType.values(), TO_CLICK, type -> switch (type) {
-            case PICKUP -> ClickType.PICKUP;
-            case QUICK_MOVE -> ClickType.QUICK_MOVE;
-            case SWAP -> ClickType.SWAP;
-            case CLONE -> ClickType.CLONE;
-            case THROW -> ClickType.THROW;
-            case QUICK_CRAFT -> ClickType.QUICK_CRAFT;
-            case PICKUP_ALL -> ClickType.PICKUP_ALL;
-            default -> ClickType.PICKUP;
-        });
+        OrdinalMaps.fill(WindowClickType.values(), TO_CLICK, new ToClickMapper());
+    }
+
+    private static final class ComponentHash implements HashedPatchMap.HashGenerator {
+        @Override
+        public Integer apply(TypedDataComponent<?> component) {
+            return component.hashCode();
+        }
+    }
+
+    private static final class ToClickMapper implements OrdinalMaps.EnumMapper<WindowClickType, ClickType> {
+        @Override
+        public ClickType map(WindowClickType type) {
+            return switch (type) {
+                case PICKUP -> ClickType.PICKUP;
+                case QUICK_MOVE -> ClickType.QUICK_MOVE;
+                case SWAP -> ClickType.SWAP;
+                case CLONE -> ClickType.CLONE;
+                case THROW -> ClickType.THROW;
+                case QUICK_CRAFT -> ClickType.QUICK_CRAFT;
+                case PICKUP_ALL -> ClickType.PICKUP_ALL;
+                default -> ClickType.PICKUP;
+            };
+        }
     }
 
     private final SharedItemBridge items;
