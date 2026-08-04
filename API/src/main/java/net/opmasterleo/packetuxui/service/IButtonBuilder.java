@@ -28,5 +28,8 @@ public interface IButtonBuilder {
 
     IButtonBuilder editable();
 
+    /** Take from GUI only — cannot place into this slot. */
+    IButtonBuilder extractable();
+
     Button build();
 }

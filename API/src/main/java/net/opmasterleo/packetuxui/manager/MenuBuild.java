@@ -112,6 +112,11 @@ public final class MenuBuild {
         return item(slot, stack == null ? new ItemStack(org.bukkit.Material.AIR) : stack, (Consumer<Player>) null, SlotKind.EDITABLE);
     }
 
+    /** Take-only top slot (gui→inv); rejects place / shift-from-inv. */
+    public MenuBuild extractableSlot(int slot, ItemStack stack) {
+        return item(slot, stack == null ? new ItemStack(org.bukkit.Material.AIR) : stack, (Consumer<Player>) null, SlotKind.EXTRACTABLE);
+    }
+
     public MenuBuild decorative(int slot, ItemStack stack) {
         return item(slot, stack, (Consumer<Player>) null, SlotKind.DECORATIVE);
     }

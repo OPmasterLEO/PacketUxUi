@@ -115,4 +115,17 @@ public final class MenuSession {
     public boolean isEditableSlot(int slot) {
         return slotKind(slot) == SlotKind.EDITABLE;
     }
+
+    public boolean isExtractableSlot(int slot) {
+        return slotKind(slot) == SlotKind.EXTRACTABLE;
+    }
+
+    public boolean allowsTake(int slot) {
+        SlotKind kind = slotKind(slot);
+        return kind == SlotKind.EDITABLE || kind == SlotKind.EXTRACTABLE;
+    }
+
+    public boolean allowsPlace(int slot) {
+        return slotKind(slot) == SlotKind.EDITABLE;
+    }
 }

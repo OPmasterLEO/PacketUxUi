@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.12.6
+
+### Instant refresh + extractable slots
+
+- Prefer `present` / `patchSlots` / `refresh` for same type+mode (no close→open, cursor stays)
+- `reopen` only when size/type/mode change (flicker is expected)
+- `SlotKind.EXTRACTABLE` / `extractableSlot` — gui→inv only (spawner-style)
+- `editableSlot` — inv↔gui both ways (sell-style)
+- Shift top→player inv; place top-cursor into player inv slots
+
+### Artifact
+`net.opmasterleo:packetuxui:0.12.6`
+
 ## 0.12.5
 
 ### Own runtime mapping caches

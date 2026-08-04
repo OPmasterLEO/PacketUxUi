@@ -96,6 +96,11 @@ public final class ButtonBuilder implements IButtonBuilder {
     }
 
     @Override
+    public IButtonBuilder extractable() {
+        return kind(SlotKind.EXTRACTABLE);
+    }
+
+    @Override
     public Button build() {
         return new Button(item, click, cooldown, kind);
     }

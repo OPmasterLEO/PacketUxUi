@@ -745,16 +745,7 @@ public final class MenuService {
                 return;
             }
             if (taking && type == WindowClickType.QUICK_MOVE) {
-                VirtualClickSimulator.Result result = VirtualClickSimulator.simulate(
-                        menu.items(),
-                        cursor,
-                        packet.slot(),
-                        packet.button(),
-                        type,
-                        s -> s == packet.slot() || session.isEditableSlot(s)
-                );
-                emitDecision(player, packet, kind, false, true, "takeable_shift_simulate");
-                applyEditableResult(player, session, result, packet.stateId());
+                handleShiftFromTopToBottom(player, session, packet);
                 return;
             }
             Button button = menu.buttons().get(packet.slot());
@@ -768,17 +759,123 @@ public final class MenuService {
             return;
         }
 
+        if (kind == SlotKind.EXTRACTABLE) {
+            handleExtractableTopClick(player, session, packet, type);
+            return;
+        }
+
+        // EDITABLE — both directions
+        if (type == WindowClickType.QUICK_MOVE) {
+            handleShiftFromTopToBottom(player, session, packet);
+            return;
+        }
+
         UxItem cursor = carriedItem.getOrDefault(id(player), UxItem.EMPTY);
+        if (!cursor.isEmpty() && !session.allowsPlace(packet.slot())) {
+            rejectEditable(player, session, packet);
+            return;
+        }
         VirtualClickSimulator.Result result = VirtualClickSimulator.simulate(
                 menu.items(),
                 cursor,
                 packet.slot(),
                 packet.button(),
                 type,
-                session::isEditableSlot
+                session::allowsPlace
         );
+        // Taking from editable uses allowsTake; simulate placeable-only would block empty-cursor pickup.
+        if (cursor.isEmpty()) {
+            result = VirtualClickSimulator.simulate(
+                    menu.items(),
+                    cursor,
+                    packet.slot(),
+                    packet.button(),
+                    type,
+                    session::allowsTake
+            );
+        }
         emitDecision(player, packet, kind, false, false, "editable_simulate");
         applyEditableResult(player, session, result, packet.stateId());
+    }
+
+    private void handleExtractableTopClick(
+            Player player,
+            MenuSession session,
+            ClickPacket packet,
+            WindowClickType type
+    ) {
+        UxItem cursor = carriedItem.getOrDefault(id(player), UxItem.EMPTY);
+        if (!cursor.isEmpty()) {
+            // Cannot place into extractable slots.
+            emitDecision(player, packet, SlotKind.EXTRACTABLE, false, false, "extractable_reject_place");
+            rejectEditable(player, session, packet);
+            return;
+        }
+        if (type == WindowClickType.QUICK_MOVE) {
+            handleShiftFromTopToBottom(player, session, packet);
+            return;
+        }
+        if (type != WindowClickType.PICKUP) {
+            rejectEditable(player, session, packet);
+            return;
+        }
+        VirtualClickSimulator.Result result = VirtualClickSimulator.simulate(
+                session.menu().items(),
+                cursor,
+                packet.slot(),
+                packet.button(),
+                type,
+                session::allowsTake
+        );
+        emitDecision(player, packet, SlotKind.EXTRACTABLE, false, false, "extractable_take");
+        applyEditableResult(player, session, result, packet.stateId());
+    }
+
+    /** Shift-click top → player inventory (gui→inv). */
+    private void handleShiftFromTopToBottom(Player player, MenuSession session, ClickPacket packet) {
+        if (!session.allowsTake(packet.slot())) {
+            rejectEditable(player, session, packet);
+            return;
+        }
+        Menu menu = session.menu();
+        List<UxItem> top = new java.util.ArrayList<>(menu.items());
+        while (top.size() < menu.type().protocolTopSize()) {
+            top.add(UxItem.EMPTY);
+        }
+        int slot = packet.slot();
+        UxItem moving = slot < top.size() ? top.get(slot) : UxItem.EMPTY;
+        if (moving == null || moving.isEmpty()) {
+            rejectEditable(player, session, packet);
+            return;
+        }
+        top.set(slot, UxItem.EMPTY);
+        List<UxItem> bottom = snapshotBottom(player);
+        VirtualClickSimulator.Result inserted = VirtualClickSimulator.shiftInto(bottom, moving, s -> true);
+        menu.setItems(top);
+        syncButtonsFromItems(menu, top, Set.of(slot));
+        writeBottom(player, inserted.items());
+        int windowId = session.windowId();
+        int stateId = protocolState(player, session, packet.stateId());
+        int topSize = menu.type().protocolTopSize();
+        adapter.packets().sendSetSlot(player, windowId, stateId, slot, UxItem.EMPTY);
+        for (Integer dirty : inserted.dirty()) {
+            if (dirty == null || dirty < 0 || dirty >= inserted.items().size()) {
+                continue;
+            }
+            adapter.packets().sendSetSlot(
+                    player, windowId, stateId, topSize + dirty, inserted.items().get(dirty));
+        }
+        UxItem leftover = inserted.cursor();
+        if (leftover != null && !leftover.isEmpty()) {
+            // No room in inv — put remainder back on top slot.
+            top.set(slot, leftover);
+            menu.setItems(top);
+            syncButtonsFromItems(menu, top, Set.of(slot));
+            adapter.packets().sendSetSlot(player, windowId, stateId, slot, leftover);
+        }
+        carriedItem.remove(id(player));
+        adapter.packets().sendCursorItem(player, UxItem.EMPTY);
+        emitDecision(player, packet, session.slotKind(slot), false, false, "shift_top_to_bottom");
     }
 
     private void handleShiftFromBottom(Player player, MenuSession session, ClickPacket packet) {
@@ -798,7 +895,7 @@ public final class MenuService {
         VirtualClickSimulator.Result inserted = VirtualClickSimulator.shiftInto(
                 menu.items(),
                 moving,
-                session::isEditableSlot
+                session::allowsPlace
         );
         UxItem leftover = inserted.cursor();
         menu.setItems(inserted.items());
@@ -844,10 +941,7 @@ public final class MenuService {
 
     private void handleEditableBottomPickup(Player player, MenuSession session, ClickPacket packet) {
         UUID pid = id(player);
-        if (!carriedItem.getOrDefault(pid, UxItem.EMPTY).isEmpty()) {
-            settleEditableBottom(player, session, packet);
-            return;
-        }
+        UxItem topCursor = carriedItem.getOrDefault(pid, UxItem.EMPTY);
         int topSize = session.menu().type().protocolTopSize();
         int maxSlot = topSize + 36;
         int slot = packet.slot();
@@ -857,6 +951,36 @@ public final class MenuService {
         }
         int bottomIndex = slot - topSize;
         List<UxItem> bottom = snapshotBottom(player);
+
+        // Place virtual top-cursor into player inv (gui→inv click).
+        if (!topCursor.isEmpty()) {
+            VirtualClickSimulator.Result placed = VirtualClickSimulator.simulate(
+                    bottom,
+                    topCursor,
+                    bottomIndex,
+                    packet.button(),
+                    WindowClickType.PICKUP,
+                    s -> true
+            );
+            writeBottom(player, placed.items());
+            if (placed.cursor().isEmpty()) {
+                carriedItem.remove(pid);
+            } else {
+                carriedItem.put(pid, placed.cursor());
+            }
+            int windowId = session.windowId();
+            int stateId = protocolState(player, session, packet.stateId());
+            for (Integer dirty : placed.dirty()) {
+                if (dirty == null || dirty < 0 || dirty >= placed.items().size()) {
+                    continue;
+                }
+                adapter.packets().sendSetSlot(
+                        player, windowId, stateId, topSize + dirty, placed.items().get(dirty));
+            }
+            adapter.packets().sendCursorItem(player, placed.cursor());
+            return;
+        }
+
         EditableBottomMoves.Held previous = bottomHeld.get(pid);
         EditableBottomMoves.Outcome outcome = EditableBottomMoves.applyPickup(
                 bottom,
@@ -1003,7 +1127,7 @@ public final class MenuService {
             if (slot == null) {
                 continue;
             }
-            if (slot < 0 || slot > menu.type().protocolLastIndex() || !session.isEditableSlot(slot)) {
+            if (slot < 0 || slot > menu.type().protocolLastIndex() || !session.allowsPlace(slot)) {
                 allEditable = false;
                 break;
             }
@@ -1025,7 +1149,7 @@ public final class MenuService {
         }
         if (!allEditable && unique.size() == 1) {
             Integer only = unique.iterator().next();
-            if (only == null || !session.isEditableSlot(only)) {
+            if (only == null || !session.allowsPlace(only)) {
                 rejectEditable(player, session, packet);
                 return;
             }
@@ -1036,7 +1160,7 @@ public final class MenuService {
                 cursor,
                 slots,
                 packet.button(),
-                session::isEditableSlot
+                session::allowsPlace
         );
         applyEditableResult(player, session, result, packet.stateId());
     }

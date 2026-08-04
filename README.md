@@ -19,7 +19,7 @@ repositories {
 }
 
 dependencies {
-    implementation("net.opmasterleo:packetuxui:0.12.5")
+    implementation("net.opmasterleo:packetuxui:0.12.6")
 }
 ```
 
@@ -52,8 +52,12 @@ gui.present(player, PacketMenus.build()
         .action(22, confirm, p -> save(p))
         .onClose((p, snap) -> reclaim(snap)));
 
-// Same type+mode → differential update; size/type change → reopen
+// Same type+mode → differential update (no flicker / cursor reset)
 gui.present(player, sameTypeRefresh);
+gui.patchSlots(player, Map.of(11, newItem)); // single/multi slot in place
+gui.refresh(player); // full SetContent, same window
+
+// Size/type/mode change only → reopen (brief close is unavoidable)
 gui.reopen(player, smallerMenu);
 
 // Close then SignGUI / chat / anything else
@@ -71,7 +75,28 @@ gui.closeThen(player, () -> signGui.open(player));
 | `patchSlots` / `patchSlotAtomic` / `refresh` / `updateTitle` | In-place mutators                                 |
 
 
-Virtual window ids use vanilla `nextContainerCounter()` (**1–100**). Pipeline injects after Via/decoder. Modern 21.5+/26.x bind a real `ChestMenu` (9xN only) and own `stateId` via `incrementStateId`; top stacks are mirrored into the bound container.
+### Editable policies
+
+| Goal | Build |
+|---|---|
+| Sell / deposit both ways (inv↔gui) | `.editable()` + `.editableSlot(slot, stack)` |
+| Spawner loot take-only (gui→inv) | `.editable()` + `.extractableSlot(slot, stack)` |
+| Buttons + fillers | `.action` / `.decorative` as usual |
+
+```java
+// Sell — place into GUI and take out
+gui.present(p, PacketMenus.build().title("Sell").rows(6).editable()
+        .editableSlot(10, ItemStack.empty())
+        .editableSlot(11, ItemStack.empty())
+        .action(49, confirm, this::sell));
+
+// Spawner — only take from GUI into inv (shift or pickup→click inv)
+gui.present(p, PacketMenus.build().title("Spawner").rows(3).editable()
+        .extractableSlot(13, drop)
+        .action(22, closeBtn, Player::closeInventory));
+```
+
+Virtual window ids use vanilla `nextContainerCounter()` (**1–100**). Pipeline injects before `packet_handler`. Modern 21.5+/26.x bind a real `ChestMenu` (9xN only) and own `stateId` via `incrementStateId`; top stacks are mirrored into the bound container.
 
 ### Protocol
 
