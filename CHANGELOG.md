@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.13.8
+
+### Chore: dedupe nms-shared sources
+
+Identical shared files no longer live as 1:1 copies in every era tree. `prepareSharedSources` copies ordered base layers + era overlays (later wins). Bases: `nms-shared-legacy-base`, `nms-shared-mid-base`, `nms-shared-modern-common`, `nms-shared-modern21-base`, `nms-shared-modern-item`, `nms-shared-modern21_5-item`. Era dirs keep only divergent Menu/Classifier/Pipeline/Item files.
+
+### Artifact
+`net.opmasterleo:packetuxui:0.13.8`
+
 ## 0.13.7
 
 ### Full item NBT / components preserved
