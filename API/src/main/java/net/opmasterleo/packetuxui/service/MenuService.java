@@ -217,17 +217,80 @@ public final class MenuService {
     }
 
     /**
-     * Swap menu type/size (e.g. 27↔54) while keeping the same window id and skipping
-     * {@code CloseWindow}. Client gets {@code OpenScreen} + contents only — no inventory flash.
+     * Swap menu type/size (hopper↔chest, 27↔54, …) without CloseWindow or session teardown.
+     * Same window id; OpenScreen + SetContent only. Cursor preserved when staying EDITABLE.
+     * No {@code onClose} / GuiCloseEvent — refresh-like, not a reopen.
      */
     private void replaceMenuInPlace(Player player, MenuSession existing, Menu menu) {
-        // Soft teardown: keep window id, skip CloseWindow, skip onClose refunds (refresh-like).
-        closeCurrent(player, false, true, GuiCloseReason.REPLACE, false, false);
-        installOpen(player, menu);
+        Menu copy = menu.copy();
+        int windowId = existing.windowId();
+        boolean stayEditable = existing.menu().mode() == MenuMode.EDITABLE
+                && copy.mode() == MenuMode.EDITABLE;
+        UxItem cursor = stayEditable ? activeCursor(player) : UxItem.EMPTY;
+        if (!stayEditable) {
+            carriedItem.remove(id(player));
+            clearBottomHeld(player);
+        }
+
+        existing.replaceMenu(copy);
+        existing.setPhase(SessionPhase.OPEN);
+        clearAccumulatedDrag(player);
+        nettyRoCorrectedForState.remove(id(player));
+
+        adapter.packets().unbindServerContainer(player);
+        adapter.items().preload(copy.items());
+
+        boolean bound = false;
+        if (copy.type().supportsChestBind()) {
+            adapter.packets().bindServerContainer(
+                    player,
+                    windowId,
+                    copy.type().id(),
+                    Math.max(1, copy.type().protocolTopSize() / 9)
+            );
+            adapter.packets().mirrorTopSlots(player, copy.items());
+            bound = adapter.packets().ownsBoundContainer(player);
+        }
+
+        int stateId = protocolState(player, existing, 0);
+        // Protocol requires OpenScreen to change container type — no CloseWindow before it.
+        adapter.packets().sendOpenWindow(player, windowId, copy.type().id(), copy.name());
+
+        List<UxItem> bottom = bottomCache.get(id(player));
+        if (bottom == null || bottom.size() != copy.type().bottomSlotCount()) {
+            bottom = snapshotBottom(player);
+            if (copy.type().bottomSlotCount() > 0) {
+                bottomCache.put(id(player), bottom);
+            }
+        }
+        if (bound && adapter.packets().sendBoundAuthority(player, stateId, !stayEditable)) {
+            if (stayEditable && cursor != null && !cursor.isEmpty()) {
+                adapter.packets().sendCursorItem(player, cursor);
+            }
+        } else {
+            List<UxItem> contents = assembleContents(copy, bottom);
+            adapter.packets().sendWindowItems(
+                    player,
+                    windowId,
+                    stateId,
+                    contents,
+                    stayEditable ? cursor : null
+            );
+            if (!stayEditable) {
+                adapter.packets().sendCursorItem(player, UxItem.EMPTY);
+            } else if (cursor != null && !cursor.isEmpty()) {
+                adapter.packets().sendCursorItem(player, cursor);
+            }
+        }
+
+        ensurePipeline(player);
         if (debugLogging) {
-            debug(player, "REPLACE_IN_PLACE windowId=" + getWindowId(player)
-                    + " type=" + menu.type()
-                    + " mode=" + menu.mode());
+            debug(player, "TYPE_SWAP windowId=" + windowId
+                    + " type=" + copy.type()
+                    + " mode=" + copy.mode()
+                    + " stateId=" + stateId
+                    + " bound=" + bound
+                    + " cursorKept=" + stayEditable);
         }
     }
 
@@ -1881,7 +1944,7 @@ public final class MenuService {
                     owner.applyMenuDifferential(player, existing, menu);
                     return;
                 }
-                // Same mode, different type/size → OpenScreen in-place (no CloseWindow, no onClose).
+                // Same mode, different type/size → silent type swap (OpenScreen only, no teardown).
                 if (existing.menu().mode() == menu.mode()) {
                     owner.replaceMenuInPlace(player, existing, menu);
                     return;

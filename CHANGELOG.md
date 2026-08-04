@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.13.2
+
+### Silent type swap (no close/open feel)
+
+`present` with same mode but different inventory type (hopper↔chest, 27↔54, …) now:
+
+- Keeps the same window id and session (no teardown)
+- Sends only `OpenScreen` + contents (protocol requires OpenScreen to change layout)
+- Skips `CloseWindow`, `onClose`, GuiClose/Open churn, cursor wipe when staying EDITABLE
+- Debug: `TYPE_SWAP` instead of CLOSE+OPEN
+
+Hard close+open only on mode change or `reopen`.
+
+### Artifact
+`net.opmasterleo:packetuxui:0.13.2`
+
 ## 0.13.1
 
 ### Hopper / editable cursor place + close dup fix

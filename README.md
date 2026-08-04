@@ -19,7 +19,7 @@ repositories {
 }
 
 dependencies {
-    implementation("net.opmasterleo:packetuxui:0.13.1")
+    implementation("net.opmasterleo:packetuxui:0.13.2")
 }
 ```
 
@@ -77,7 +77,7 @@ gui.closeThen(player, () -> signGui.open(player));
 
 | API                                                          | Role                                                                         |
 | ------------------------------------------------------------ | ---------------------------------------------------------------------------- |
-| `present`                                                    | Diff if same type; **silent replace** if same mode different size; else open |
+| `present`                                                    | Diff if same type; **silent type swap** (OpenScreen only) if same mode different type; else open |
 | `reopen`                                                     | Force close+open                                                             |
 | `close`                                                      | Empty cursor, close packet, unbind, clear session                            |
 | `closeThen`                                                  | `close` + 1 tick, then runnable                                              |

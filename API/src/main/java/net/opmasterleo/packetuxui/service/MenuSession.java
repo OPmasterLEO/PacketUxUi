@@ -7,7 +7,7 @@ import net.opmasterleo.packetuxui.types.InventoryType;
 
 public final class MenuSession {
 
-    private final Menu menu;
+    private Menu menu;
     private final int windowId;
     /** Last stateId sent to the client (mirrors NMS when bound). */
     private int stateId;
@@ -26,6 +26,15 @@ public final class MenuSession {
 
     public Menu menu() {
         return menu;
+    }
+
+    /**
+     * Swap the open menu without changing window id / phase (type-change present).
+     */
+    public void replaceMenu(Menu menu) {
+        this.menu = Objects.requireNonNull(menu, "menu");
+        this.title = menu.name();
+        bumpGeneration();
     }
 
     public int windowId() {
