@@ -9,6 +9,7 @@ public final class MenuSession {
 
     private final Menu menu;
     private final int windowId;
+    /** Last stateId sent to the client (mirrors NMS when bound). */
     private int stateId;
     private SessionPhase phase = SessionPhase.OPEN;
     private int generation;
@@ -35,6 +36,15 @@ public final class MenuSession {
         return stateId;
     }
 
+    /** Record the last protocol stateId sent (from NMS bump or local counter). */
+    public void recordStateId(int stateId) {
+        this.stateId = stateId;
+    }
+
+    /**
+     * Local fallback counter for adapters without NMS {@code incrementStateId}.
+     * Prefer {@link net.opmasterleo.packetuxui.nms.MenuPacketBridge#bumpStateId} when available.
+     */
     public int nextStateId() {
         stateId = stateId == Integer.MAX_VALUE ? 1 : stateId + 1;
         return stateId;

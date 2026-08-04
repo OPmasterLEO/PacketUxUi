@@ -9,7 +9,6 @@ import net.opmasterleo.packetuxui.nms.NmsAdapter;
 import net.opmasterleo.packetuxui.nms.PacketClassifier;
 import net.opmasterleo.packetuxui.scheduler.PlatformScheduler;
 import net.opmasterleo.packetuxui.service.MenuService;
-import net.opmasterleo.packetuxui.service.WindowIdPool;
 
 public final class MenuInboundHandler extends ChannelInboundHandlerAdapter {
 
@@ -38,15 +37,15 @@ public final class MenuInboundHandler extends ChannelInboundHandlerAdapter {
             case CLOSE -> {
                 boolean hadVirtualMenu = menuService.hasOpen(player.getUniqueId());
                 int closeId = classifier.closeWindowId(msg);
-                boolean virtualClose = WindowIdPool.isVirtual(closeId);
+                boolean oursClose = menuService.isOursWindow(player.getUniqueId(), closeId);
                 if (menuService.debugLogging()) {
                     menuService.debug(player, "CLOSE closeId=" + closeId
                             + " hadVirtual=" + hadVirtualMenu
                             + " transition=" + menuService.isTransitionActive(player));
                 }
                 scheduler.runForPlayer(player, () -> menuService.onCloseMenu(player));
-                // Never leak virtual-window closes into vanilla / anticheat.
-                if (hadVirtualMenu || virtualClose || menuService.isTransitionActive(player)) {
+                // Never leak PacketUxUi window closes into vanilla / anticheat.
+                if (hadVirtualMenu || oursClose || menuService.isTransitionActive(player)) {
                     return;
                 }
                 ctx.fireChannelRead(msg);
@@ -58,7 +57,8 @@ public final class MenuInboundHandler extends ChannelInboundHandlerAdapter {
                     return;
                 }
                 if (menuService.shouldIgnore(windowId, player)) {
-                    if (WindowIdPool.isVirtual(windowId) || menuService.hasOpen(player.getUniqueId())) {
+                    if (menuService.isOursWindow(player.getUniqueId(), windowId)
+                            || menuService.hasOpen(player.getUniqueId())) {
                         return;
                     }
                     ctx.fireChannelRead(msg);
@@ -66,15 +66,13 @@ public final class MenuInboundHandler extends ChannelInboundHandlerAdapter {
                 }
                 ClickPacket click = classifier.readClick(msg);
                 if (click == null) {
-                    if (WindowIdPool.isVirtual(windowId)) {
+                    if (menuService.isOursWindow(player.getUniqueId(), windowId)) {
                         return;
                     }
                     ctx.fireChannelRead(msg);
                     return;
                 }
-                // Correct optimistic client pickup on the netty thread BEFORE the scheduled
-                // click handler runs — otherwise Lunar/vanilla prediction keeps the button
-                // on the cursor for one or more frames (or forever if stateId is stale).
+                // Netty: cursor-only clear (no stateId). Player thread does one SetContent.
                 try {
                     menuService.correctReadOnlyClick(player, click);
                 } catch (Throwable error) {

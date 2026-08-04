@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.11
+
+### Protocol rewrite (vanilla-aligned)
+
+- Window ids from `ServerPlayer.nextContainerCounter()` (1..100); drop magic 100–126 pool
+- Bound `ChestMenu` owns `stateId` via `incrementStateId`; session only mirrors last sent
+- Top stacks mirrored into the bound `SimpleContainer` on every SetSlot/SetContent
+- READ_ONLY: netty sends **SetCursorItem(EMPTY) only**; player thread does **one** SetContent
+- EDITABLE: one stateId bump per apply; client-floor on all click settlers (including RO bottom)
+- Right-click `ClickData` mapping fixed (post-click carried, same as left)
+- READ_ONLY drag START/ADD now settles optimistic ghosts
+- Chest bind only for generic 9xN (hopper/anvil stay packet-only)
+
+### Artifact
+`net.opmasterleo:packetuxui:0.11`
+
 ## 0.10
 
 ### Point restored

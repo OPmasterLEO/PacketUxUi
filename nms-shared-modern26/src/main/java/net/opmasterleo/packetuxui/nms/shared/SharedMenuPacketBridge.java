@@ -45,6 +45,67 @@ public final class SharedMenuPacketBridge implements MenuPacketBridge {
     }
 
     @Override
+    public int allocateWindowId(Player player) {
+        ServerPlayer sp = nms(player);
+        if (sp == null) {
+            return 1;
+        }
+        return sp.nextContainerCounter();
+    }
+
+    @Override
+    public int bumpStateId(Player player, int clientFloor) {
+        ServerPlayer sp = nms(player);
+        if (sp == null) {
+            return -1;
+        }
+        AbstractContainerMenu menu = sp.containerMenu;
+        if (!(menu instanceof PacketUxBoundMenu)) {
+            return -1;
+        }
+        int floor = Math.max(0, clientFloor);
+        int id = menu.incrementStateId();
+        int guard = 0;
+        while (id <= floor && guard++ < 10_000) {
+            id = menu.incrementStateId();
+        }
+        return id;
+    }
+
+    @Override
+    public boolean ownsBoundContainer(Player player) {
+        ServerPlayer sp = nms(player);
+        return sp != null && sp.containerMenu instanceof PacketUxBoundMenu;
+    }
+
+    @Override
+    public void mirrorTopSlots(Player player, List<UxItem> topItems) {
+        PacketUxBoundMenu bound = bound(player);
+        if (bound == null || topItems == null) {
+            return;
+        }
+        SimpleContainer top = bound.topContainer();
+        int n = Math.min(top.getContainerSize(), topItems.size());
+        for (int i = 0; i < n; i++) {
+            UxItem ux = topItems.get(i);
+            top.setItem(i, ux == null || ux.isEmpty() ? ItemStack.EMPTY : items.toMinecraft(ux));
+        }
+    }
+
+    @Override
+    public void mirrorSlot(Player player, int slot, UxItem item) {
+        PacketUxBoundMenu bound = bound(player);
+        if (bound == null || slot < 0) {
+            return;
+        }
+        SimpleContainer top = bound.topContainer();
+        if (slot >= top.getContainerSize()) {
+            return;
+        }
+        top.setItem(slot, item == null || item.isEmpty() ? ItemStack.EMPTY : items.toMinecraft(item));
+    }
+
+    @Override
     public void sendOpenWindow(Player player, int windowId, int typeId, Component title) {
         ServerPlayer sp = nms(player);
         if (sp == null) {
@@ -72,16 +133,22 @@ public final class SharedMenuPacketBridge implements MenuPacketBridge {
         if (sp == null) {
             return;
         }
+        PacketUxBoundMenu bound = bound(player);
+        int topSize = bound == null ? 0 : bound.topContainer().getContainerSize();
         NonNullList<ItemStack> list = NonNullList.withSize(uxItems.size(), ItemStack.EMPTY);
         Map<UxItem, ItemStack> converted = new HashMap<>();
         for (int i = 0; i < uxItems.size(); i++) {
             UxItem ux = uxItems.get(i);
-            ItemStack nms = converted.get(ux);
-            if (nms == null) {
-                nms = items.toMinecraft(ux);
-                converted.put(ux, nms);
+            ItemStack nmsStack = converted.get(ux);
+            if (nmsStack == null) {
+                nmsStack = items.toMinecraft(ux);
+                converted.put(ux, nmsStack);
             }
-            list.set(i, nms.copy());
+            ItemStack copy = nmsStack.copy();
+            list.set(i, copy);
+            if (bound != null && i < topSize) {
+                bound.topContainer().setItem(i, copy.copy());
+            }
         }
         ItemStack carriedNms;
         if (carried == null || carried.isEmpty()) {
@@ -103,11 +170,16 @@ public final class SharedMenuPacketBridge implements MenuPacketBridge {
         if (sp == null) {
             return;
         }
+        ItemStack nmsStack = items.toMinecraft(item);
+        PacketUxBoundMenu bound = bound(player);
+        if (bound != null && slot < bound.topContainer().getContainerSize()) {
+            bound.topContainer().setItem(slot, nmsStack.copy());
+        }
         sp.connection.send(new ClientboundContainerSetSlotPacket(
                 windowId,
                 stateId,
                 slot,
-                items.toMinecraft(item)
+                nmsStack
         ));
     }
 
@@ -144,6 +216,10 @@ public final class SharedMenuPacketBridge implements MenuPacketBridge {
 
     @Override
     public void bindServerContainer(Player player, int windowId, int typeId, int rows) {
+        // Only generic 9xN — never bind a wrong-size chest for hopper/anvil/etc.
+        if (typeId < 0 || typeId > 5) {
+            return;
+        }
         ServerPlayer sp = nms(player);
         if (sp == null) {
             return;
@@ -153,22 +229,7 @@ public final class SharedMenuPacketBridge implements MenuPacketBridge {
         SimpleContainer container = new SimpleContainer(top);
         Inventory inv = sp.getInventory();
         MenuType<?> type = menuType(typeId);
-        ChestMenu menu = new ChestMenu(type, windowId, inv, container, safeRows) {
-            @Override
-            public boolean stillValid(net.minecraft.world.entity.player.Player viewer) {
-                return true;
-            }
-
-            @Override
-            public void clicked(int slotId, int buttonId, ContainerInput clickType, net.minecraft.world.entity.player.Player viewer) {
-                // PacketUxUi owns click handling; keep the bound container inert for AC validity only.
-            }
-
-            @Override
-            public ItemStack quickMoveStack(net.minecraft.world.entity.player.Player viewer, int index) {
-                return ItemStack.EMPTY;
-            }
-        };
+        PacketUxBoundMenu menu = new PacketUxBoundMenu(type, windowId, inv, container, safeRows);
         sp.containerMenu = menu;
     }
 
@@ -179,14 +240,18 @@ public final class SharedMenuPacketBridge implements MenuPacketBridge {
             return;
         }
         AbstractContainerMenu open = sp.containerMenu;
-        if (open == null || open == sp.inventoryMenu) {
-            return;
-        }
-        int id = open.containerId;
-        // Only reclaim menus we bound for virtual windows (ids 100-126).
-        if (id >= 100 && id <= 126) {
+        if (open instanceof PacketUxBoundMenu) {
             sp.containerMenu = sp.inventoryMenu;
         }
+    }
+
+    private PacketUxBoundMenu bound(Player player) {
+        ServerPlayer sp = nms(player);
+        if (sp == null) {
+            return null;
+        }
+        AbstractContainerMenu open = sp.containerMenu;
+        return open instanceof PacketUxBoundMenu packetUxBoundMenu ? packetUxBoundMenu : null;
     }
 
     private static ContainerInput toNmsClickType(WindowClickType type) {
@@ -242,5 +307,34 @@ public final class SharedMenuPacketBridge implements MenuPacketBridge {
             return craft.getHandle();
         }
         return null;
+    }
+
+    /** Marker ChestMenu that PacketUxUi owns for AC/stateId/mirroring. */
+    private static final class PacketUxBoundMenu extends ChestMenu {
+        private final SimpleContainer topContainer;
+
+        PacketUxBoundMenu(MenuType<?> type, int windowId, Inventory inv, SimpleContainer container, int rows) {
+            super(type, windowId, inv, container, rows);
+            this.topContainer = container;
+        }
+
+        SimpleContainer topContainer() {
+            return topContainer;
+        }
+
+        @Override
+        public boolean stillValid(net.minecraft.world.entity.player.Player viewer) {
+            return true;
+        }
+
+        @Override
+        public void clicked(int slotId, int buttonId, ContainerInput clickType, net.minecraft.world.entity.player.Player viewer) {
+            // PacketUxUi owns click handling.
+        }
+
+        @Override
+        public ItemStack quickMoveStack(net.minecraft.world.entity.player.Player viewer, int index) {
+            return ItemStack.EMPTY;
+        }
     }
 }

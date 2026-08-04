@@ -21,6 +21,41 @@ public interface MenuPacketBridge {
 
     void injectClick(Player player, ClickPacket click);
 
+    /**
+     * Allocate the next vanilla container sync id (typically {@code ServerPlayer.nextContainerCounter()},
+     * cycling 1..100). Fallback adapters use {@link FallbackWindowIds}.
+     */
+    default int allocateWindowId(Player player) {
+        return FallbackWindowIds.next(player.getUniqueId());
+    }
+
+    /**
+     * Advance the bound NMS menu's stateId past {@code clientFloor}.
+     *
+     * @return the new stateId, or {@code -1} if this bridge does not own NMS state (caller uses session)
+     */
+    default int bumpStateId(Player player, int clientFloor) {
+        return -1;
+    }
+
+    /**
+     * Write top-slot stacks into the bound server container so AC/size inspection matches packets.
+     */
+    default void mirrorTopSlots(Player player, List<UxItem> topItems) {
+    }
+
+    default void mirrorSlot(Player player, int slot, UxItem item) {
+    }
+
+    /** True when {@code player.containerMenu} is a PacketUxUi-bound menu. */
+    default boolean ownsBoundContainer(Player player) {
+        return false;
+    }
+
+    /**
+     * Bind an inert {@code ChestMenu} for generic 9xN types only. Non-chest typeIds must no-op
+     * (do not lie to anticheat with the wrong menu size).
+     */
     default void bindServerContainer(Player player, int windowId, int typeId, int rows) {
     }
 

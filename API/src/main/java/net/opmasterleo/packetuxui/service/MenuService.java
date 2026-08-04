@@ -33,7 +33,7 @@ import net.opmasterleo.packetuxui.types.ExecuteComponent;
 
 public final class MenuService {
 
-    /** @deprecated Use {@link WindowIdPool} per-player ids. */
+    /** @deprecated Per-player vanilla window ids; do not hardcode. */
     @Deprecated
     public static final int WINDOW_ID = WindowIdPool.LEGACY_FIXED_ID;
 
@@ -162,6 +162,10 @@ public final class MenuService {
         return sessions.containsKey(playerId);
     }
 
+    public boolean isOursWindow(UUID playerId, int windowId) {
+        return windowIds.isOurs(playerId, windowId);
+    }
+
     public SessionPhase phase(Player player) {
         MenuSession session = sessions.get(id(player));
         return session == null ? SessionPhase.IDLE : session.phase();
@@ -174,30 +178,20 @@ public final class MenuService {
     public void openMenuSync(Player player, Menu menu) {
         closeCurrent(player, true, true);
         Menu copy = menu.copy();
-        int windowId;
-        try {
-            windowId = windowIds.allocate(player);
-        } catch (IllegalStateException exhausted) {
-            BiConsumer<Player, String> failed = openFailedHandler;
-            if (failed != null) {
-                try {
-                    failed.accept(player, exhausted.getMessage());
-                } catch (Throwable ignored) {
-                }
-            }
-            return;
-        }
+        int windowId = windowIds.allocate(player, () -> adapter.packets().allocateWindowId(player));
         MenuSession session = new MenuSession(copy, windowId);
         session.setPhase(SessionPhase.OPENING);
         sessions.put(id(player), session);
         fireScope(player, true, session.topSlotCount());
-        int stateId = session.nextStateId();
-        adapter.packets().bindServerContainer(
-                player,
-                windowId,
-                copy.type().id(),
-                Math.max(1, copy.type().protocolTopSize() / 9)
-        );
+        if (copy.type().supportsChestBind()) {
+            adapter.packets().bindServerContainer(
+                    player,
+                    windowId,
+                    copy.type().id(),
+                    Math.max(1, copy.type().protocolTopSize() / 9)
+            );
+        }
+        int stateId = protocolState(player, session, 0);
         adapter.packets().sendOpenWindow(player, windowId, copy.type().id(), copy.name());
         adapter.packets().sendWindowItems(player, windowId, stateId, fullContents(player, copy), null);
         adapter.packets().sendCursorItem(player, UxItem.EMPTY);
@@ -296,7 +290,7 @@ public final class MenuService {
             adapter.packets().sendWindowItems(
                     player,
                     session.windowId(),
-                    session.nextStateId(),
+                    protocolState(player, session),
                     contentsForOpen(player, session.menu()),
                     carriedItem.get(id(player))
             );
@@ -393,7 +387,7 @@ public final class MenuService {
             return;
         }
         if (!dirty.isEmpty()) {
-            int stateId = session.nextStateId();
+            int stateId = protocolState(player, session);
             int windowId = session.windowId();
             for (Map.Entry<Integer, UxItem> entry : dirty.entrySet()) {
                 adapter.packets().sendSetSlot(player, windowId, stateId, entry.getKey(), entry.getValue());
@@ -402,7 +396,7 @@ public final class MenuService {
             adapter.packets().sendWindowItems(
                     player,
                     session.windowId(),
-                    session.nextStateId(),
+                    protocolState(player, session),
                     contentsForOpen(player, current),
                     carriedItem.get(id(player))
             );
@@ -440,6 +434,10 @@ public final class MenuService {
         ClickData clickData = getClickType(packet);
         if (clickData.clickType() == ClickType.DRAG_START || clickData.clickType() == ClickType.DRAG_ADD) {
             accumulateDrag(player, packet, clickData.clickType());
+            if (session.menu().mode() != MenuMode.EDITABLE) {
+                resyncDirtySlots(player, session, packet, UxItem.EMPTY);
+                carriedItem.remove(id(player));
+            }
             return;
         }
         if (session.menu().mode() == MenuMode.EDITABLE) {
@@ -482,7 +480,7 @@ public final class MenuService {
         int maxSlot = topSize + 36;
         List<UxItem> bottom = snapshotBottom(player);
         int windowId = session.windowId();
-        int stateId = session.nextStateId();
+        int stateId = protocolState(player, session, packet.stateId());
         Set<Integer> dirty = new HashSet<>();
         if (packet.slot() > last && packet.slot() < maxSlot) {
             dirty.add(packet.slot());
@@ -622,7 +620,7 @@ public final class MenuService {
         bottom.set(bottomIndex, leftover);
         writeBottom(player, bottom);
         int windowId = session.windowId();
-        int stateId = session.nextStateIdAbove(packet.stateId());
+        int stateId = protocolState(player, session, packet.stateId());
         for (Integer slot : inserted.dirty()) {
             UxItem item = slot < inserted.items().size() ? inserted.items().get(slot) : UxItem.EMPTY;
             adapter.packets().sendSetSlot(player, windowId, stateId, slot, item);
@@ -638,7 +636,7 @@ public final class MenuService {
         int topSize = session.menu().type().protocolTopSize();
         int maxSlot = topSize + 36;
         int windowId = session.windowId();
-        int stateId = session.nextStateIdAbove(packet.stateId());
+        int stateId = protocolState(player, session, packet.stateId());
         List<UxItem> bottom = snapshotBottom(player);
         Set<Integer> dirty = new HashSet<>();
         if (packet.slot() >= topSize && packet.slot() < maxSlot) {
@@ -687,7 +685,7 @@ public final class MenuService {
             bottomHeld.put(pid, outcome.held());
         }
         int windowId = session.windowId();
-        int stateId = session.nextStateIdAbove(packet.stateId());
+        int stateId = protocolState(player, session, packet.stateId());
         for (Integer dirty : outcome.dirty()) {
             if (dirty == null || dirty < 0 || dirty >= outcome.bottom().size()) {
                 continue;
@@ -738,7 +736,7 @@ public final class MenuService {
         }
         int topSize = session.menu().type().protocolTopSize();
         int windowId = session.windowId();
-        int stateId = session.nextStateId();
+        int stateId = protocolState(player, session);
         int origin = held.originIndex();
         if (origin >= 0 && origin < restored.size()) {
             adapter.packets().sendSetSlot(player, windowId, stateId, topSize + origin, restored.get(origin));
@@ -913,7 +911,7 @@ public final class MenuService {
             return;
         }
         int windowId = session.windowId();
-        int stateId = session.nextStateIdAbove(clientStateId);
+        int stateId = protocolState(player, session, clientStateId);
         if (!dirtyEmpty) {
             List<UxItem> items = result.items();
             for (Integer slot : result.dirty()) {
@@ -957,7 +955,7 @@ public final class MenuService {
         int topSize = menu.type().protocolTopSize();
         int maxSlot = topSize + 36;
         int windowId = session.windowId();
-        int stateId = session.nextStateIdAbove(packet.stateId());
+        int stateId = protocolState(player, session, packet.stateId());
         UxItem cursor = activeCursor(player);
         List<UxItem> bottom = null;
         if (packet.slot() >= 0 && packet.slot() <= last) {
@@ -996,7 +994,9 @@ public final class MenuService {
     }
 
     private void resyncFull(Player player, MenuSession session, int clientStateId, boolean clearCursor) {
-        int stateId = clientStateId >= 0 ? session.nextStateIdAbove(clientStateId) : session.nextStateId();
+        int stateId = clientStateId >= 0
+                ? protocolState(player, session, clientStateId)
+                : protocolState(player, session);
         if (clearCursor) {
             carriedItem.remove(id(player));
             clearBottomHeld(player);
@@ -1015,8 +1015,8 @@ public final class MenuService {
     }
 
     /**
-     * Netty-thread-safe correction for read-only menus. Only touches in-memory menu state and
-     * outbound packets — never Bukkit inventory APIs (unsafe off the region/main thread).
+     * Netty-thread-safe correction for read-only menus. Only clears the cursor packet
+     * (no stateId) — the player thread sends one SetContent with a bumped stateId.
      */
     public void correctReadOnlyClick(Player player, ClickPacket packet) {
         MenuSession session = sessions.get(id(player));
@@ -1025,23 +1025,6 @@ public final class MenuService {
         }
         if (session.menu().mode() != MenuMode.READ_ONLY) {
             return;
-        }
-        int stateId = session.nextStateIdAbove(packet.stateId());
-        int windowId = session.windowId();
-        int top = session.menu().type().protocolTopSize();
-        List<UxItem> items = session.menu().items();
-
-        int slot = packet.slot();
-        if (slot >= 0 && slot < top) {
-            UxItem item = slot < items.size() ? items.get(slot) : UxItem.EMPTY;
-            adapter.packets().sendSetSlot(player, windowId, stateId, slot, item == null ? UxItem.EMPTY : item);
-        }
-        for (Integer changed : packet.changedSlotIds()) {
-            if (changed == null || changed == slot || changed < 0 || changed >= top) {
-                continue;
-            }
-            UxItem item = changed < items.size() ? items.get(changed) : UxItem.EMPTY;
-            adapter.packets().sendSetSlot(player, windowId, stateId, changed, item == null ? UxItem.EMPTY : item);
         }
         adapter.packets().sendCursorItem(player, UxItem.EMPTY);
         carriedItem.remove(id(player));
@@ -1135,7 +1118,7 @@ public final class MenuService {
             adapter.packets().sendWindowItems(
                     player,
                     session.windowId(),
-                    session.nextStateId(),
+                    protocolState(player, session),
                     fullContents(player, session.menu()),
                     cursor.isEmpty() ? null : cursor
             );
@@ -1164,7 +1147,7 @@ public final class MenuService {
             List<UxItem> copy = new ArrayList<>(items);
             copy.set(slot, next);
             menu.setItems(copy);
-            adapter.packets().sendSetSlot(player, session.windowId(), session.nextStateId(), slot, next);
+            adapter.packets().sendSetSlot(player, session.windowId(), protocolState(player, session), slot, next);
         });
     }
 
@@ -1195,7 +1178,7 @@ public final class MenuService {
                 return;
             }
             menu.setItems(items);
-            int stateId = session.nextStateId();
+            int stateId = protocolState(player, session);
             for (Map.Entry<Integer, UxItem> entry : dirty.entrySet()) {
                 adapter.packets().sendSetSlot(
                         player,
@@ -1228,7 +1211,7 @@ public final class MenuService {
             List<UxItem> copy = new ArrayList<>(items);
             copy.set(slot, next);
             menu.setItems(copy);
-            adapter.packets().sendSetSlot(player, session.windowId(), session.nextStateId(), slot, next);
+            adapter.packets().sendSetSlot(player, session.windowId(), protocolState(player, session), slot, next);
         });
     }
 
@@ -1262,7 +1245,7 @@ public final class MenuService {
             if (dirty.isEmpty()) {
                 return;
             }
-            int stateId = session.nextStateId();
+            int stateId = protocolState(player, session);
             int windowId = session.windowId();
             for (Map.Entry<Integer, UxItem> entry : dirty.entrySet()) {
                 adapter.packets().sendSetSlot(player, windowId, stateId, entry.getKey(), entry.getValue());
@@ -1308,7 +1291,7 @@ public final class MenuService {
             if (dirty.isEmpty()) {
                 return;
             }
-            int stateId = session.nextStateId();
+            int stateId = protocolState(player, session);
             for (Map.Entry<Integer, UxItem> entry : dirty.entrySet()) {
                 adapter.packets().sendSetSlot(player, session.windowId(), stateId, entry.getKey(), entry.getValue());
             }
@@ -1353,7 +1336,7 @@ public final class MenuService {
             }
             copy.set(slot, next);
             menu.setItems(copy);
-            adapter.packets().sendSetSlot(player, session.windowId(), session.nextStateId(), slot, next);
+            adapter.packets().sendSetSlot(player, session.windowId(), protocolState(player, session), slot, next);
         });
     }
 
@@ -1427,7 +1410,8 @@ public final class MenuService {
                 if (packet.button() == 0) {
                     yield packet.carriedEmpty() ? ClickData.LEFT_PLACE : ClickData.LEFT_PICKUP;
                 }
-                yield packet.carriedEmpty() ? ClickData.RIGHT_PICKUP : ClickData.RIGHT_PLACE;
+                // Post-click carried: empty → place finished; non-empty → pickup (match left).
+                yield packet.carriedEmpty() ? ClickData.RIGHT_PLACE : ClickData.RIGHT_PICKUP;
             }
             case QUICK_MOVE -> packet.button() == 0 ? ClickData.SHIFT_LEFT : ClickData.SHIFT_RIGHT;
             case SWAP -> {
@@ -1498,7 +1482,7 @@ public final class MenuService {
         Menu menu = session.menu();
         int last = menu.type().protocolLastIndex();
         int windowId = session.windowId();
-        int stateId = session.nextStateId();
+        int stateId = protocolState(player, session, packet.stateId());
         if (packet.slot() >= 0 && packet.slot() <= last) {
             List<UxItem> items = menu.items();
             UxItem item = packet.slot() < items.size() ? menu.items().get(packet.slot()) : UxItem.EMPTY;
@@ -1527,15 +1511,25 @@ public final class MenuService {
         );
     }
 
-    private void updateCarriedItem(Player player, UxItem carried, ClickType clickType) {
-        if (carried == null || adapter.items().isEmpty(carried)) {
-            carriedItem.remove(id(player));
-            return;
+    /**
+     * Prefer NMS {@code incrementStateId} when a ChestMenu is bound; otherwise session counter.
+     */
+    private int protocolState(Player player, MenuSession session, int clientFloor) {
+        int bridged = adapter.packets().bumpStateId(player, Math.max(0, clientFloor));
+        if (bridged >= 0) {
+            session.recordStateId(bridged);
+            return bridged;
         }
-        switch (clickType) {
-            case PICKUP, PICKUP_ALL, DRAG_START, DRAG_END -> carriedItem.put(id(player), carried);
-            default -> carriedItem.remove(id(player));
+        return session.nextStateIdAbove(clientFloor);
+    }
+
+    private int protocolState(Player player, MenuSession session) {
+        int bridged = adapter.packets().bumpStateId(player, session.stateId());
+        if (bridged >= 0) {
+            session.recordStateId(bridged);
+            return bridged;
         }
+        return session.nextStateId();
     }
 
     private Menu requireMenu(Player player) {

@@ -76,7 +76,17 @@ gui.closeThen(player, () -> signGui.open(player));
 | `presentAsync` | Build off-thread, then `present` |
 | `patchSlots` / `patchSlotAtomic` / `refresh` / `updateTitle` | In-place mutators |
 
-Virtual window ids **100–126**. Pipeline injects after Via/decoder. Modern 21.5+/26.x bind an inert server `ChestMenu` for anticheat size checks; clicks stay in PacketUxUi.
+Virtual window ids use vanilla `nextContainerCounter()` (**1–100**). Pipeline injects after Via/decoder. Modern 21.5+/26.x bind a real `ChestMenu` (9xN only) and own `stateId` via `incrementStateId`; top stacks are mirrored into the bound container.
+
+### Protocol
+
+| Rule | Behavior |
+|---|---|
+| Window id | Vanilla 1..100; tracked per player (`isOurs`) |
+| stateId | Bound menu `incrementStateId` (session mirrors last sent) |
+| READ_ONLY click | Netty: SetCursorItem(EMPTY). Main: one SetContent + handler |
+| EDITABLE click | Simulate → mirror → one bumped SetSlot(s) + SetCursorItem |
+| Bind | Generic 9xN chests only — no wrong-size bind for hopper/anvil |
 
 Debug: `-Dpacketuxui.debug=true`
 

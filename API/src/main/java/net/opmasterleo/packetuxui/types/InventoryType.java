@@ -61,4 +61,12 @@ public enum InventoryType {
     public int id() {
         return windowTypeId;
     }
+
+    /**
+     * True for generic 9xN (and CUSTOM* that open as GENERIC_9x6). These are the only types
+     * PacketUxUi binds as a real {@code ChestMenu}; hopper/anvil/etc. stay packet-only.
+     */
+    public boolean supportsChestBind() {
+        return windowTypeId >= 0 && windowTypeId <= 5;
+    }
 }
