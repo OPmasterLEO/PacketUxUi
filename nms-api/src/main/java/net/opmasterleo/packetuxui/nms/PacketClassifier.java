@@ -18,4 +18,11 @@ public interface PacketClassifier {
         ClickPacket click = readClick(packet);
         return click == null ? -1 : click.windowId();
     }
+
+    /**
+     * Container id from a close packet, or {@code -1} when unknown / unsupported on this platform.
+     */
+    default int closeWindowId(Object packet) {
+        return -1;
+    }
 }

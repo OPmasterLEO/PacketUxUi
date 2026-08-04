@@ -17,6 +17,10 @@ public final class WindowIdPool {
     private final ConcurrentMap<UUID, Integer> assigned = new ConcurrentHashMap<>();
     private final BitSet inUse = new BitSet(MAX_ID + 1);
 
+    public static boolean isVirtual(int windowId) {
+        return windowId >= MIN_ID && windowId <= MAX_ID;
+    }
+
     public synchronized int allocate(Player player) {
         return allocate(player.getUniqueId());
     }

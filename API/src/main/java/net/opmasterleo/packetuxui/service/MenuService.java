@@ -265,6 +265,9 @@ public final class MenuService {
                 CursorReclaim.reclaim(player, adapter.items(), heldBottom.item());
             }
         }
+        // Always clear the client cursor before close. Optimistic pickups from the last click
+        // otherwise survive into the player inventory when the virtual window disappears.
+        adapter.packets().sendCursorItem(player, UxItem.EMPTY);
         if (sendClosePacket) {
             adapter.packets().sendCloseWindow(player, session.windowId());
         }
@@ -972,10 +975,8 @@ public final class MenuService {
         Menu menu = session.menu();
         int slot = packet.slot();
         Button button = slot >= 0 ? menu.buttons().get(slot) : null;
-        resyncDirtySlots(player, session, packet, UxItem.EMPTY);
-        if (touchesBottomSlots(packet, menu.type().protocolTopSize())) {
-            settleBottomSlots(player, session, packet);
-        }
+        // Full resync beats client optimistic pickup + stateId races on read-only packet menus.
+        resyncFull(player, session);
         carriedItem.remove(id(player));
         if (button == null) {
             emitDecision(player, packet, SlotKind.DECORATIVE, false, false, "readonly_no_handler");

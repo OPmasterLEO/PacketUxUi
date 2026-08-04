@@ -4,37 +4,43 @@ Virtual packet menus for **Paper / Spigot / Folia** — Minecraft **1.8 → 26.2
 
 Direct NMS (no PacketEvents). Netty click handling, dirty-slot Set Slot updates, Folia-safe schedulers.
 
-[JitPack](https://jitpack.io/#OPmasterLEO/PacketUxUi) · one fat jar (API + all NMS adapters shaded).
+Distributed via [Reposilite](http://repo.mastersmp.net/).
 
 ---
 
 ## Install
 
-Add JitPack, then depend on the repo. Replace `Tag` with a release tag, commit SHA, or `main-SNAPSHOT`.
-
-**Gradle**
-
-```gradle
-repositories {
-    mavenCentral()
-    maven { url 'https://jitpack.io' }
-}
-
-dependencies {
-    implementation 'com.github.OPmasterLEO:PacketUxUi:Tag'
-}
-```
+Add the MasterSMP repo, then depend on the fat jar:
 
 **Gradle Kotlin**
 
 ```kotlin
 repositories {
     mavenCentral()
-    maven("https://jitpack.io")
+    maven {
+        url = uri("http://repo.mastersmp.net/releases")
+        isAllowInsecureProtocol = true
+    }
 }
 
 dependencies {
-    implementation("com.github.OPmasterLEO:PacketUxUi:Tag")
+    implementation("net.opmasterleo:packetuxui:0.7")
+}
+```
+
+**Gradle**
+
+```gradle
+repositories {
+    mavenCentral()
+    maven {
+        url 'http://repo.mastersmp.net/releases'
+        allowInsecureProtocol = true
+    }
+}
+
+dependencies {
+    implementation 'net.opmasterleo:packetuxui:0.7'
 }
 ```
 
@@ -43,38 +49,27 @@ dependencies {
 ```xml
 <repositories>
   <repository>
-    <id>jitpack.io</id>
-    <url>https://jitpack.io</url>
+    <id>mastersmp</id>
+    <url>http://repo.mastersmp.net/releases</url>
   </repository>
 </repositories>
 
 <dependency>
-  <groupId>com.github.OPmasterLEO</groupId>
-  <artifactId>PacketUxUi</artifactId>
-  <version>Tag</version>
+  <groupId>net.opmasterleo</groupId>
+  <artifactId>packetuxui</artifactId>
+  <version>0.7</version>
 </dependency>
 ```
 
-That single dependency is the full library (API + every NMS adapter). Shade it into your plugin if you want; if you use `minimize()`, exclude it so wrappers are not stripped:
+`PacketUxUi` is the full library (API + every NMS adapter). Shade it into your plugin if you want; if you use `minimize()`, exclude it so wrappers are not stripped:
 
 ```kotlin
 tasks.shadowJar {
     // relocate("net.opmasterleo.packetuxui", "your.plugin.lib.packetuxui")
     minimize {
-        exclude(dependency("com.github.OPmasterLEO:PacketUxUi:.*"))
+        exclude(dependency("net.opmasterleo:packetuxui:.*"))
     }
 }
-```
-
-**Local publish**
-
-```bash
-./gradlew publishToMavenLocal
-```
-
-```kotlin
-repositories { mavenLocal() }
-dependencies { implementation("net.opmasterleo:PacketUxUi:1.0.0") }
 ```
 
 ---
@@ -129,16 +124,20 @@ PacketMenus.refresh(player); // full Window Items only when you need it
 
 ---
 
+
+
 ## READ_ONLY vs EDITABLE
 
-| | READ_ONLY | EDITABLE |
-|---|---|---|
-| Top clicks | Cancel + dirty Set Slot; run ACTION handlers | DECORATIVE cancel; ACTION handler; EDITABLE place/take |
-| Bottom clicks | Light settle | Light settle; shift-click merges into EDITABLE tops |
-| Drag | Cancel | Only if every touched top slot is EDITABLE |
-| Number / offhand / double-collect | Cancel | Denied by default |
-| Cursor on close | Cleared | Reclaimed into player inv (leftover dropped) |
-| Real inv writes | Never | Shift-from-bottom + close reclaim only |
+
+|                                   | READ_ONLY                                    | EDITABLE                                               |
+| --------------------------------- | -------------------------------------------- | ------------------------------------------------------ |
+| Top clicks                        | Cancel + dirty Set Slot; run ACTION handlers | DECORATIVE cancel; ACTION handler; EDITABLE place/take |
+| Bottom clicks                     | Light settle                                 | Light settle; shift-click merges into EDITABLE tops    |
+| Drag                              | Cancel                                       | Only if every touched top slot is EDITABLE             |
+| Number / offhand / double-collect | Cancel                                       | Denied by default                                      |
+| Cursor on close                   | Cleared                                      | Reclaimed into player inv (leftover dropped)           |
+| Real inv writes                   | Never                                        | Shift-from-bottom + close reclaim only                 |
+
 
 Slot kinds: `DECORATIVE`, `ACTION`, `EDITABLE`. Unspecified slots in editable menus default to editable.
 
@@ -148,15 +147,19 @@ Use `registerTakeablePredicate` / `registerTakeablePredicateBukkit` when special
 
 ---
 
+
+
 ## Packets
 
-| When | Packet |
-|---|---|
-| Open | Open Window + Window Items |
+
+| When                           | Packet                               |
+| ------------------------------ | ------------------------------------ |
+| Open                           | Open Window + Window Items           |
 | Title-only / same-size present | Open Window (title) + dirty Set Slot |
-| Click settle / patch | Set Slot (dirty only) |
-| `refresh()` / heavy settle | Window Items |
-| Close | Close Window |
+| Click settle / patch           | Set Slot (dirty only)                |
+| `refresh()` / heavy settle     | Window Items                         |
+| Close                          | Close Window                         |
+
 
 No `Player#updateInventory()` on the default click path.
 
@@ -164,9 +167,9 @@ Virtual window ids are pooled **100–126** per player (`BitSet` reclaim). Exhau
 
 **Overlays** (e.g. Worth lore):
 
-1. `setScopeListener` — open before content; close after cleanup  
-2. Skip outbound slots `0 .. getTopSlotCount()-1` for that player's `getWindowId()`  
-3. Works for both menu modes  
+1. `setScopeListener` — open before content; close after cleanup
+2. Skip outbound slots `0 .. getTopSlotCount()-1` for that player's `getWindowId()`
+3. Works for both menu modes
 
 Anti-dupe: clicks ignored while `OPENING` / `CLOSING`; ~100ms debounce (configurable).
 
@@ -203,6 +206,8 @@ For large plugin ecosystems, use the manager/service guarantees below:
   - `presentOrUpdate(...)`
   - `refreshPage(player, pageModel, strategy)`
 
+
+
 #### Thread-safety / execution model
 
 - `presentAsync*` / `updateAsync*` supplier execution: async thread
@@ -210,6 +215,8 @@ For large plugin ecosystems, use the manager/service guarantees below:
 - completion future/callback: completed from scheduler task after apply check
 - synchronous mutations (`present`, `update`, `patchSlotAtomic`, `updateButtons`, `clearButtons`) should be called from plugin logic; manager routes player-critical paths onto scheduler where needed
 - supplier exceptions are surfaced via `AsyncMenuResult` (`SUPPLIER_FAILED`) rather than silently ignored
+
+
 
 #### Safe defaults recipe
 
@@ -234,29 +241,37 @@ try {
 
 ---
 
+
+
 ## Folia / Paper / Spigot
 
 Scheduler backend is chosen **once at init** — no Paper/Bukkit branching on hot paths.
 
-| Backend | When | Sync / entity | Async | Events |
-|---|---|---|---|---|
-| `SchedulerKind.BUKKIT` | Spigot / CraftBukkit | main-thread Bukkit | Bukkit async | `BukkitLifecycleListener` |
-| `SchedulerKind.PAPER` | Paper / Folia | entity + region + global | Paper `AsyncScheduler` | `PaperLifecycleListener` |
+
+| Backend                | When                 | Sync / entity            | Async                  | Events                    |
+| ---------------------- | -------------------- | ------------------------ | ---------------------- | ------------------------- |
+| `SchedulerKind.BUKKIT` | Spigot / CraftBukkit | main-thread Bukkit       | Bukkit async           | `BukkitLifecycleListener` |
+| `SchedulerKind.PAPER`  | Paper / Folia        | entity + region + global | Paper `AsyncScheduler` | `PaperLifecycleListener`  |
+
 
 - Spigot never loads Paper scheduler classes (`scheduler.bukkit` / `scheduler.paper`)
 - `presentAsync` / `updateAsync` build off-thread; apply on entity/main; stale generations ignored
 
 ---
 
+
+
 ## Project layout
 
-| Module | Role |
-|---|---|
-| **root (`PacketUxUi`)** | Published fat jar — `com.github.OPmasterLEO:PacketUxUi` |
-| `API` | Public API (shaded into fat jar) |
-| `nms-api` | Bridges / `UxItem` / `AdapterLoader` |
-| `nms:*` | Per-version adapters (1.8–26.2) |
-| `TestMenu` | Demo Paper plugin |
+
+| Module                      | Role                                             |
+| --------------------------- | ------------------------------------------------ |
+| **root (**`PacketUxUi`**)** | Published fat jar — `net.opmasterleo:packetuxui` |
+| `API`                       | Public API (shaded into fat jar)                 |
+| `nms-api`                   | Bridges / `UxItem` / `AdapterLoader`             |
+| `nms:*`                     | Per-version adapters (1.8–26.2)                  |
+| `TestMenu`                  | Demo Paper plugin                                |
+
 
 ```bash
 ./gradlew publishToMavenLocal
@@ -265,10 +280,12 @@ Scheduler backend is chosen **once at init** — no Paper/Bukkit branching on ho
 
 Legacy Spigot NMS jars come from [CodeMC](https://docs.codemc.io/faq/using-nms-repository/). Paper `1.20.5+` uses paperweight (network on first setup). JDK **21** runs Gradle; JDK **25** is auto-provisioned (Foojay) for Minecraft 26.x modules.
 
-| Range | Mapping |
-|---|---|
-| 1.8 – 1.20.4 | Relocated CraftBukkit / Spigot NMS |
+
+| Range         | Mapping                                       |
+| ------------- | --------------------------------------------- |
+| 1.8 – 1.20.4  | Relocated CraftBukkit / Spigot NMS            |
 | 1.20.5 – 26.2 | Mojang-mapped Paper (Paper/Folia recommended) |
+
 
 ---
 

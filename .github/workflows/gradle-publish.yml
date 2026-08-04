@@ -23,8 +23,8 @@ jobs:
             25
           cache: "gradle"
 
-      - name: Build with Gradle (JitPack install path)
-        run: chmod +x gradlew && ./gradlew clean publishToMavenLocal -x test --no-daemon
+      - name: Build with Gradle
+        run: chmod +x gradlew && ./gradlew shadowJar -x test --no-daemon
 
       - name: Upload PacketUxUi jar
         uses: actions/upload-artifact@v7
@@ -33,37 +33,9 @@ jobs:
           path: build/libs/PacketUxUi-*.jar
           if-no-files-found: error
 
-  jitpack:
-    name: Trigger JitPack
-    needs: build
-    if: github.event_name == 'push'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Warm JitPack build for this commit
-        run: |
-          set -euo pipefail
-          REPO="${{ github.repository }}"
-          REF="${{ github.sha }}"
-          URL="https://jitpack.io/com/github/${REPO}/${REF}/build.log"
-          echo "Requesting ${URL}"
-          # Give GitHub a moment to make the commit visible to JitPack.
-          sleep 15
-          attempt=1
-          while [ "$attempt" -le 3 ]; do
-            echo "JitPack attempt ${attempt}/3"
-            if curl -fsSL --max-time 900 -L "${URL}" -o jitpack-build.log; then
-              break
-            fi
-            attempt=$((attempt + 1))
-            sleep 30
-          done
-          if [ ! -s jitpack-build.log ]; then
-            echo "JitPack did not return a build log"
-            exit 1
-          fi
-          echo "---- JitPack log (tail) ----"
-          tail -n 80 jitpack-build.log
-          if grep -qiE 'Build failed|FAILURE: Build failed' jitpack-build.log; then
-            echo "JitPack reported a failed build"
-            exit 1
-          fi
+      - name: Publish snapshot to Reposilite
+        if: github.event_name == 'push'
+        run: ./gradlew publish -x test -Preposilite.repo=snapshots --no-daemon
+        env:
+          REPOSILITE_USER: ${{ secrets.REPOSILITE_USER }}
+          REPOSILITE_TOKEN: ${{ secrets.REPOSILITE_TOKEN }}

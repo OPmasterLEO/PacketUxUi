@@ -7,7 +7,7 @@ plugins {
 
 allprojects {
     group = "net.opmasterleo"
-    version = "1.0.0"
+    version = "0.7"
 
     repositories {
         mavenCentral()
@@ -96,7 +96,7 @@ tasks.build {
 publishing {
     publications {
         create<MavenPublication>("maven") {
-            artifactId = rootProject.name
+            artifactId = "packetuxui"
             artifact(tasks.shadowJar) {
                 classifier = null
             }
@@ -126,8 +126,24 @@ publishing {
         }
     }
     repositories {
-        mavenLocal()
+        maven {
+            name = "Reposilite"
+            // Default: releases (local `./gradlew publish`). CI passes -Preposilite.repo=snapshots.
+            val reposiliteRepo = (findProperty("reposilite.repo") as String?)
+                ?: System.getenv("REPOSILITE_REPO")
+                ?: "releases"
+            url = uri("http://repo.mastersmp.net/$reposiliteRepo")
+            isAllowInsecureProtocol = true
+            credentials {
+                username = project.findProperty("reposilite.user") as String? ?: System.getenv("REPOSILITE_USER")
+                password = project.findProperty("reposilite.token") as String? ?: System.getenv("REPOSILITE_TOKEN")
+            }
+        }
     }
+}
+
+tasks.named("publish").configure {
+    dependsOn(tasks.shadowJar)
 }
 
 tasks.named("publishToMavenLocal").configure {
