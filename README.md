@@ -19,7 +19,7 @@ repositories {
 }
 
 dependencies {
-    implementation("net.opmasterleo:packetuxui:0.12")
+    implementation("net.opmasterleo:packetuxui:0.12.1")
 }
 ```
 

@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.12.1
+
+### Robust READ_ONLY / pipeline (free-move fix)
+
+- Pipeline inject **never** `addFirst` (undecoded → leaks to vanilla → client free moves)
+- Prefer after PacketEvents/Via decoder, else **before** `packet_handler`
+- `ensureInjected` on every `present` / open
+- While session open: **all** container clicks swallowed (mismatch → force resync)
+- Bukkit `InventoryClickEvent` / `InventoryDragEvent` cancelled while PacketUxUi menu open
+- RO netty: provisional SetSlot(s) + SetCursorItem so Lunar accepts before player-thread SetContent
+
+### Artifact
+`net.opmasterleo:packetuxui:0.12.1`
+
 ## 0.12
 
 **Supports** pagination / refresh / filters via composable APIs — does **not** ship PaginatedMenu / ConfirmMenu products.

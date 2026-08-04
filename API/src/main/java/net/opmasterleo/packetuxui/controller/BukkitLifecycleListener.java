@@ -5,6 +5,8 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.PlayerDeathEvent;
+import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerKickEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
@@ -13,6 +15,10 @@ import net.opmasterleo.packetuxui.network.PipelineManager;
 import net.opmasterleo.packetuxui.scheduler.PlatformScheduler;
 import net.opmasterleo.packetuxui.service.MenuService;
 
+/**
+ * Join/quit pipeline + Bukkit inventory safety net while a PacketUxUi session is open.
+ * Packet path is authoritative; these cancels stop leaks if a click reaches CraftBukkit.
+ */
 public class BukkitLifecycleListener implements Listener {
 
     private final MenuService service;
@@ -49,6 +55,26 @@ public class BukkitLifecycleListener implements Listener {
     @EventHandler(priority = EventPriority.MONITOR)
     public void onDeath(PlayerDeathEvent event) {
         forceClose(event.getEntity());
+    }
+
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = false)
+    public void onInventoryClick(InventoryClickEvent event) {
+        if (!(event.getWhoClicked() instanceof Player player)) {
+            return;
+        }
+        if (service.hasOpen(player.getUniqueId())) {
+            event.setCancelled(true);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = false)
+    public void onInventoryDrag(InventoryDragEvent event) {
+        if (!(event.getWhoClicked() instanceof Player player)) {
+            return;
+        }
+        if (service.hasOpen(player.getUniqueId())) {
+            event.setCancelled(true);
+        }
     }
 
     private void forceClose(Player player) {

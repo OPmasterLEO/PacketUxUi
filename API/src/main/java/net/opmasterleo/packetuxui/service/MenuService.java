@@ -52,6 +52,7 @@ public final class MenuService {
     private final ConcurrentHashMap<UUID, Long> transitionTokens = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<UUID, String> lastClickDecision = new ConcurrentHashMap<>();
     private final CopyOnWriteArrayList<Predicate<UxItem>> takeablePredicates = new CopyOnWriteArrayList<>();
+    private final ConcurrentHashMap<UUID, Integer> nettyRoCorrectedForState = new ConcurrentHashMap<>();
     private final AtomicLong transitionSequence = new AtomicLong();
     private final GuiEventManager events = new GuiEventManager();
     private volatile GuiScopeListener scopeListener;
@@ -223,18 +224,12 @@ public final class MenuService {
                 + " stateId=" + stateId
                 + " top=" + session.topSlotCount()
                 + " bound=" + adapter.packets().ownsBoundContainer(player));
-        Consumer<Player> reassert = pipelineReassert;
-        if (reassert != null) {
-            try {
-                reassert.accept(player);
-            } catch (Throwable error) {
-                debug(player, "pipeline reassert failed: " + error.getClass().getSimpleName());
-            }
-        }
+        ensurePipeline(player);
     }
 
     public void present(Player player, Menu menu) {
         scheduler.runForPlayer(player, () -> {
+            ensurePipeline(player);
             MenuSession existing = sessions.get(id(player));
             if (existing != null
                     && existing.menu().type() == menu.type()
@@ -376,6 +371,7 @@ public final class MenuService {
         carriedItem.remove(id(player));
         clearBottomHeld(player);
         clearAccumulatedDrag(player);
+        nettyRoCorrectedForState.remove(id(player));
         debug(player, "CLOSE windowId=" + windowId + " sendPacket=" + sendClosePacket + " reclaim=" + reclaim);
         fireScope(player, false, session, top);
     }
@@ -1114,10 +1110,6 @@ public final class MenuService {
         }
     }
 
-    /**
-     * Netty-thread-safe correction for read-only menus. Only clears the cursor packet
-     * (no stateId) — the player thread sends one SetContent with a bumped stateId.
-     */
     public void correctReadOnlyClick(Player player, ClickPacket packet) {
         MenuSession session = sessions.get(id(player));
         if (session == null || session.phase() != SessionPhase.OPEN) {
@@ -1126,8 +1118,48 @@ public final class MenuService {
         if (session.menu().mode() != MenuMode.READ_ONLY) {
             return;
         }
+        int windowId = session.windowId();
+        int top = session.menu().type().protocolTopSize();
+        List<UxItem> items = session.menu().items();
+        int provisional = Math.max(0, packet.stateId()) + 1;
+        int slot = packet.slot();
+        if (slot >= 0 && slot < top) {
+            UxItem item = slot < items.size() ? items.get(slot) : UxItem.EMPTY;
+            adapter.packets().sendSetSlot(player, windowId, provisional, slot, item == null ? UxItem.EMPTY : item);
+        }
+        for (Integer changed : packet.changedSlotIds()) {
+            if (changed == null || changed == slot || changed < 0 || changed >= top) {
+                continue;
+            }
+            UxItem item = changed < items.size() ? items.get(changed) : UxItem.EMPTY;
+            adapter.packets().sendSetSlot(player, windowId, provisional, changed, item == null ? UxItem.EMPTY : item);
+        }
         adapter.packets().sendCursorItem(player, UxItem.EMPTY);
         carriedItem.remove(id(player));
+        nettyRoCorrectedForState.put(id(player), packet.stateId());
+    }
+
+    /** Full resync for open session (window-id mismatch / safety). */
+    public void forceResyncOpen(Player player) {
+        MenuSession session = sessions.get(id(player));
+        if (session == null || session.phase() != SessionPhase.OPEN) {
+            return;
+        }
+        boolean clearCursor = session.menu().mode() != MenuMode.EDITABLE;
+        resyncFull(player, session, session.stateId(), clearCursor);
+        debug(player, "forceResyncOpen mode=" + session.menu().mode() + " windowId=" + session.windowId());
+    }
+
+    private void ensurePipeline(Player player) {
+        Consumer<Player> reassert = pipelineReassert;
+        if (reassert == null) {
+            return;
+        }
+        try {
+            reassert.accept(player);
+        } catch (Throwable error) {
+            debug(player, "pipeline ensure failed: " + error.getClass().getSimpleName());
+        }
     }
 
     private List<UxItem> contentsForOpen(Player player, Menu menu) {

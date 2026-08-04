@@ -24,7 +24,7 @@ import net.opmasterleo.packetuxui.service.MenuService;
 
 public final class PacketUxUiAPI {
 
-    public static final String VERSION = "0.12";
+    public static final String VERSION = "0.12.1";
 
     private static final AtomicInteger RETAIN = new AtomicInteger();
     private static final Set<JavaPlugin> CLIENTS = new LinkedHashSet<>();
@@ -111,7 +111,7 @@ public final class PacketUxUiAPI {
         scheduler = new PlatformScheduler(plugin);
         service = new MenuService(adapter, scheduler);
         pipelineManager = new PipelineManager(plugin, adapter, service, scheduler);
-        service.setPipelineReassert(pipelineManager::inject);
+        service.setPipelineReassert(pipelineManager::ensureInjected);
         if (Boolean.getBoolean("packetuxui.debug")
                 || "true".equalsIgnoreCase(System.getenv("PACKETUXUI_DEBUG"))) {
             service.setDebugLogging(true);
