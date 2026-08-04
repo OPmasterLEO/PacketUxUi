@@ -24,7 +24,7 @@ import net.opmasterleo.packetuxui.service.MenuService;
 
 public final class PacketUxUiAPI {
 
-    public static final String VERSION = "0.13.5";
+    public static final String VERSION = "0.13.6";
 
     private static final AtomicInteger RETAIN = new AtomicInteger();
     private static final Set<JavaPlugin> CLIENTS = new LinkedHashSet<>();
@@ -108,6 +108,7 @@ public final class PacketUxUiAPI {
         }
         adapter = nmsAdapter;
         host = plugin;
+        net.opmasterleo.packetuxui.nms.LiveLimits.bind(adapter.limits());
         scheduler = new PlatformScheduler(plugin);
         service = new MenuService(adapter, scheduler);
         pipelineManager = new PipelineManager(plugin, adapter, service, scheduler);
@@ -244,6 +245,7 @@ public final class PacketUxUiAPI {
         adapter = null;
         scheduler = null;
         pipelineManager = null;
+        net.opmasterleo.packetuxui.nms.LiveLimits.unbind();
         PacketGuiManager.resetHolder();
     }
 

@@ -33,6 +33,7 @@ import net.opmasterleo.packetuxui.event.GuiDragPhase;
 import net.opmasterleo.packetuxui.event.GuiEventManager;
 import net.opmasterleo.packetuxui.event.GuiOpenEvent;
 import net.opmasterleo.packetuxui.nms.ClickPacket;
+import net.opmasterleo.packetuxui.nms.LiveLimits;
 import net.opmasterleo.packetuxui.nms.NmsAdapter;
 import net.opmasterleo.packetuxui.nms.WindowClickType;
 import net.opmasterleo.packetuxui.nms.item.UxItem;
@@ -1417,14 +1418,17 @@ public final class MenuService {
 
     private void writeBottom(Player player, List<UxItem> bottom) {
         PlayerInventory inv = player.getInventory();
-        for (int i = 0; i < 27 && i < bottom.size(); i++) {
-            inv.setItem(i + 9, toBukkitOrNull(bottom.get(i)));
+        int storage = LiveLimits.playerStorageSlots();
+        int hotbar = LiveLimits.hotbarSlots();
+        int total = LiveLimits.playerInventorySlots();
+        for (int i = 0; i < storage && i < bottom.size(); i++) {
+            inv.setItem(i + hotbar, toBukkitOrNull(bottom.get(i)));
         }
-        for (int i = 0; i < 9 && (27 + i) < bottom.size(); i++) {
-            inv.setItem(i, toBukkitOrNull(bottom.get(27 + i)));
+        for (int i = 0; i < hotbar && (storage + i) < bottom.size(); i++) {
+            inv.setItem(i, toBukkitOrNull(bottom.get(storage + i)));
         }
-        // Cache what we wrote — do not re-snapshot Bukkit (36 fromBukkit).
-        if (bottom.size() == 36) {
+        // Cache what we wrote — do not re-snapshot Bukkit.
+        if (bottom.size() == total) {
             bottomCache.put(id(player), bottom.getClass() == ArrayList.class
                     ? List.copyOf(bottom)
                     : bottom);
@@ -1747,14 +1751,16 @@ public final class MenuService {
 
     private List<UxItem> nettySafeContents(Player player, MenuSession session) {
         List<UxItem> bottom = bottomCache.get(id(player));
-        if (bottom == null || bottom.size() != 36) {
+        int expected = LiveLimits.playerInventorySlots();
+        if (bottom == null || bottom.size() != expected) {
             bottom = emptyBottom();
         }
         return assembleContents(session.menu(), bottom);
     }
 
     private static List<UxItem> emptyBottom() {
-        UxItem[] arr = new UxItem[36];
+        int n = LiveLimits.playerInventorySlots();
+        UxItem[] arr = new UxItem[n];
         java.util.Arrays.fill(arr, UxItem.EMPTY);
         return java.util.Arrays.asList(arr);
     }
@@ -1797,7 +1803,8 @@ public final class MenuService {
 
     private List<UxItem> fullContents(Player player, Menu menu) {
         List<UxItem> bottom = bottomCache.get(id(player));
-        if (bottom == null || bottom.size() != 36) {
+        int expected = LiveLimits.playerInventorySlots();
+        if (bottom == null || bottom.size() != expected) {
             bottom = snapshotBottom(player);
             bottomCache.put(id(player), bottom);
         }
@@ -1805,13 +1812,22 @@ public final class MenuService {
     }
 
     private List<UxItem> snapshotBottom(Player player) {
-        List<UxItem> bottom = new ArrayList<>(36);
+        int hotbar = LiveLimits.hotbarSlots();
+        int total = LiveLimits.playerInventorySlots();
+        List<UxItem> bottom = new ArrayList<>(total);
         PlayerInventory inv = player.getInventory();
-        for (int i = 9; i < 36; i++) {
+        for (int i = hotbar; i < total; i++) {
             bottom.add(fromBukkitSlot(inv.getItem(i)));
         }
-        for (int i = 0; i < 9; i++) {
+        for (int i = 0; i < hotbar; i++) {
             bottom.add(fromBukkitSlot(inv.getItem(i)));
+        }
+        // Ensure size matches NMS inventory size even if loops diverge.
+        while (bottom.size() < total) {
+            bottom.add(UxItem.EMPTY);
+        }
+        if (bottom.size() > total) {
+            return List.copyOf(bottom.subList(0, total));
         }
         return bottom;
     }

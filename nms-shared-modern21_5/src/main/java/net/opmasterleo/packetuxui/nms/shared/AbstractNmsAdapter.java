@@ -7,6 +7,7 @@ import net.opmasterleo.packetuxui.nms.NmsAdapter;
 import net.opmasterleo.packetuxui.nms.PacketClassifier;
 import net.opmasterleo.packetuxui.nms.PipelineBridge;
 import net.opmasterleo.packetuxui.nms.ProtocolVersions;
+import net.opmasterleo.packetuxui.nms.ServerLimits;
 
 public abstract class AbstractNmsAdapter implements NmsAdapter {
 
@@ -17,6 +18,7 @@ public abstract class AbstractNmsAdapter implements NmsAdapter {
     private final SharedMenuPacketBridge packets;
     private final SharedPipelineBridge pipeline;
     private final SharedPacketClassifier classifier;
+    private final ServerLimits limits;
 
     protected AbstractNmsAdapter(String bucketId, int minProtocol, int maxProtocol) {
         int protocol = SharedConstants.getProtocolVersion();
@@ -28,6 +30,7 @@ public abstract class AbstractNmsAdapter implements NmsAdapter {
         this.packets = new SharedMenuPacketBridge(items);
         this.pipeline = new SharedPipelineBridge();
         this.classifier = new SharedPacketClassifier(items);
+        this.limits = new SharedServerLimits();
     }
 
     @Override
@@ -63,5 +66,10 @@ public abstract class AbstractNmsAdapter implements NmsAdapter {
     @Override
     public ItemBridge items() {
         return items;
+    }
+
+    @Override
+    public ServerLimits limits() {
+        return limits;
     }
 }

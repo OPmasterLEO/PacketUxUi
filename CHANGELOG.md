@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.13.6
+
+### Live NMS limits (no hardcoded vanilla copies)
+
+Runtime values come from the loaded NMS jar via `ServerLimits` / `LiveLimits`:
+
+- Book: `WritableBookContent.MAX_PAGES`, `PAGE_EDIT_LENGTH`
+- Player inv: `Inventory.INVENTORY_SIZE`, `Inventory.getSelectionSize()`
+- Hopper top: `HopperMenu.CONTAINER_SIZE`
+- Window ids: counter min/max (mirrors `nextContainerCounter` cycle)
+- Menu top sizes: resolved from live `MenuType` references where possible
+
+`InventoryType`, `BookView`, `WindowIdPool`, `Slots`, and bottom snapshots all read through `LiveLimits` after `PacketUxUiAPI.init`.
+
+### Artifact
+`net.opmasterleo:packetuxui:0.13.6`
+
 ## 0.13.5
 
 ### Book page line builder

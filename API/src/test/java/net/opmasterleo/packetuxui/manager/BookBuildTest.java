@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test;
 
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
+import net.opmasterleo.packetuxui.nms.LiveLimits;
 import net.opmasterleo.packetuxui.service.BookView;
 
 class BookBuildTest {
@@ -59,7 +60,7 @@ class BookBuildTest {
     @Test
     void rejectsTooManyPages() {
         List<Component> pages = new ArrayList<>();
-        for (int i = 0; i < BookView.MAX_PAGES + 1; i++) {
+        for (int i = 0; i < BookView.maxPages() + 1; i++) {
             pages.add(Component.text(String.valueOf(i)));
         }
         assertThrows(IllegalArgumentException.class, () -> new BookView(
@@ -73,12 +74,14 @@ class BookBuildTest {
     @Test
     void maxPagesAllowed() {
         List<Component> pages = new ArrayList<>();
-        for (int i = 0; i < BookView.MAX_PAGES; i++) {
+        for (int i = 0; i < BookView.maxPages(); i++) {
             pages.add(Component.text(String.valueOf(i)));
         }
         BookView view = new BookView(Component.text("t"), Component.text("a"), pages, null);
-        assertEquals(BookView.MAX_PAGES, view.pages().size());
+        assertEquals(BookView.maxPages(), view.pages().size());
         assertTrue(view.onClose() == null);
+        assertTrue(LiveLimits.bookMaxPages() >= 1);
+        assertTrue(LiveLimits.bookMaxPageLength() >= 1);
     }
 
     private static String plain(Component component) {

@@ -15,4 +15,9 @@ public interface NmsAdapter {
     PacketClassifier classifier();
 
     ItemBridge items();
+
+    /** Vanilla limits sourced from NMS on this server (books, inv size, window ids, …). */
+    default ServerLimits limits() {
+        return ServerLimits.FALLBACK;
+    }
 }

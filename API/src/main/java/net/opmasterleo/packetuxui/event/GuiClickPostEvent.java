@@ -49,7 +49,7 @@ public final class GuiClickPostEvent extends GuiEvent {
         this.slotType = GuiClickMapper.slotType(
                 this.slot,
                 topSlotCount,
-                menu == null ? 36 : menu.type().bottomSlotCount()
+                menu == null ? net.opmasterleo.packetuxui.nms.LiveLimits.playerInventorySlots() : menu.type().bottomSlotCount()
         );
         this.currentItem = GuiClickMapper.currentItem(menu, this.slot, topSlotCount);
         this.cursor = cursor == null ? UxItem.EMPTY : cursor;

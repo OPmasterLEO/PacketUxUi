@@ -3,44 +3,52 @@ package net.opmasterleo.packetuxui.util;
 import java.util.ArrayList;
 import java.util.List;
 
+import net.opmasterleo.packetuxui.nms.LiveLimits;
+
 /**
- * Slot index helpers for 9-wide chest menus. Plugins compose layouts; the library does not
- * ship border/pagination products.
+ * Slot index helpers for chest menus. Column width comes from live NMS hotbar size.
  */
 public final class Slots {
 
     private Slots() {
     }
 
+    public static int columns() {
+        return LiveLimits.hotbarSlots();
+    }
+
     public static int index(int row, int column) {
-        if (row < 0 || column < 0 || column > 8) {
-            throw new IllegalArgumentException("row>=0 and column 0..8 required");
+        int cols = columns();
+        if (row < 0 || column < 0 || column >= cols) {
+            throw new IllegalArgumentException("row>=0 and column 0.." + (cols - 1) + " required");
         }
-        return row * 9 + column;
+        return row * cols + column;
     }
 
     public static int row(int slot) {
-        return slot / 9;
+        return slot / columns();
     }
 
     public static int column(int slot) {
-        return slot % 9;
+        return slot % columns();
     }
 
-    /** Top/bottom rows and left/right columns for a chest with {@code rows} (1..6). */
+    /** Top/bottom rows and left/right columns for a chest with {@code rows}. */
     public static List<Integer> border(int rows) {
-        int safe = Math.max(1, Math.min(6, rows));
-        int size = safe * 9;
+        int cols = columns();
+        int maxRows = LiveLimits.maxGenericChestRows();
+        int safe = Math.max(1, Math.min(maxRows, rows));
+        int size = safe * cols;
         List<Integer> out = new ArrayList<>(size);
-        for (int c = 0; c < 9; c++) {
+        for (int c = 0; c < cols; c++) {
             out.add(c);
             if (safe > 1) {
-                out.add((safe - 1) * 9 + c);
+                out.add((safe - 1) * cols + c);
             }
         }
         for (int r = 1; r < safe - 1; r++) {
-            out.add(r * 9);
-            out.add(r * 9 + 8);
+            out.add(r * cols);
+            out.add(r * cols + (cols - 1));
         }
         return out;
     }
@@ -64,19 +72,19 @@ public final class Slots {
     }
 
     public static boolean isBottom(int slot, int topSlotCount) {
-        return isBottom(slot, topSlotCount, 36);
+        return isBottom(slot, topSlotCount, LiveLimits.playerInventorySlots());
     }
 
     public static boolean isBottom(int slot, int topSlotCount, int bottomSlotCount) {
         return slot >= topSlotCount && slot < topSlotCount + bottomSlotCount;
     }
 
-    /** Protocol bottom slot → 0..35 inventory snapshot index (storage then hotbar). */
+    /** Protocol bottom slot → inventory snapshot index (storage then hotbar). */
     public static int toBottomIndex(int protocolSlot, int topSlotCount) {
         return protocolSlot - topSlotCount;
     }
 
-    /** 0..35 bottom snapshot index → protocol slot. */
+    /** Bottom snapshot index → protocol slot. */
     public static int fromBottomIndex(int bottomIndex, int topSlotCount) {
         return topSlotCount + bottomIndex;
     }

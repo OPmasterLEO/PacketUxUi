@@ -7,16 +7,23 @@ import java.util.function.IntSupplier;
 
 import org.bukkit.entity.Player;
 
+import net.opmasterleo.packetuxui.nms.LiveLimits;
+
 /**
- * Tracks which vanilla window id (1..100) is currently owned by PacketUxUi per player.
+ * Tracks which vanilla window id is currently owned by PacketUxUi per player.
  * Allocation itself comes from {@code MenuPacketBridge.allocateWindowId} (NMS counter).
+ * Valid id range is {@link LiveLimits#containerCounterMin()}..{@link LiveLimits#containerCounterMax()}.
  */
 public final class WindowIdPool {
 
-    /** @deprecated Magic pool removed; ids are vanilla 1..100. */
+    /**
+     * @deprecated use {@link LiveLimits#containerCounterMin()}
+     */
     @Deprecated
     public static final int MIN_ID = 1;
-    /** @deprecated Magic pool removed; ids are vanilla 1..100. */
+    /**
+     * @deprecated use {@link LiveLimits#containerCounterMax()}
+     */
     @Deprecated
     public static final int MAX_ID = 100;
     /** @deprecated No fixed virtual id; use per-player allocate. */
@@ -26,11 +33,16 @@ public final class WindowIdPool {
     private final ConcurrentMap<UUID, Integer> assigned = new ConcurrentHashMap<>();
 
     /**
-     * @deprecated Prefer {@link #isOurs(UUID, int)} — any 1..100 id may be ours or vanilla.
+     * @deprecated Prefer {@link #isOurs(UUID, int)} — range is live NMS container-counter bounds.
      */
     @Deprecated
     public static boolean isVirtual(int windowId) {
-        return windowId >= 1 && windowId <= 100;
+        return isInCounterRange(windowId);
+    }
+
+    public static boolean isInCounterRange(int windowId) {
+        return windowId >= LiveLimits.containerCounterMin()
+                && windowId <= LiveLimits.containerCounterMax();
     }
 
     public int allocate(Player player, IntSupplier allocator) {

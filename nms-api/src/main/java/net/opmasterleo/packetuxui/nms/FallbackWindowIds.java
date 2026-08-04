@@ -8,8 +8,8 @@ import java.util.function.Function;
 import java.util.function.IntUnaryOperator;
 
 /**
- * Vanilla-like 1..100 window id cycling for adapters that cannot call
- * {@code ServerPlayer.nextContainerCounter()}.
+ * Vanilla-like window id cycling for adapters that cannot call
+ * {@code ServerPlayer.nextContainerCounter()}. Bounds come from {@link LiveLimits}.
  */
 public final class FallbackWindowIds {
 
@@ -38,7 +38,12 @@ public final class FallbackWindowIds {
     private static final class WindowIdAdvance implements IntUnaryOperator {
         @Override
         public int applyAsInt(int v) {
-            return v >= 100 ? 1 : v + 1;
+            int max = LiveLimits.containerCounterMax();
+            int min = LiveLimits.containerCounterMin();
+            if (max < min) {
+                max = min;
+            }
+            return v >= max ? min : v + 1;
         }
     }
 }

@@ -1,15 +1,15 @@
 package net.opmasterleo.packetuxui.types;
 
+import net.opmasterleo.packetuxui.nms.LiveLimits;
+
 /**
- * Vanilla Open Screen window types (protocol ids 0–24) plus oversized CUSTOM chests
+ * Vanilla Open Screen window types (protocol ids) plus oversized CUSTOM chests
  * that open as {@link #GENERIC9X6}.
  * <p>
- * {@link #size()} is the contiguous top-slot count used for buttons / SetContent tops.
- * {@link #bottomSlotCount()} is usually 36 (player storage + hotbar); {@link #LECTERN} is 0.
+ * Slot counts prefer live NMS via {@link LiveLimits} (inventory size, hotbar columns,
+ * menu-type tops). Enum constructor values are fallbacks before an adapter is bound.
  * <p>
- * {@link #supportsChestBind()} is true only for generic 9×N (and CUSTOM* as 9×6) — those bind
- * a real NMS {@code ChestMenu}. Hopper, anvil, furnace, etc. stay <b>packet-only</b>
- * (correct Open Screen type + contents; no wrong-size chest bind).
+ * {@link #supportsChestBind()} is true only for generic 9×N (and CUSTOM* as 9×6).
  */
 public enum InventoryType {
     GENERIC9X1(9, 0, 36),
@@ -61,46 +61,64 @@ public enum InventoryType {
     CUSTOM9x9(81, 5, 36),
     CUSTOM9x10(90, 5, 36);
 
-    private final int size;
+    private final int fallbackSize;
     private final int windowTypeId;
-    private final int bottomSlotCount;
+    private final int fallbackBottom;
 
     InventoryType(int slots, int windowTypeId, int bottomSlotCount) {
-        this.size = slots;
+        this.fallbackSize = slots;
         this.windowTypeId = windowTypeId;
-        this.bottomSlotCount = bottomSlotCount;
+        this.fallbackBottom = bottomSlotCount;
     }
 
     /** Contiguous virtual top slots (button indices / item list length). */
     public int size() {
-        return size;
+        int rows = chestRows();
+        int cols = LiveLimits.hotbarSlots();
+        if (rows > 0 && isGenericChest() && cols > 0) {
+            if (this == CUSTOM9x7 || this == CUSTOM9x8 || this == CUSTOM9x9 || this == CUSTOM9x10) {
+                return fallbackSize;
+            }
+            return rows * cols;
+        }
+        int live = LiveLimits.menuTypeTopSlots(windowTypeId);
+        if (live > 0) {
+            return live;
+        }
+        return fallbackSize;
     }
 
     /**
-     * Top slots included in Set Content. CUSTOM* open as GENERIC_9x6 so protocol top is 54.
+     * Top slots included in Set Content. CUSTOM* open as GENERIC_9x6 so protocol top is 9×6.
      */
     public int protocolTopSize() {
         return switch (this) {
-            case CUSTOM9x7, CUSTOM9x8, CUSTOM9x9, CUSTOM9x10 -> 54;
-            default -> size;
+            case CUSTOM9x7, CUSTOM9x8, CUSTOM9x9, CUSTOM9x10 -> {
+                int live = LiveLimits.menuTypeTopSlots(5);
+                yield live > 0 ? live : LiveLimits.hotbarSlots() * LiveLimits.maxGenericChestRows();
+            }
+            default -> size();
         };
     }
 
     /**
-     * Player inventory slots appended after the top in Set Content (36 = storage+hotbar).
+     * Player inventory slots appended after the top in Set Content.
      * {@link #LECTERN} is 0 — the container has no player inv section.
      */
     public int bottomSlotCount() {
-        return bottomSlotCount;
+        if (fallbackBottom <= 0) {
+            return 0;
+        }
+        return LiveLimits.playerInventorySlots();
     }
 
     /** {@link #protocolTopSize()} + {@link #bottomSlotCount()}. */
     public int totalProtocolSlots() {
-        return protocolTopSize() + bottomSlotCount;
+        return protocolTopSize() + bottomSlotCount();
     }
 
     public int lastIndex() {
-        return size - 1;
+        return size() - 1;
     }
 
     public int protocolLastIndex() {
@@ -135,6 +153,10 @@ public enum InventoryType {
     }
 
     public static InventoryType genericRows(int rows) {
+        int max = LiveLimits.maxGenericChestRows();
+        if (rows < 1 || rows > max) {
+            throw new IllegalArgumentException("rows must be 1.." + max + ", got " + rows);
+        }
         return switch (rows) {
             case 1 -> GENERIC9X1;
             case 2 -> GENERIC9X2;
@@ -142,7 +164,7 @@ public enum InventoryType {
             case 4 -> GENERIC9X4;
             case 5 -> GENERIC9X5;
             case 6 -> GENERIC9X6;
-            default -> throw new IllegalArgumentException("rows must be 1..6, got " + rows);
+            default -> throw new IllegalArgumentException("rows must be 1.." + max + ", got " + rows);
         };
     }
 
@@ -151,7 +173,8 @@ public enum InventoryType {
      * NMS {@code ChestMenu}. All other types are packet-only Open Screen + contents.
      */
     public boolean supportsChestBind() {
-        return windowTypeId >= 0 && windowTypeId <= 5;
+        int maxGenericId = LiveLimits.maxGenericChestRows() - 1;
+        return windowTypeId >= 0 && windowTypeId <= maxGenericId && isGenericChest();
     }
 
     /** Alias of {@link #supportsChestBind()} — server container bind is chest-shaped only. */

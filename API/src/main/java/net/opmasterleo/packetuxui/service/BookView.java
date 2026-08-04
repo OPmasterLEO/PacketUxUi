@@ -8,19 +8,24 @@ import java.util.function.Consumer;
 import org.bukkit.entity.Player;
 
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
+import net.opmasterleo.packetuxui.nms.LiveLimits;
 
 /**
  * Immutable written-book viewer payload.
  * <p>
- * <b>Limits (vanilla client):</b> at most {@link #MAX_PAGES} pages; each page is a single
- * text component (keep under ~1023 characters / ~14 lines). Page turns are client-side.
- * There are no inventory slots — use Adventure {@code ClickEvent}s on page text for actions
- * ({@code run_command}, {@code suggest_command}, {@code change_page}, {@code open_url}, …).
+ * Page/character caps come from live NMS ({@link LiveLimits#bookMaxPages()},
+ * {@link LiveLimits#bookMaxPageLength()}) — not hardcoded. Page turns are client-side.
+ * There are no inventory slots — use Adventure {@code ClickEvent}s on page text for actions.
  * Closing the book does not send a container close; {@link #onClose()} runs when the book
  * is displaced (another GUI, {@code close}, quit) — not reliably on Esc alone.
  */
 public final class BookView {
 
+    /**
+     * @deprecated use {@link #maxPages()} / {@link LiveLimits#bookMaxPages()} (live NMS)
+     */
+    @Deprecated
     public static final int MAX_PAGES = 100;
 
     private final Component title;
@@ -37,19 +42,47 @@ public final class BookView {
         this.title = title == null ? Component.empty() : title;
         this.author = author == null ? Component.empty() : author;
         List<Component> raw = pages == null ? List.of() : pages;
-        if (raw.size() > MAX_PAGES) {
-            throw new IllegalArgumentException("book pages exceed " + MAX_PAGES);
+        int maxPages = maxPages();
+        if (raw.size() > maxPages) {
+            throw new IllegalArgumentException(
+                    "book pages exceed NMS limit (" + maxPages + ")"
+            );
         }
+        int maxLen = LiveLimits.bookMaxPageLength();
         List<Component> copy = new ArrayList<>(Math.max(1, raw.size()));
         if (raw.isEmpty()) {
             copy.add(Component.empty());
         } else {
             for (Component page : raw) {
-                copy.add(page == null ? Component.empty() : page);
+                Component safe = page == null ? Component.empty() : page;
+                enforcePageLength(safe, maxLen);
+                copy.add(safe);
             }
         }
         this.pages = List.copyOf(copy);
         this.onClose = onClose;
+    }
+
+    /** Live NMS {@code WritableBookContent.MAX_PAGES}. */
+    public static int maxPages() {
+        return LiveLimits.bookMaxPages();
+    }
+
+    /** Live NMS {@code WritableBookContent.PAGE_EDIT_LENGTH}. */
+    public static int maxPageLength() {
+        return LiveLimits.bookMaxPageLength();
+    }
+
+    private static void enforcePageLength(Component page, int maxLen) {
+        if (maxLen <= 0) {
+            return;
+        }
+        String plain = PlainTextComponentSerializer.plainText().serialize(page);
+        if (plain.length() > maxLen) {
+            throw new IllegalArgumentException(
+                    "book page exceeds NMS length limit (" + maxLen + " chars, got " + plain.length() + ")"
+            );
+        }
     }
 
     public Component title() {

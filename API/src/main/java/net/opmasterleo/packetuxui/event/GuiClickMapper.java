@@ -3,6 +3,7 @@ package net.opmasterleo.packetuxui.event;
 import java.util.Objects;
 
 import net.opmasterleo.packetuxui.nms.ClickPacket;
+import net.opmasterleo.packetuxui.nms.LiveLimits;
 import net.opmasterleo.packetuxui.nms.WindowClickType;
 import net.opmasterleo.packetuxui.nms.item.UxItem;
 import net.opmasterleo.packetuxui.service.Menu;
@@ -19,7 +20,7 @@ public final class GuiClickMapper {
     }
 
     public static GuiSlotType slotType(int slot, int topSize) {
-        return slotType(slot, topSize, 36);
+        return slotType(slot, topSize, LiveLimits.playerInventorySlots());
     }
 
     public static GuiSlotType slotType(int slot, int topSize, int bottomSize) {
@@ -33,7 +34,8 @@ public final class GuiClickMapper {
             return GuiSlotType.OUTSIDE;
         }
         int bottom = slot - topSize;
-        if (bottom >= 27 && bottom < bottomSize) {
+        int storage = LiveLimits.playerStorageSlots();
+        if (bottom >= storage && bottom < bottomSize) {
             return GuiSlotType.HOTBAR;
         }
         if (bottom >= 0 && bottom < bottomSize) {

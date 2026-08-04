@@ -19,7 +19,7 @@ repositories {
 }
 
 dependencies {
-    implementation("net.opmasterleo:packetuxui:0.13.5")
+    implementation("net.opmasterleo:packetuxui:0.13.6")
 }
 ```
 
@@ -91,7 +91,7 @@ gui.closeThen(player, () -> signGui.open(player));
 | API                                                          | Role                                                                         |
 | ------------------------------------------------------------ | ---------------------------------------------------------------------------- |
 | `present`                                                    | Diff if same type; **silent type swap** (OpenScreen only) if same mode different type; else open |
-| `book` / `openBook`                                          | Written-book text viewer (max 100 pages; no slots; Adventure click events) |
+| `book` / `openBook`                                          | Written-book text viewer (NMS page/length caps; no slots; Adventure click events) |
 | `reopen`                                                     | Force close+open                                                             |
 | `close`                                                      | Empty cursor, close packet, unbind, clear session                            |
 | `closeThen`                                                  | `close` + 1 tick, then runnable                                              |
@@ -122,7 +122,7 @@ gui.present(p, PacketMenus.build().title("Spawner").rows(3).editable()
         .action(22, closeBtn, Player::closeInventory));
 ```
 
-Virtual window ids use vanilla `nextContainerCounter()` (**1–100**). Pipeline injects before `packet_handler`. Modern 21.5+/26.x bind a real `ChestMenu` (**generic 9×N only**) and own `stateId` via `incrementStateId`; top stacks are mirrored into the bound container.
+Virtual window ids use vanilla `nextContainerCounter()` (live min/max via `LiveLimits`). Pipeline injects before `packet_handler`. Modern 21.5+/26.x bind a real `ChestMenu` (**generic 9×N only**) and own `stateId` via `incrementStateId`; top stacks are mirrored into the bound container.
 
 ### Inventory types
 

@@ -10,6 +10,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.Test;
 
+import net.opmasterleo.packetuxui.nms.LiveLimits;
+
 class WindowIdPoolTest {
 
     @Test
@@ -54,12 +56,14 @@ class WindowIdPoolTest {
         WindowIdPool pool = new WindowIdPool();
         UUID a = UUID.randomUUID();
         AtomicInteger vanilla = new AtomicInteger(0);
+        int max = LiveLimits.containerCounterMax();
+        int min = LiveLimits.containerCounterMin();
         int id = pool.allocate(a, () -> {
-            int next = vanilla.updateAndGet(v -> v >= 100 ? 1 : v + 1);
+            int next = vanilla.updateAndGet(v -> v >= max ? min : v + 1);
             return next;
         });
-        assertTrue(id >= 1 && id <= 100);
+        assertTrue(WindowIdPool.isInCounterRange(id));
         assertNotEquals(126, id);
-        assertFalse(id >= 101 && id <= 126);
+        assertFalse(id > max);
     }
 }
