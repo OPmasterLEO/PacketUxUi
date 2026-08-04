@@ -61,6 +61,10 @@ public final class MenuService {
     private final ConcurrentHashMap<UUID, Integer> nettyRoCorrectedForState = new ConcurrentHashMap<>();
     /** Netty-safe bottom inventory snapshot (no Bukkit touch on event-loop). */
     private final ConcurrentHashMap<UUID, List<UxItem>> bottomCache = new ConcurrentHashMap<>();
+    /** Per-player close re-entrancy guard (button onClose → present must not nest-corrupt). */
+    private final java.util.Set<UUID> closingPlayers = java.util.concurrent.ConcurrentHashMap.newKeySet();
+    /** Open requested while {@link #closingPlayers} — applied after close finally. */
+    private final ConcurrentHashMap<UUID, Menu> pendingPresent = new ConcurrentHashMap<>();
     private final AtomicLong transitionSequence = new AtomicLong();
     private final GuiEventManager events = new GuiEventManager();
     private volatile GuiScopeListener scopeListener;
@@ -191,11 +195,80 @@ public final class MenuService {
     }
 
     public boolean hasOpen(UUID playerId) {
+        MenuSession session = sessions.get(playerId);
+        return session != null && session.phase() == SessionPhase.OPEN;
+    }
+
+    public boolean hasOpen(Player player) {
+        return player != null && hasOpen(player.getUniqueId());
+    }
+
+    /** Any in-memory session (OPEN/OPENING/CLOSING) — used for packet intercept. */
+    public boolean hasSession(UUID playerId) {
         return sessions.containsKey(playerId);
+    }
+
+    public boolean isClosing(UUID playerId) {
+        return closingPlayers.contains(playerId);
     }
 
     public boolean isOursWindow(UUID playerId, int windowId) {
         return windowIds.isOurs(playerId, windowId);
+    }
+
+    /**
+     * Hard-reset all menu tracking for a player (stale session, stranded transition, etc.).
+     * Safe to call from join/quit or after a desync.
+     */
+    public void resetPlayer(Player player) {
+        if (player == null) {
+            return;
+        }
+        UUID pid = id(player);
+        pendingPresent.remove(pid);
+        closingPlayers.add(pid);
+        try {
+            MenuSession session = sessions.get(pid);
+            if (session != null) {
+                try {
+                    adapter.packets().sendCursorItem(player, UxItem.EMPTY);
+                } catch (Throwable ignored) {
+                }
+                try {
+                    adapter.packets().sendCloseWindow(player, session.windowId());
+                } catch (Throwable ignored) {
+                }
+                try {
+                    adapter.packets().unbindServerContainer(player);
+                } catch (Throwable ignored) {
+                }
+            }
+            clearPlayerTracking(player, true);
+            transitionTokens.remove(pid);
+            pendingPresent.remove(pid);
+        } finally {
+            closingPlayers.remove(pid);
+        }
+    }
+
+    /** Quit/kick/death: fire close then purge every tracking map. */
+    public void onDisconnect(Player player, GuiCloseReason reason) {
+        if (player == null) {
+            return;
+        }
+        UUID pid = id(player);
+        pendingPresent.remove(pid);
+        try {
+            onCloseMenu(player, reason == null ? GuiCloseReason.QUIT : reason);
+        } catch (Throwable ignored) {
+        } finally {
+            transitionTokens.remove(pid);
+            pendingPresent.remove(pid);
+            closingPlayers.remove(pid);
+            if (sessions.containsKey(pid)) {
+                clearPlayerTracking(player, true);
+            }
+        }
     }
 
     public SessionPhase phase(Player player) {
@@ -208,7 +281,16 @@ public final class MenuService {
     }
 
     public void openMenuSync(Player player, Menu menu) {
+        UUID pid = id(player);
+        if (closingPlayers.contains(pid)) {
+            pendingPresent.put(pid, menu);
+            return;
+        }
         closeCurrent(player, true, true, GuiCloseReason.REPLACE, true);
+        if (closingPlayers.contains(pid)) {
+            pendingPresent.put(pid, menu);
+            return;
+        }
         installOpen(player, menu);
     }
 
@@ -376,10 +458,15 @@ public final class MenuService {
     }
 
     public void onCloseMenu(Player player, GuiCloseReason reason) {
-        if (isTransitionActive(player)) {
-            return;
-        }
-        closeCurrent(player, false, true, reason == null ? GuiCloseReason.PLAYER : reason);
+        // Never soft-ignore: a stranded transition/session blocks opens and Bukkit clicks.
+        closeCurrent(
+                player,
+                false,
+                true,
+                reason == null ? GuiCloseReason.PLAYER : reason,
+                true,
+                true
+        );
     }
 
     public void closeMenu(Player player) {
@@ -412,58 +499,104 @@ public final class MenuService {
             boolean releaseWindowId,
             boolean fireMenuOnClose
     ) {
-        MenuSession session = sessions.get(id(player));
-        if (session == null) {
-            if (releaseWindowId) {
-                windowIds.release(player);
+        UUID pid = id(player);
+        if (!closingPlayers.add(pid)) {
+            // Nested close (onClose → close/present): outer owns cleanup; drop leftovers.
+            MenuSession nested = sessions.remove(pid);
+            if (nested != null) {
+                try {
+                    adapter.packets().unbindServerContainer(player);
+                } catch (Throwable ignored) {
+                }
             }
-            carriedItem.remove(id(player));
-            clearBottomHeld(player);
-            clearAccumulatedDrag(player);
             return;
         }
-        session.setPhase(SessionPhase.CLOSING);
-        // Include bottomHeld so CloseSnapshot.cursor matches what the player sees.
-        UxItem cursor = activeCursor(player);
-        CloseSnapshot snapshot = new CloseSnapshot(session.menu().items(), cursor);
-        BiConsumer<Player, CloseSnapshot> onClose = session.menu().onClose();
-        if (fireMenuOnClose && onClose != null) {
+        MenuSession session = sessions.get(pid);
+        int top = 0;
+        int windowId = -1;
+        CloseSnapshot snapshot = null;
+        try {
+            if (session == null) {
+                return;
+            }
+            session.setPhase(SessionPhase.CLOSING);
+            // Include bottomHeld so CloseSnapshot.cursor matches what the player sees.
+            UxItem cursor = activeCursor(player);
+            snapshot = new CloseSnapshot(session.menu().items(), cursor);
+            BiConsumer<Player, CloseSnapshot> onClose = session.menu().onClose();
+            if (fireMenuOnClose && onClose != null) {
+                try {
+                    onClose.accept(player, snapshot);
+                } catch (Throwable ignored) {
+                }
+            }
+            if (reclaim && reclaimCursorOnClose && cursor != null && !cursor.isEmpty()) {
+                // Single reclaim — covers carriedItem and bottomHeld (activeCursor).
+                CursorReclaim.reclaim(player, adapter.items(), cursor);
+            }
+            // Empty top on the client before CloseWindow so vanilla does not dump GUI items
+            // back into the player inventory (would duplicate plugin onClose refunds).
+            if (sendClosePacket) {
+                try {
+                    flushClientTopEmpty(player, session);
+                } catch (Throwable error) {
+                    debug(player, "flushClientTopEmpty failed: " + error.getClass().getSimpleName());
+                }
+            }
             try {
-                onClose.accept(player, snapshot);
+                adapter.packets().sendCursorItem(player, UxItem.EMPTY);
             } catch (Throwable ignored) {
             }
+            if (sendClosePacket) {
+                try {
+                    adapter.packets().sendCloseWindow(player, session.windowId());
+                } catch (Throwable error) {
+                    debug(player, "sendCloseWindow failed: " + error.getClass().getSimpleName());
+                }
+            }
+            try {
+                adapter.packets().unbindServerContainer(player);
+            } catch (Throwable ignored) {
+            }
+            top = session.topSlotCount();
+            windowId = session.windowId();
+            if (debugLogging) {
+                debug(player, "CLOSE windowId=" + windowId + " sendPacket=" + sendClosePacket
+                        + " reclaim=" + reclaim + " releaseId=" + releaseWindowId
+                        + " fireOnClose=" + fireMenuOnClose + " reason=" + reason);
+            }
+            if (snapshot != null) {
+                fireScope(player, false, session, top, reason, snapshot);
+            }
+        } catch (Throwable error) {
+            debug(player, "closeCurrent failed: " + error.getClass().getSimpleName());
+        } finally {
+            // Always clear tracking — packet/send failures must not strand CLOSING/OPEN.
+            clearPlayerTracking(player, releaseWindowId);
+            closingPlayers.remove(pid);
+            Menu pending = pendingPresent.remove(pid);
+            if (pending != null && player.isOnline()) {
+                try {
+                    installOpen(player, pending);
+                } catch (Throwable error) {
+                    debug(player, "pendingPresent failed: " + error.getClass().getSimpleName());
+                }
+            }
         }
-        if (reclaim && reclaimCursorOnClose && cursor != null && !cursor.isEmpty()) {
-            // Single reclaim — covers carriedItem and bottomHeld (activeCursor).
-            CursorReclaim.reclaim(player, adapter.items(), cursor);
-        }
-        // Empty top on the client before CloseWindow so vanilla does not dump GUI items
-        // back into the player inventory (would duplicate plugin onClose refunds).
-        if (sendClosePacket) {
-            flushClientTopEmpty(player, session);
-        }
-        adapter.packets().sendCursorItem(player, UxItem.EMPTY);
-        if (sendClosePacket) {
-            adapter.packets().sendCloseWindow(player, session.windowId());
-        }
-        adapter.packets().unbindServerContainer(player);
-        int top = session.topSlotCount();
-        int windowId = session.windowId();
-        sessions.remove(id(player));
+    }
+
+    private void clearPlayerTracking(Player player, boolean releaseWindowId) {
+        UUID pid = id(player);
+        sessions.remove(pid);
         if (releaseWindowId) {
             windowIds.release(player);
         }
-        carriedItem.remove(id(player));
+        carriedItem.remove(pid);
         clearBottomHeld(player);
         clearAccumulatedDrag(player);
-        nettyRoCorrectedForState.remove(id(player));
-        bottomCache.remove(id(player));
-        if (debugLogging) {
-            debug(player, "CLOSE windowId=" + windowId + " sendPacket=" + sendClosePacket
-                    + " reclaim=" + reclaim + " releaseId=" + releaseWindowId
-                    + " fireOnClose=" + fireMenuOnClose + " reason=" + reason);
-        }
-        fireScope(player, false, session, top, reason, snapshot);
+        nettyRoCorrectedForState.remove(pid);
+        bottomCache.remove(pid);
+        lastClickDecision.remove(pid);
     }
 
     /** Clear top slots client-side so CloseWindow cannot dump virtual items into the inv. */
@@ -598,8 +731,16 @@ public final class MenuService {
     }
 
     public void handleIncomingClick(Player player, ClickPacket packet) {
-        MenuSession session = sessions.get(id(player));
+        UUID pid = id(player);
+        if (closingPlayers.contains(pid)) {
+            return;
+        }
+        MenuSession session = sessions.get(pid);
         if (session == null) {
+            return;
+        }
+        if (packet.windowId() != session.windowId()) {
+            emitDecision(player, packet, SlotKind.DECORATIVE, false, false, "stale_window_id");
             return;
         }
         if (!isValidClickSlot(session, packet)) {
@@ -608,10 +749,10 @@ public final class MenuService {
             return;
         }
         if (session.phase() != SessionPhase.OPEN) {
-            emitDecision(player, packet, SlotKind.DECORATIVE, false, false, "phase_mismatch_resync_full");
-            resyncFull(player, session, packet.stateId(), true);
+            emitDecision(player, packet, SlotKind.DECORATIVE, false, false, "phase_mismatch_drop");
             return;
         }
+        final int clickGeneration = session.generation();
         long now = System.nanoTime();
         // EDITABLE take→place is faster than debounce — never reject simulation.
         boolean debounced = clickDebounceNanos > 0L
@@ -619,7 +760,9 @@ public final class MenuService {
                 && now - session.lastClickNanos() < clickDebounceNanos;
         if (debounced && session.menu().mode() != MenuMode.EDITABLE) {
             emitDecision(player, packet, SlotKind.DECORATIVE, false, false, "debounce_resync_full");
-            resyncFull(player, session, packet.stateId(), true);
+            if (stillSameSession(player, session, clickGeneration)) {
+                resyncFull(player, session, packet.stateId(), true);
+            }
             return;
         }
         session.markClick(now);
@@ -641,8 +784,10 @@ public final class MenuService {
             events.fireClick(pre);
             if (pre.isCancelled()) {
                 emitDecision(player, packet, SlotKind.DECORATIVE, false, false, "listener_cancelled");
-                resyncFull(player, session, packet.stateId(), session.menu().mode() != MenuMode.EDITABLE);
-                fireClickPost(player, session, packet, clickData, carried, "listener_cancelled");
+                if (stillSameSession(player, session, clickGeneration)) {
+                    resyncFull(player, session, packet.stateId(), session.menu().mode() != MenuMode.EDITABLE);
+                    fireClickPost(player, session, packet, clickData, carried, "listener_cancelled");
+                }
                 return;
             }
         }
@@ -676,12 +821,17 @@ public final class MenuService {
                 events.fireDrag(drag);
                 if (drag.isCancelled()) {
                     clearAccumulatedDrag(player);
-                    resyncFull(player, session, packet.stateId(), session.menu().mode() != MenuMode.EDITABLE);
-                    fireClickPost(player, session, packet, clickData, carried, "drag_cancelled");
+                    if (stillSameSession(player, session, clickGeneration)) {
+                        resyncFull(player, session, packet.stateId(), session.menu().mode() != MenuMode.EDITABLE);
+                        fireClickPost(player, session, packet, clickData, carried, "drag_cancelled");
+                    }
                     return;
                 }
             }
             if (phase == GuiDragPhase.START || phase == GuiDragPhase.ADD) {
+                if (!stillSameSession(player, session, clickGeneration)) {
+                    return;
+                }
                 accumulateDrag(player, packet, clickData.clickType());
                 if (session.menu().mode() != MenuMode.EDITABLE) {
                     resyncDirtySlots(player, session, packet, UxItem.EMPTY);
@@ -692,20 +842,52 @@ public final class MenuService {
             }
             // DRAG_END falls through to editable/readonly handlers below
         }
+        if (!stillOpenSession(player, session)) {
+            emitDecision(player, packet, SlotKind.DECORATIVE, false, false, "generation_stale_pre");
+            return;
+        }
         if (session.menu().mode() == MenuMode.EDITABLE) {
             handleEditableClick(player, session, clickData, packet);
-            fireClickPost(player, session, packet, clickData, activeCursor(player),
-                    lastClickDecision.getOrDefault(id(player), "editable"));
+            if (stillOpenSession(player, session)) {
+                fireClickPost(player, session, packet, clickData, activeCursor(player),
+                        lastClickDecision.getOrDefault(id(player), "editable"));
+            }
             return;
         }
         if (isMenuClick(packet, clickData.clickType(), player)) {
             handleClickMenu(player, session, clickData, packet);
-            fireClickPost(player, session, packet, clickData, UxItem.EMPTY,
-                    lastClickDecision.getOrDefault(id(player), "readonly"));
+            if (stillOpenSession(player, session)) {
+                fireClickPost(player, session, packet, clickData, UxItem.EMPTY,
+                        lastClickDecision.getOrDefault(id(player), "readonly"));
+            }
             return;
         }
         settleReadOnlyOutside(player, session, packet);
-        fireClickPost(player, session, packet, clickData, UxItem.EMPTY, "readonly_outside");
+        if (stillOpenSession(player, session)) {
+            fireClickPost(player, session, packet, clickData, UxItem.EMPTY, "readonly_outside");
+        }
+    }
+
+    private boolean stillSameSession(Player player, MenuSession expected, int generation) {
+        if (expected == null || closingPlayers.contains(id(player))) {
+            return false;
+        }
+        MenuSession current = sessions.get(id(player));
+        return current == expected
+                && current.phase() == SessionPhase.OPEN
+                && current.generation() == generation
+                && current.windowId() == expected.windowId();
+    }
+
+    /** Session still open (generation may bump from resync within the same click). */
+    private boolean stillOpenSession(Player player, MenuSession expected) {
+        if (expected == null || closingPlayers.contains(id(player))) {
+            return false;
+        }
+        MenuSession current = sessions.get(id(player));
+        return current == expected
+                && current.phase() == SessionPhase.OPEN
+                && current.windowId() == expected.windowId();
     }
 
     private void fireClickPost(
@@ -1589,6 +1771,10 @@ public final class MenuService {
         if (clickData.clickType() == ClickType.DRAG_END) {
             clearAccumulatedDrag(player);
         }
+        if (!stillOpenSession(player, session)) {
+            emitDecision(player, packet, SlotKind.DECORATIVE, false, false, "readonly_stale_session");
+            return;
+        }
         Menu menu = session.menu();
         int slot = packet.slot();
         Button button = slot >= 0 ? menu.buttons().get(slot) : null;
@@ -1599,6 +1785,11 @@ public final class MenuService {
         } else {
             protocolState(player, session, packet.stateId());
             carriedItem.remove(id(player));
+        }
+        // resyncFull bumps generation — only require same open session identity.
+        if (!stillOpenSession(player, session)) {
+            emitDecision(player, packet, SlotKind.DECORATIVE, false, false, "readonly_closed_during_resync");
+            return;
         }
         if (button == null) {
             emitDecision(player, packet, SlotKind.DECORATIVE, false, false, "readonly_no_handler");
@@ -1936,7 +2127,12 @@ public final class MenuService {
 
         @Override
         public void run() {
-            MenuSession existing = owner.sessions.get(id(player));
+            UUID pid = id(player);
+            if (owner.closingPlayers.contains(pid)) {
+                owner.pendingPresent.put(pid, menu);
+                return;
+            }
+            MenuSession existing = owner.sessions.get(pid);
             if (existing != null && existing.phase() == SessionPhase.OPEN) {
                 // Same type+mode → differential SetSlots (no close, no onClose refund).
                 if (existing.menu().mode() == menu.mode()

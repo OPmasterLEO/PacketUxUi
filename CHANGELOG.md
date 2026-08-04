@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.13.3
+
+### Session / GUI tracking harden (double-click stuck state)
+
+Fast double-clicks that close a GUI could leave a stranded server session: client closed, close listener skipped, `hasOpen` stayed true → Bukkit clicks cancelled and new GUIs would not open until rejoin.
+
+- `closeCurrent` always clears session/window/cursor maps in `finally` (packet send failures cannot strand CLOSING/OPEN)
+- `hasOpen` is true only for `SessionPhase.OPEN` (not CLOSING leftovers)
+- Close during transition no longer soft-ignored; pending `present` deferred until close finishes
+- Stale click guards: window-id mismatch, closing flag, session identity after handlers
+- Join resets tracking; quit/kick/death use full `onDisconnect` purge
+- Public `PacketGuiManager.resetPlayer(Player)` for emergency clear
+
+### Artifact
+`net.opmasterleo:packetuxui:0.13.3`
+
 ## 0.13.2
 
 ### Silent type swap (no close/open feel)

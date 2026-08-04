@@ -11,6 +11,7 @@ import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerKickEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 
+import net.opmasterleo.packetuxui.event.GuiCloseReason;
 import net.opmasterleo.packetuxui.network.PipelineManager;
 import net.opmasterleo.packetuxui.scheduler.PlatformScheduler;
 import net.opmasterleo.packetuxui.service.MenuService;
@@ -38,22 +39,22 @@ public class BukkitLifecycleListener implements Listener {
     @EventHandler
     public void onJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
-        scheduler.runForPlayer(player, new InjectPipelineTask(pipelineManager, player));
+        scheduler.runForPlayer(player, new JoinResetInjectTask(service, pipelineManager, player));
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onKick(PlayerKickEvent event) {
-        forceClose(event.getPlayer(), net.opmasterleo.packetuxui.event.GuiCloseReason.KICK);
+        forceClose(event.getPlayer(), GuiCloseReason.KICK);
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void onDeath(PlayerDeathEvent event) {
-        forceClose(event.getEntity(), net.opmasterleo.packetuxui.event.GuiCloseReason.DEATH);
+        forceClose(event.getEntity(), GuiCloseReason.DEATH);
     }
 
     @EventHandler
     public void onQuit(PlayerQuitEvent event) {
-        forceClose(event.getPlayer(), net.opmasterleo.packetuxui.event.GuiCloseReason.QUIT);
+        forceClose(event.getPlayer(), GuiCloseReason.QUIT);
         pipelineManager.remove(event.getPlayer());
     }
 
@@ -77,24 +78,27 @@ public class BukkitLifecycleListener implements Listener {
         }
     }
 
-    private void forceClose(Player player, net.opmasterleo.packetuxui.event.GuiCloseReason reason) {
+    private void forceClose(Player player, GuiCloseReason reason) {
         try {
-            service.onCloseMenu(player, reason);
+            service.onDisconnect(player, reason);
         } catch (Throwable ignored) {
         }
     }
 
-    private static final class InjectPipelineTask implements Runnable {
+    private static final class JoinResetInjectTask implements Runnable {
+        private final MenuService service;
         private final PipelineManager pipelineManager;
         private final Player player;
 
-        private InjectPipelineTask(PipelineManager pipelineManager, Player player) {
+        private JoinResetInjectTask(MenuService service, PipelineManager pipelineManager, Player player) {
+            this.service = service;
             this.pipelineManager = pipelineManager;
             this.player = player;
         }
 
         @Override
         public void run() {
+            service.resetPlayer(player);
             pipelineManager.inject(player);
         }
     }

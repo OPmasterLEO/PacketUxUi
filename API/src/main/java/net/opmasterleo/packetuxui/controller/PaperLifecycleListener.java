@@ -36,10 +36,11 @@ public final class PaperLifecycleListener implements Listener {
     public void onJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
         if (scheduler.isOwnedByCurrentRegion(player)) {
+            service.resetPlayer(player);
             pipelineManager.inject(player);
             return;
         }
-        scheduler.runForPlayer(player, new InjectPipelineTask(pipelineManager, player));
+        scheduler.runForPlayer(player, new JoinResetInjectTask(service, pipelineManager, player));
     }
 
     @EventHandler
@@ -90,22 +91,25 @@ public final class PaperLifecycleListener implements Listener {
 
     private void forceClose(Player player, GuiCloseReason reason) {
         try {
-            service.onCloseMenu(player, reason);
+            service.onDisconnect(player, reason);
         } catch (Throwable ignored) {
         }
     }
 
-    private static final class InjectPipelineTask implements Runnable {
+    private static final class JoinResetInjectTask implements Runnable {
+        private final MenuService service;
         private final PipelineManager pipelineManager;
         private final Player player;
 
-        private InjectPipelineTask(PipelineManager pipelineManager, Player player) {
+        private JoinResetInjectTask(MenuService service, PipelineManager pipelineManager, Player player) {
+            this.service = service;
             this.pipelineManager = pipelineManager;
             this.player = player;
         }
 
         @Override
         public void run() {
+            service.resetPlayer(player);
             pipelineManager.inject(player);
         }
     }

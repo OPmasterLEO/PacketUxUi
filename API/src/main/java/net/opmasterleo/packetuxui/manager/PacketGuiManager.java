@@ -192,6 +192,11 @@ public final class PacketGuiManager {
         return player != null && hasOpen(player.getUniqueId());
     }
 
+    /** Hard-clear stranded session/transition state for a player. */
+    public void resetPlayer(Player player) {
+        service.resetPlayer(player);
+    }
+
     public SessionPhase phase(Player player) {
         return service.phase(player);
     }

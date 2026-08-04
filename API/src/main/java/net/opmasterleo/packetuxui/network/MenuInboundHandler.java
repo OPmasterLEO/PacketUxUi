@@ -42,26 +42,37 @@ public final class MenuInboundHandler extends ChannelInboundHandlerAdapter {
         }
         PacketClassifier classifier = adapter.classifier();
         PacketClassifier.Kind kind = classifier.kindOf(msg);
-        boolean sessionOpen = menuService.hasOpen(player.getUniqueId());
+        java.util.UUID playerId = player.getUniqueId();
+        boolean sessionOpen = menuService.hasOpen(playerId);
+        boolean tracked = sessionOpen
+                || menuService.hasSession(playerId)
+                || menuService.isClosing(playerId)
+                || menuService.isTransitionActive(player);
 
         switch (kind) {
             case CLOSE -> {
                 int closeId = classifier.closeWindowId(msg);
-                boolean oursClose = menuService.isOursWindow(player.getUniqueId(), closeId);
+                boolean oursClose = menuService.isOursWindow(playerId, closeId);
                 if (menuService.debugLogging()) {
                     menuService.debug(player, "CLOSE closeId=" + closeId
-                            + " hadVirtual=" + sessionOpen);
+                            + " hadVirtual=" + sessionOpen
+                            + " tracked=" + tracked);
                 }
-                if (sessionOpen || oursClose || menuService.isTransitionActive(player)) {
+                if (tracked || oursClose) {
                     scheduler.runForPlayer(player, new CloseMenuTask(player, menuService));
                     return;
                 }
                 ctx.fireChannelRead(msg);
             }
             case CLICK -> {
+                if (menuService.isClosing(playerId)
+                        || (menuService.hasSession(playerId) && !sessionOpen)) {
+                    // Mid-teardown or non-OPEN phase: drop, never vanilla.
+                    return;
+                }
                 if (!sessionOpen) {
                     int windowId = classifier.clickWindowId(msg);
-                    if (menuService.isOursWindow(player.getUniqueId(), windowId)) {
+                    if (menuService.isOursWindow(playerId, windowId)) {
                         return;
                     }
                     ctx.fireChannelRead(msg);
