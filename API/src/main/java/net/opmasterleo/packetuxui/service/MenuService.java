@@ -890,8 +890,16 @@ public final class MenuService {
     }
 
     private void resyncFull(Player player, MenuSession session) {
-        int stateId = session.nextStateId();
-        UxItem cursor = activeCursor(player);
+        resyncFull(player, session, -1, true);
+    }
+
+    private void resyncFull(Player player, MenuSession session, int clientStateId, boolean clearCursor) {
+        int stateId = clientStateId >= 0 ? session.nextStateIdAbove(clientStateId) : session.nextStateId();
+        if (clearCursor) {
+            carriedItem.remove(id(player));
+            clearBottomHeld(player);
+        }
+        UxItem cursor = clearCursor ? UxItem.EMPTY : activeCursor(player);
         adapter.packets().sendWindowItems(
                 player,
                 session.windowId(),
@@ -899,6 +907,24 @@ public final class MenuService {
                 fullContents(player, session.menu()),
                 cursor.isEmpty() ? null : cursor
         );
+        if (clearCursor) {
+            adapter.packets().sendCursorItem(player, UxItem.EMPTY);
+        }
+    }
+
+    /**
+     * Netty-thread-safe correction for read-only menus: push a full content + empty cursor
+     * resync immediately so the client cannot keep an optimistic button pickup.
+     */
+    public void correctReadOnlyClick(Player player, ClickPacket packet) {
+        MenuSession session = sessions.get(id(player));
+        if (session == null || session.phase() != SessionPhase.OPEN) {
+            return;
+        }
+        if (session.menu().mode() != MenuMode.READ_ONLY) {
+            return;
+        }
+        resyncFull(player, session, packet.stateId(), true);
     }
 
     private List<UxItem> contentsForOpen(Player player, Menu menu) {
@@ -976,8 +1002,7 @@ public final class MenuService {
         int slot = packet.slot();
         Button button = slot >= 0 ? menu.buttons().get(slot) : null;
         // Full resync beats client optimistic pickup + stateId races on read-only packet menus.
-        resyncFull(player, session);
-        carriedItem.remove(id(player));
+        resyncFull(player, session, packet.stateId(), true);
         if (button == null) {
             emitDecision(player, packet, SlotKind.DECORATIVE, false, false, "readonly_no_handler");
             return;

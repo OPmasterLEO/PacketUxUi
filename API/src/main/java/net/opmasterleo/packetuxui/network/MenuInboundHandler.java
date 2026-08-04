@@ -36,11 +36,9 @@ public final class MenuInboundHandler extends ChannelInboundHandlerAdapter {
         PacketClassifier.Kind kind = classifier.kindOf(msg);
         switch (kind) {
             case CLOSE -> {
-                // Capture before onClose clears the session.
                 boolean hadVirtualMenu = menuService.hasOpen(player.getUniqueId());
                 int closeId = classifier.closeWindowId(msg);
                 scheduler.runForPlayer(player, () -> menuService.onCloseMenu(player));
-                // Virtual menu closes must not reach vanilla — server has no real container at these ids.
                 if (hadVirtualMenu || WindowIdPool.isVirtual(closeId)) {
                     return;
                 }
@@ -53,9 +51,6 @@ public final class MenuInboundHandler extends ChannelInboundHandlerAdapter {
                     return;
                 }
                 if (menuService.shouldIgnore(windowId, player)) {
-                    // Stale / mid-transition clicks on virtual window ids must be dropped.
-                    // Forwarding them to vanilla is what triggers AC InvalidInventoryClick
-                    // ("Plugins using fake packets inventories?").
                     if (WindowIdPool.isVirtual(windowId) || menuService.hasOpen(player.getUniqueId())) {
                         return;
                     }
@@ -70,7 +65,13 @@ public final class MenuInboundHandler extends ChannelInboundHandlerAdapter {
                     ctx.fireChannelRead(msg);
                     return;
                 }
-                // Swallow: never let vanilla see clicks for our virtual window.
+                // Correct optimistic client pickup on the netty thread BEFORE the scheduled
+                // click handler runs — otherwise Lunar/vanilla prediction keeps the button
+                // on the cursor for one or more frames (or forever if stateId is stale).
+                try {
+                    menuService.correctReadOnlyClick(player, click);
+                } catch (Throwable ignored) {
+                }
                 scheduler.runForPlayer(player, () -> menuService.handleIncomingClick(player, click));
             }
             case OTHER -> ctx.fireChannelRead(msg);

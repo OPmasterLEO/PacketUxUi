@@ -40,6 +40,16 @@ public final class MenuSession {
         return stateId;
     }
 
+    /**
+     * Bump past both our last state and the client's click stateId so correction packets
+     * are accepted after optimistic client-side inventory mutations.
+     */
+    public int nextStateIdAbove(int clientStateId) {
+        int floor = Math.max(stateId, Math.max(0, clientStateId));
+        stateId = floor == Integer.MAX_VALUE ? 1 : floor + 1;
+        return stateId;
+    }
+
     public SessionPhase phase() {
         return phase;
     }
