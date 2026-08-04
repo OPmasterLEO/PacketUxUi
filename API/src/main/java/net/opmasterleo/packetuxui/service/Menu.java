@@ -55,7 +55,8 @@ public class Menu {
         }
         this.name = name;
         this.type = type;
-        this.buttons = new ConcurrentHashMap<>(buttons);
+        this.buttons = new ConcurrentHashMap<>(Math.max(16, buttons.size() * 2));
+        this.buttons.putAll(buttons);
         this.cooldown = cooldown;
         this.mode = mode == null ? MenuMode.READ_ONLY : mode;
         this.onClose = onClose;
@@ -108,7 +109,16 @@ public class Menu {
     }
 
     public void setItems(List<UxItem> items) {
-        this.items = List.copyOf(items);
+        if (items == null) {
+            this.items = List.of();
+            return;
+        }
+        // Prefer O(1) unmodifiable view over List.copyOf when caller transfers a fresh ArrayList.
+        if (items.getClass() == ArrayList.class) {
+            this.items = java.util.Collections.unmodifiableList(items);
+        } else {
+            this.items = List.copyOf(items);
+        }
     }
 
     public Menu copy() {

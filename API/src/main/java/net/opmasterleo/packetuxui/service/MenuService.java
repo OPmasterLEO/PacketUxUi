@@ -325,13 +325,18 @@ public final class MenuService {
                     session.menu().type().id(),
                     next
             );
-            adapter.packets().sendWindowItems(
-                    player,
-                    session.windowId(),
-                    protocolState(player, session),
-                    contentsForOpen(player, session.menu()),
-                    carriedItem.get(id(player))
-            );
+            int stateId = protocolState(player, session);
+            adapter.packets().mirrorTopSlots(player, session.menu().items());
+            if (!adapter.packets().sendBoundAuthority(
+                    player, stateId, session.menu().mode() != MenuMode.EDITABLE)) {
+                adapter.packets().sendWindowItems(
+                        player,
+                        session.windowId(),
+                        stateId,
+                        contentsForOpen(player, session.menu()),
+                        carriedItem.get(id(player))
+                );
+            }
         });
     }
 
@@ -396,8 +401,10 @@ public final class MenuService {
         clearAccumulatedDrag(player);
         nettyRoCorrectedForState.remove(id(player));
         bottomCache.remove(id(player));
-        debug(player, "CLOSE windowId=" + windowId + " sendPacket=" + sendClosePacket
-                + " reclaim=" + reclaim + " reason=" + reason);
+        if (debugLogging) {
+            debug(player, "CLOSE windowId=" + windowId + " sendPacket=" + sendClosePacket
+                    + " reclaim=" + reclaim + " reason=" + reason);
+        }
         fireScope(player, false, session, top, reason, snapshot);
     }
 
@@ -536,22 +543,25 @@ public final class MenuService {
 
         ClickData clickData = getClickType(packet);
         UxItem carried = activeCursor(player);
-        GuiClickEvent pre = new GuiClickEvent(
-                player,
-                session.menu(),
-                session.windowId(),
-                session.topSlotCount(),
-                session.stateId(),
-                packet,
-                clickData,
-                carried
-        );
-        events.fireClick(pre);
-        if (pre.isCancelled()) {
-            emitDecision(player, packet, SlotKind.DECORATIVE, false, false, "listener_cancelled");
-            resyncFull(player, session, packet.stateId(), session.menu().mode() != MenuMode.EDITABLE);
-            fireClickPost(player, session, packet, clickData, carried, "listener_cancelled");
-            return;
+        boolean listen = events.hasListeners();
+        if (listen) {
+            GuiClickEvent pre = new GuiClickEvent(
+                    player,
+                    session.menu(),
+                    session.windowId(),
+                    session.topSlotCount(),
+                    session.stateId(),
+                    packet,
+                    clickData,
+                    carried
+            );
+            events.fireClick(pre);
+            if (pre.isCancelled()) {
+                emitDecision(player, packet, SlotKind.DECORATIVE, false, false, "listener_cancelled");
+                resyncFull(player, session, packet.stateId(), session.menu().mode() != MenuMode.EDITABLE);
+                fireClickPost(player, session, packet, clickData, carried, "listener_cancelled");
+                return;
+            }
         }
 
         if (clickData.clickType() == ClickType.DRAG_START
@@ -562,29 +572,31 @@ public final class MenuService {
                 case DRAG_END -> GuiDragPhase.END;
                 default -> GuiDragPhase.ADD;
             };
-            Set<Integer> dragSlots = new HashSet<>();
-            if (packet.slot() >= 0) {
-                dragSlots.add(packet.slot());
-            }
-            dragSlots.addAll(packet.changedSlotIds());
-            GuiDragEvent drag = new GuiDragEvent(
-                    player,
-                    session.menu(),
-                    session.windowId(),
-                    session.topSlotCount(),
-                    session.stateId(),
-                    packet,
-                    clickData,
-                    phase,
-                    dragSlots,
-                    carried
-            );
-            events.fireDrag(drag);
-            if (drag.isCancelled()) {
-                clearAccumulatedDrag(player);
-                resyncFull(player, session, packet.stateId(), session.menu().mode() != MenuMode.EDITABLE);
-                fireClickPost(player, session, packet, clickData, carried, "drag_cancelled");
-                return;
+            if (listen) {
+                Set<Integer> dragSlots = new HashSet<>(4);
+                if (packet.slot() >= 0) {
+                    dragSlots.add(packet.slot());
+                }
+                dragSlots.addAll(packet.changedSlotIds());
+                GuiDragEvent drag = new GuiDragEvent(
+                        player,
+                        session.menu(),
+                        session.windowId(),
+                        session.topSlotCount(),
+                        session.stateId(),
+                        packet,
+                        clickData,
+                        phase,
+                        dragSlots,
+                        carried
+                );
+                events.fireDrag(drag);
+                if (drag.isCancelled()) {
+                    clearAccumulatedDrag(player);
+                    resyncFull(player, session, packet.stateId(), session.menu().mode() != MenuMode.EDITABLE);
+                    fireClickPost(player, session, packet, clickData, carried, "drag_cancelled");
+                    return;
+                }
             }
             if (phase == GuiDragPhase.START || phase == GuiDragPhase.ADD) {
                 accumulateDrag(player, packet, clickData.clickType());
@@ -621,6 +633,9 @@ public final class MenuService {
             UxItem carried,
             String decision
     ) {
+        if (!events.hasListeners()) {
+            return;
+        }
         try {
             events.fireClickPost(new GuiClickPostEvent(
                     player,
@@ -771,6 +786,7 @@ public final class MenuService {
         }
 
         UxItem cursor = carriedItem.getOrDefault(id(player), UxItem.EMPTY);
+        Predicate<Integer> allow = cursor.isEmpty() ? session::allowsTake : session::allowsPlace;
         if (!cursor.isEmpty() && !session.allowsPlace(packet.slot())) {
             rejectEditable(player, session, packet);
             return;
@@ -781,19 +797,8 @@ public final class MenuService {
                 packet.slot(),
                 packet.button(),
                 type,
-                session::allowsPlace
+                allow
         );
-        // Taking from editable uses allowsTake; simulate placeable-only would block empty-cursor pickup.
-        if (cursor.isEmpty()) {
-            result = VirtualClickSimulator.simulate(
-                    menu.items(),
-                    cursor,
-                    packet.slot(),
-                    packet.button(),
-                    type,
-                    session::allowsTake
-            );
-        }
         emitDecision(player, packet, kind, false, false, "editable_simulate");
         applyEditableResult(player, session, result, packet.stateId());
     }
@@ -1075,7 +1080,14 @@ public final class MenuService {
         for (int i = 0; i < 9 && (27 + i) < bottom.size(); i++) {
             inv.setItem(i, toBukkitOrNull(bottom.get(27 + i)));
         }
-        refreshBottomCache(player);
+        // Cache what we wrote — do not re-snapshot Bukkit (36 fromBukkit).
+        if (bottom.size() == 36) {
+            bottomCache.put(id(player), bottom.getClass() == ArrayList.class
+                    ? List.copyOf(bottom)
+                    : bottom);
+        } else {
+            refreshBottomCache(player);
+        }
     }
 
     private ItemStack toBukkitOrNull(UxItem item) {
@@ -1531,13 +1543,18 @@ public final class MenuService {
             if (!editable) {
                 carriedItem.remove(id(player));
             }
+            int stateId = protocolState(player, session);
+            adapter.packets().mirrorTopSlots(player, session.menu().items());
+            if (adapter.packets().sendBoundAuthority(player, stateId, !editable)) {
+                return;
+            }
             UxItem cursor = editable
                     ? carriedItem.getOrDefault(id(player), UxItem.EMPTY)
                     : UxItem.EMPTY;
             adapter.packets().sendWindowItems(
                     player,
                     session.windowId(),
-                    protocolState(player, session),
+                    stateId,
                     fullContents(player, session.menu()),
                     cursor.isEmpty() ? null : cursor
             );

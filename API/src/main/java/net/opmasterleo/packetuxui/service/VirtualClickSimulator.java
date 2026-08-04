@@ -20,7 +20,7 @@ public final class VirtualClickSimulator {
 
     public record Result(List<UxItem> items, UxItem cursor, Set<Integer> dirty) {
         public Result {
-            items = List.copyOf(items);
+            // Own the items list (simulate allocates a fresh ArrayList) — no List.copyOf.
             cursor = cursor == null || cursor.isEmpty() ? UxItem.EMPTY : cursor;
             dirty = dirty == null || dirty.isEmpty() ? NO_DIRTY : Set.copyOf(dirty);
         }

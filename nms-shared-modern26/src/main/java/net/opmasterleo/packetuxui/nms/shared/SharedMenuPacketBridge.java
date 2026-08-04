@@ -1,7 +1,6 @@
 package net.opmasterleo.packetuxui.nms.shared;
 
 import java.util.List;
-import java.util.HashMap;
 import java.util.Map;
 
 import org.bukkit.craftbukkit.entity.CraftPlayer;
@@ -149,8 +148,11 @@ public final class SharedMenuPacketBridge implements MenuPacketBridge {
     @Override
     public boolean sendBoundAuthority(Player player, int stateId, boolean clearCursor) {
         ServerPlayer sp = nms(player);
-        PacketUxBoundMenu menu = bound(player);
-        if (sp == null || menu == null) {
+        if (sp == null) {
+            return false;
+        }
+        PacketUxBoundMenu menu = bound(sp);
+        if (menu == null) {
             return false;
         }
         int size = menu.slots.size();
@@ -176,30 +178,21 @@ public final class SharedMenuPacketBridge implements MenuPacketBridge {
         if (sp == null) {
             return;
         }
-        PacketUxBoundMenu bound = bound(player);
+        PacketUxBoundMenu bound = bound(sp);
         int topSize = bound == null ? 0 : bound.topContainer().getContainerSize();
         NonNullList<ItemStack> list = NonNullList.withSize(uxItems.size(), ItemStack.EMPTY);
-        Map<UxItem, ItemStack> converted = new HashMap<>();
         for (int i = 0; i < uxItems.size(); i++) {
-            UxItem ux = uxItems.get(i);
-            ItemStack nmsStack = converted.get(ux);
-            if (nmsStack == null) {
-                nmsStack = items.toMinecraft(ux);
-                converted.put(ux, nmsStack);
-            }
-            ItemStack copy = nmsStack.copy();
+            ItemStack proto = items.nmsPrototype(uxItems.get(i));
+            ItemStack copy = proto.isEmpty() ? ItemStack.EMPTY : proto.copy();
             list.set(i, copy);
             if (bound != null && i < topSize) {
+                // Packet constructor copies list entries; container needs its own ref.
                 bound.topContainer().setItem(i, copy.copy());
             }
         }
-        ItemStack carriedNms;
-        if (carried == null || carried.isEmpty()) {
-            carriedNms = ItemStack.EMPTY;
-        } else {
-            ItemStack cached = converted.get(carried);
-            carriedNms = cached == null ? items.toMinecraft(carried) : cached.copy();
-        }
+        ItemStack carriedNms = carried == null || carried.isEmpty()
+                ? ItemStack.EMPTY
+                : items.toMinecraft(carried);
         sp.connection.send(new ClientboundContainerSetContentPacket(windowId, stateId, list, carriedNms));
     }
 
@@ -213,8 +206,9 @@ public final class SharedMenuPacketBridge implements MenuPacketBridge {
         if (sp == null) {
             return;
         }
-        ItemStack nmsStack = items.toMinecraft(item);
-        PacketUxBoundMenu bound = bound(player);
+        ItemStack proto = items.nmsPrototype(item);
+        ItemStack nmsStack = proto.isEmpty() ? ItemStack.EMPTY : proto.copy();
+        PacketUxBoundMenu bound = bound(sp);
         if (bound != null && slot < bound.topContainer().getContainerSize()) {
             bound.topContainer().setItem(slot, nmsStack.copy());
         }
@@ -289,7 +283,10 @@ public final class SharedMenuPacketBridge implements MenuPacketBridge {
     }
 
     private PacketUxBoundMenu bound(Player player) {
-        ServerPlayer sp = nms(player);
+        return bound(nms(player));
+    }
+
+    private static PacketUxBoundMenu bound(ServerPlayer sp) {
         if (sp == null) {
             return null;
         }

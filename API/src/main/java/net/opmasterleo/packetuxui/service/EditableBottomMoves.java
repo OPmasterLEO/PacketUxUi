@@ -24,7 +24,14 @@ public final class EditableBottomMoves {
 
     public record Outcome(List<UxItem> bottom, Held held, Set<Integer> dirty) {
         public Outcome {
-            bottom = List.copyOf(bottom);
+            // bottom already owned by simulate ArrayList — wrap, don't deep-copy.
+            if (bottom == null) {
+                bottom = List.of();
+            } else if (bottom.getClass() == java.util.ArrayList.class) {
+                bottom = java.util.Collections.unmodifiableList(bottom);
+            } else {
+                bottom = List.copyOf(bottom);
+            }
             dirty = dirty == null || dirty.isEmpty() ? Set.of() : Set.copyOf(dirty);
         }
     }

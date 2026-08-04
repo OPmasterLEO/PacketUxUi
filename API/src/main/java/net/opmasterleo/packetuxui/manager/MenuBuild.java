@@ -84,13 +84,13 @@ public final class MenuBuild {
 
     public MenuBuild item(int slot, ItemStack stack, Consumer<Player> click, SlotKind kind) {
         Objects.requireNonNull(stack, "stack");
-        UxItem ux = PacketUxUiAPI.getAdapter().items().fromBukkit(stack.clone());
+        UxItem ux = PacketUxUiAPI.getAdapter().items().fromBukkit(stack);
         return put(slot, ux, click, null, kind == null ? defaultItemKind() : kind);
     }
 
     public MenuBuild item(int slot, ItemStack stack, BiConsumer<Player, ClickType> click) {
         Objects.requireNonNull(stack, "stack");
-        UxItem ux = PacketUxUiAPI.getAdapter().items().fromBukkit(stack.clone());
+        UxItem ux = PacketUxUiAPI.getAdapter().items().fromBukkit(stack);
         return put(slot, ux, null, click, click != null ? SlotKind.ACTION : defaultItemKind());
     }
 
@@ -129,7 +129,7 @@ public final class MenuBuild {
         SlotKind nextKind = kind == null ? SlotKind.DECORATIVE : kind;
         UxItem ux = filler == null
                 ? UxItem.EMPTY
-                : PacketUxUiAPI.getAdapter().items().fromBukkit(filler.clone());
+                : PacketUxUiAPI.getAdapter().items().fromBukkit(filler);
         for (int slot = 0; slot < type().size(); slot++) {
             if (buttons.containsKey(slot)) {
                 continue;

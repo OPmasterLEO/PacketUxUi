@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.12.7
+
+### Speed pass (hot paths, bounded caches)
+
+- GuiEventManager: cached ordered listener array; skip click/drag/post alloc when no listeners
+- Editable simulate: one predicate path (no double simulate)
+- `writeBottom`: cache written list (no 36-slot Bukkit re-snapshot)
+- VirtualClickSimulator / Menu.setItems: no defensive `List.copyOf` of full inventories
+- ConversionCache: trim ~25% on overflow (no full wipe miss-storm)
+- ItemBridge: `nmsPrototype` + Bukkit-then-NMS build; drop per-send HashMap
+- Title/refresh: prefer `sendBoundAuthority` over Ux assemble
+- Debug string concat gated on close
+
+No unbounded caches / no PE reflection.
+
+### Artifact
+`net.opmasterleo:packetuxui:0.12.7`
+
 ## 0.12.6
 
 ### Instant refresh + extractable slots

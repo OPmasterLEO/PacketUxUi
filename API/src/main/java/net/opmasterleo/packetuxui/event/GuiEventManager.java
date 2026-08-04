@@ -6,34 +6,47 @@ import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CopyOnWriteArrayList;
 
+/**
+ * Listener bus with a cached ordered snapshot — no sort/alloc on every click.
+ */
 public final class GuiEventManager {
 
     private static final Comparator<GuiListener> BY_PRIORITY =
             Comparator.comparingInt(l -> l.priority().ordinal());
+    private static final GuiListener[] EMPTY = new GuiListener[0];
 
     private final CopyOnWriteArrayList<GuiListener> listeners = new CopyOnWriteArrayList<>();
+    private volatile GuiListener[] ordered = EMPTY;
 
     public void register(GuiListener listener) {
         Objects.requireNonNull(listener, "listener");
-        listeners.addIfAbsent(listener);
+        if (listeners.addIfAbsent(listener)) {
+            rebuildOrdered();
+        }
     }
 
     public void unregister(GuiListener listener) {
-        if (listener != null) {
-            listeners.remove(listener);
+        if (listener != null && listeners.remove(listener)) {
+            rebuildOrdered();
         }
     }
 
     public void clear() {
         listeners.clear();
+        ordered = EMPTY;
+    }
+
+    public boolean hasListeners() {
+        return ordered.length > 0;
     }
 
     public List<GuiListener> listeners() {
-        return List.copyOf(listeners);
+        return List.of(ordered);
     }
 
     public void fireOpen(GuiOpenEvent event) {
-        for (GuiListener listener : ordered()) {
+        GuiListener[] snap = ordered;
+        for (GuiListener listener : snap) {
             try {
                 listener.onOpen(event);
             } catch (Throwable ignored) {
@@ -42,7 +55,8 @@ public final class GuiEventManager {
     }
 
     public void fireClose(GuiCloseEvent event) {
-        for (GuiListener listener : ordered()) {
+        GuiListener[] snap = ordered;
+        for (GuiListener listener : snap) {
             try {
                 listener.onClose(event);
             } catch (Throwable ignored) {
@@ -51,7 +65,8 @@ public final class GuiEventManager {
     }
 
     public void fireClick(GuiClickEvent event) {
-        for (GuiListener listener : ordered()) {
+        GuiListener[] snap = ordered;
+        for (GuiListener listener : snap) {
             try {
                 listener.onClick(event);
             } catch (Throwable ignored) {
@@ -60,17 +75,18 @@ public final class GuiEventManager {
     }
 
     public void fireClickPost(GuiClickPostEvent event) {
-        List<GuiListener> ordered = ordered();
-        for (int i = ordered.size() - 1; i >= 0; i--) {
+        GuiListener[] snap = ordered;
+        for (int i = snap.length - 1; i >= 0; i--) {
             try {
-                ordered.get(i).onClickPost(event);
+                snap[i].onClickPost(event);
             } catch (Throwable ignored) {
             }
         }
     }
 
     public void fireDrag(GuiDragEvent event) {
-        for (GuiListener listener : ordered()) {
+        GuiListener[] snap = ordered;
+        for (GuiListener listener : snap) {
             try {
                 listener.onDrag(event);
             } catch (Throwable ignored) {
@@ -78,9 +94,13 @@ public final class GuiEventManager {
         }
     }
 
-    private List<GuiListener> ordered() {
+    private void rebuildOrdered() {
+        if (listeners.isEmpty()) {
+            ordered = EMPTY;
+            return;
+        }
         ArrayList<GuiListener> copy = new ArrayList<>(listeners);
         copy.sort(BY_PRIORITY);
-        return copy;
+        ordered = copy.toArray(GuiListener[]::new);
     }
 }

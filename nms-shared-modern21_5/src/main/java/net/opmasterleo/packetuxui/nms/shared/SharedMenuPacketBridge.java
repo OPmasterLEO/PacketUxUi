@@ -175,17 +175,20 @@ public final class SharedMenuPacketBridge implements MenuPacketBridge {
         if (sp == null) {
             return;
         }
-        PacketUxBoundMenu bound = bound(player);
+        PacketUxBoundMenu bound = bound(sp);
         int topSize = bound == null ? 0 : bound.topContainer().getContainerSize();
         NonNullList<ItemStack> list = NonNullList.withSize(uxItems.size(), ItemStack.EMPTY);
         for (int i = 0; i < uxItems.size(); i++) {
-            ItemStack nmsStack = items.toMinecraft(uxItems.get(i));
-            list.set(i, nmsStack);
+            ItemStack proto = items.nmsPrototype(uxItems.get(i));
+            ItemStack copy = proto.isEmpty() ? ItemStack.EMPTY : proto.copy();
+            list.set(i, copy);
             if (bound != null && i < topSize) {
-                bound.topContainer().setItem(i, nmsStack.copy());
+                bound.topContainer().setItem(i, copy.copy());
             }
         }
-        ItemStack carriedNms = carried == null ? ItemStack.EMPTY : items.toMinecraft(carried);
+        ItemStack carriedNms = carried == null || carried.isEmpty()
+                ? ItemStack.EMPTY
+                : items.toMinecraft(carried);
         sp.connection.send(new ClientboundContainerSetContentPacket(windowId, stateId, list, carriedNms));
     }
 
@@ -199,8 +202,9 @@ public final class SharedMenuPacketBridge implements MenuPacketBridge {
         if (sp == null) {
             return;
         }
-        ItemStack nmsStack = items.toMinecraft(item);
-        PacketUxBoundMenu bound = bound(player);
+        ItemStack proto = items.nmsPrototype(item);
+        ItemStack nmsStack = proto.isEmpty() ? ItemStack.EMPTY : proto.copy();
+        PacketUxBoundMenu bound = bound(sp);
         if (bound != null && slot < bound.topContainer().getContainerSize()) {
             bound.topContainer().setItem(slot, nmsStack.copy());
         }
@@ -274,7 +278,10 @@ public final class SharedMenuPacketBridge implements MenuPacketBridge {
     }
 
     private PacketUxBoundMenu bound(Player player) {
-        ServerPlayer sp = nms(player);
+        return bound(nms(player));
+    }
+
+    private static PacketUxBoundMenu bound(ServerPlayer sp) {
         if (sp == null) {
             return null;
         }

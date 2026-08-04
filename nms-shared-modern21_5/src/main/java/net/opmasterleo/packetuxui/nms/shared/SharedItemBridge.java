@@ -60,8 +60,19 @@ public final class SharedItemBridge implements ItemBridge {
         if (item == null || item.isEmpty()) {
             return ItemStack.EMPTY;
         }
+        ItemStack cached = nmsPrototype(item);
+        return cached.isEmpty() ? ItemStack.EMPTY : cached.copy();
+    }
+
+    /**
+     * Cached NMS prototype — do not mutate. Callers that need a mutable stack must {@code copy()}.
+     */
+    public ItemStack nmsPrototype(UxItem item) {
+        if (item == null || item.isEmpty()) {
+            return ItemStack.EMPTY;
+        }
         ItemStack cached = nmsCache.get(item);
-        return cached == null ? ItemStack.EMPTY : cached.copy();
+        return cached == null ? ItemStack.EMPTY : cached;
     }
 
     public UxItem fromMinecraft(ItemStack stack) {
@@ -95,8 +106,9 @@ public final class SharedItemBridge implements ItemBridge {
             for (String enchantKey : item.enchantments().keySet()) {
                 BukkitKeyMaps.enchant(enchantKey);
             }
-            nmsCache.get(item);
+            // Bukkit first so NMS build reuses it.
             bukkitCache.get(item);
+            nmsCache.get(item);
         }
     }
 
@@ -107,7 +119,11 @@ public final class SharedItemBridge implements ItemBridge {
     }
 
     private ItemStack buildMinecraft(UxItem item) {
-        return CraftItemStack.asNMSCopy(buildBukkit(item));
+        org.bukkit.inventory.ItemStack bukkit = bukkitCache.get(item);
+        if (bukkit == null) {
+            bukkit = buildBukkit(item);
+        }
+        return CraftItemStack.asNMSCopy(bukkit);
     }
 
     private org.bukkit.inventory.ItemStack buildBukkit(UxItem item) {
