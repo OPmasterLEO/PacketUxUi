@@ -170,6 +170,68 @@ Virtual window ids are pooled **100–126** per player (`BitSet` reclaim). Exhau
 
 Anti-dupe: clicks ignored while `OPENING` / `CLOSING`; ~100ms debounce (configurable).
 
+### Production migration APIs
+
+For large plugin ecosystems, use the manager/service guarantees below:
+
+- `presentAsyncResult(...)` / `updateAsyncResult(...)` return `CompletableFuture<AsyncMenuResult>` with explicit status:
+  - `APPLIED`, `PLAYER_OFFLINE`, `SUPPLIER_FAILED`, `SUPPLIER_RETURNED_NULL`, `GENERATION_MISMATCH`, `PHASE_MISMATCH`, `MENU_NOT_OPEN`, `SKIPPED_BY_POLICY`
+- callback overloads:
+  - `presentAsync(player, supplier, completion)`
+  - `updateAsync(player, supplier, completion)`
+- transition-safe close suppression:
+  - `TransitionToken token = gui.beginTransition(player);`
+  - `gui.endTransition(player, token);`
+  - close packets are ignored while transition token is active
+- explicit handler mutation:
+  - `updateButtons(player, patches)`
+  - `clearButtons(player, slots)`
+  - `patchSlotAtomic(player, slot, item, buttonBuilder, slotKind)`
+- onClose differential policy:
+  - `present(player, build, PresentOptions.FORCE_REOPEN_ON_CLOSE_CHANGE)`
+- editable leak prevention:
+  - `MenuBuild.sealUnspecifiedTopSlots(SlotKind.DECORATIVE, null)`
+- layout validation:
+  - `validateLayout()`, `validateLayout(LayoutPlan)`, `validateLayoutOrThrow()`
+- routing diagnostics:
+  - `service.setStrictActionMode(true)`
+  - `service.setClickDecisionListener(...)`
+- session diagnostics:
+  - `gui.diagnostics(player)` / `gui.diagnosticsDump(player)`
+- migration helpers:
+  - `updateIfOpen(...)`
+  - `presentOrUpdate(...)`
+  - `refreshPage(player, pageModel, strategy)`
+
+#### Thread-safety / execution model
+
+- `presentAsync*` / `updateAsync*` supplier execution: async thread
+- menu apply phase: entity/main scheduler via `runForPlayer`
+- completion future/callback: completed from scheduler task after apply check
+- synchronous mutations (`present`, `update`, `patchSlotAtomic`, `updateButtons`, `clearButtons`) should be called from plugin logic; manager routes player-critical paths onto scheduler where needed
+- supplier exceptions are surfaced via `AsyncMenuResult` (`SUPPLIER_FAILED`) rather than silently ignored
+
+#### Safe defaults recipe
+
+```java
+PacketGuiManager gui = PacketMenus.gui();
+gui.setClickDebounceMillis(100);
+gui.service().setStrictActionMode(true);
+
+MenuBuild build = PacketMenus.build()
+        .rows(6)
+        .editable()
+        .sealUnspecifiedTopSlots(SlotKind.DECORATIVE, null);
+build.validateLayoutOrThrow();
+
+TransitionToken token = gui.beginTransition(player);
+try {
+    gui.present(player, build, PresentOptions.FORCE_REOPEN_ON_CLOSE_CHANGE);
+} finally {
+    gui.endTransition(player, token);
+}
+```
+
 ---
 
 ## Folia / Paper / Spigot

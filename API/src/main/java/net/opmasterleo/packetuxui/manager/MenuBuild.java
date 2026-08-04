@@ -1,8 +1,12 @@
 package net.opmasterleo.packetuxui.manager;
 
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
@@ -116,6 +120,21 @@ public final class MenuBuild {
         return item(slot, stack, click, SlotKind.ACTION);
     }
 
+    public MenuBuild sealUnspecifiedTopSlots(SlotKind kind, ItemStack filler) {
+        SlotKind nextKind = kind == null ? SlotKind.DECORATIVE : kind;
+        UxItem ux = filler == null
+                ? UxItem.EMPTY
+                : PacketUxUiAPI.getAdapter().items().fromBukkit(filler.clone());
+        for (int slot = 0; slot < type().size(); slot++) {
+            if (buttons.containsKey(slot)) {
+                continue;
+            }
+            IButtonBuilder builder = new ButtonBuilder().item(ux).kind(nextKind);
+            buttons.put(slot, builder.build());
+        }
+        return this;
+    }
+
     public MenuBuild onClose(Consumer<Player> onClose) {
         this.closePlayerOnly = onClose;
         return this;
@@ -164,6 +183,61 @@ public final class MenuBuild {
 
     public int rows() {
         return rows;
+    }
+
+    public LayoutDiagnostics validateLayout() {
+        ArrayList<LayoutIssue> issues = new ArrayList<>();
+        int size = type().size();
+        for (Integer slot : buttons.keySet()) {
+            if (slot == null || slot < 0 || slot >= size) {
+                issues.add(new LayoutIssue(slot == null ? -1 : slot, "OUT_OF_BOUNDS", "Button slot out of bounds"));
+            }
+        }
+        if (mode == MenuMode.EDITABLE) {
+            for (int slot = 0; slot < size; slot++) {
+                if (!buttons.containsKey(slot)) {
+                    issues.add(new LayoutIssue(slot, "UNSEALED_EDITABLE_SLOT", "Editable menu has unspecified slot"));
+                }
+            }
+        }
+        return new LayoutDiagnostics(List.copyOf(issues));
+    }
+
+    public LayoutDiagnostics validateLayout(LayoutPlan plan) {
+        if (plan == null) {
+            return validateLayout();
+        }
+        ArrayList<LayoutIssue> issues = new ArrayList<>(validateLayout().issues());
+        validateGroupOverlap(issues, "CONTENT_ACTION_COLLISION", plan.contentSlots(), plan.actionSlots());
+        validateGroupOverlap(issues, "CONTENT_FOOTER_COLLISION", plan.contentSlots(), plan.footerSlots());
+        validateGroupOverlap(issues, "CONTENT_NAV_COLLISION", plan.contentSlots(), plan.navigationSlots());
+        validateGroupOverlap(issues, "ACTION_FOOTER_COLLISION", plan.actionSlots(), plan.footerSlots());
+        validateGroupOverlap(issues, "ACTION_NAV_COLLISION", plan.actionSlots(), plan.navigationSlots());
+        validateGroupOverlap(issues, "FOOTER_NAV_COLLISION", plan.footerSlots(), plan.navigationSlots());
+        return new LayoutDiagnostics(List.copyOf(issues));
+    }
+
+    public void validateLayoutOrThrow() {
+        LayoutDiagnostics diagnostics = validateLayout();
+        if (!diagnostics.ok()) {
+            throw new IllegalStateException("Invalid menu layout: " + diagnostics.issues());
+        }
+    }
+
+    private static void validateGroupOverlap(
+            ArrayList<LayoutIssue> issues,
+            String code,
+            Set<Integer> left,
+            Set<Integer> right
+    ) {
+        if (left == null || right == null || left.isEmpty() || right.isEmpty()) {
+            return;
+        }
+        Set<Integer> overlap = new HashSet<>(left);
+        overlap.retainAll(right);
+        for (Integer slot : overlap) {
+            issues.add(new LayoutIssue(slot == null ? -1 : slot, code, "Layout slot collision"));
+        }
     }
 
     private MenuBuild put(
