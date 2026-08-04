@@ -47,8 +47,26 @@ public final class ServerPlatform {
         return isPaper();
     }
 
-    public static long ticks(long ticks) {
+    /**
+     * Tick delay for schedules that allow zero (Folia {@code execute} / immediate).
+     * Negative values become 0.
+     */
+    public static long delayTicks(long ticks) {
+        return Math.max(0L, ticks);
+    }
+
+    /**
+     * Tick period / positive delay — Folia {@code runDelayed}/{@code runAtFixedRate} require &gt; 0.
+     * Prefer {@link #delayTicks(long)} when zero-delay immediate/next-tick is intended.
+     */
+    public static long periodTicks(long ticks) {
         return Math.max(1L, ticks);
+    }
+
+    /** @deprecated use {@link #periodTicks(long)} */
+    @Deprecated
+    public static long ticks(long ticks) {
+        return periodTicks(ticks);
     }
 
     private static boolean detectPaperSchedulers() {

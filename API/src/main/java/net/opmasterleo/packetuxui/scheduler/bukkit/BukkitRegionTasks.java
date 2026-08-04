@@ -39,6 +39,13 @@ public final class BukkitRegionTasks implements RegionTasks {
     }
 
     @Override
+    public TaskHandle runAtNextTick(World world, int chunkX, int chunkZ, Runnable task) {
+        Objects.requireNonNull(world, "world");
+        Objects.requireNonNull(task, "task");
+        return global.runNextTick(task);
+    }
+
+    @Override
     public TaskHandle runAtLater(Location location, Runnable task, long delayTicks) {
         Objects.requireNonNull(location, "location");
         Objects.requireNonNull(task, "task");

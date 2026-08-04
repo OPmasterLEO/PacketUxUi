@@ -59,12 +59,11 @@ public final class PipelineManager {
         if (player == null) {
             return;
         }
-        Channel channel = adapter.pipeline().channel(player);
-        if (channel == null) {
-            injected.remove(player.getUniqueId());
-            return;
+        if (scheduler.isOwnedByCurrentRegion(player)) {
+            injectOnEntityThread(player);
+        } else {
+            scheduler.runForPlayer(player, () -> injectOnEntityThread(player));
         }
-        ChannelOps.runInEventLoop(channel, () -> install(player, channel, false));
     }
 
     /** Re-inject if missing or channel replaced (call on every present/open). */
@@ -72,19 +71,11 @@ public final class PipelineManager {
         if (player == null) {
             return;
         }
-        Channel channel = adapter.pipeline().channel(player);
-        if (channel == null) {
-            injected.remove(player.getUniqueId());
-            return;
+        if (scheduler.isOwnedByCurrentRegion(player)) {
+            ensureOnEntityThread(player);
+        } else {
+            scheduler.runForPlayer(player, () -> ensureOnEntityThread(player));
         }
-        ChannelOps.runInEventLoop(channel, () -> {
-            ChannelHandler existing = ChannelOps.get(channel, handlerName);
-            if (existing instanceof MenuInboundHandler) {
-                injected.put(player.getUniqueId(), Boolean.TRUE);
-                return;
-            }
-            install(player, channel, true);
-        });
     }
 
     public boolean isInjected(Player player) {
@@ -102,6 +93,39 @@ public final class PipelineManager {
         if (player == null) {
             return;
         }
+        if (scheduler.isOwnedByCurrentRegion(player)) {
+            removeOnEntityThread(player);
+        } else {
+            scheduler.runForPlayer(player, () -> removeOnEntityThread(player));
+        }
+    }
+
+    private void injectOnEntityThread(Player player) {
+        Channel channel = adapter.pipeline().channel(player);
+        if (channel == null) {
+            injected.remove(player.getUniqueId());
+            return;
+        }
+        ChannelOps.runInEventLoop(channel, () -> install(player, channel, false));
+    }
+
+    private void ensureOnEntityThread(Player player) {
+        Channel channel = adapter.pipeline().channel(player);
+        if (channel == null) {
+            injected.remove(player.getUniqueId());
+            return;
+        }
+        ChannelOps.runInEventLoop(channel, () -> {
+            ChannelHandler existing = ChannelOps.get(channel, handlerName);
+            if (existing instanceof MenuInboundHandler) {
+                injected.put(player.getUniqueId(), Boolean.TRUE);
+                return;
+            }
+            install(player, channel, true);
+        });
+    }
+
+    private void removeOnEntityThread(Player player) {
         injected.remove(player.getUniqueId());
         Channel channel = adapter.pipeline().channel(player);
         if (channel == null) {

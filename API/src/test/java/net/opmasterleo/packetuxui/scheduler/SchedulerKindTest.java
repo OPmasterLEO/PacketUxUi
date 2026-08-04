@@ -18,8 +18,11 @@ class SchedulerKindTest {
 
     @Test
     void ticksFloorAtOne() {
-        assertEquals(1L, ServerPlatform.ticks(0));
-        assertEquals(1L, ServerPlatform.ticks(-5));
-        assertEquals(3L, ServerPlatform.ticks(3));
+        assertEquals(1L, ServerPlatform.periodTicks(0));
+        assertEquals(1L, ServerPlatform.periodTicks(-5));
+        assertEquals(3L, ServerPlatform.periodTicks(3));
+        assertEquals(0L, ServerPlatform.delayTicks(0));
+        assertEquals(0L, ServerPlatform.delayTicks(-5));
+        assertEquals(3L, ServerPlatform.delayTicks(3));
     }
 }

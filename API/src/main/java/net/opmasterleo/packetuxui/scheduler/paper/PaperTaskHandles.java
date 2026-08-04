@@ -35,5 +35,21 @@ final class PaperTaskHandles {
         public boolean isRepeating() {
             return task.isRepeatingTask();
         }
+
+        @Override
+        public State state() {
+            try {
+                return switch (task.getExecutionState()) {
+                    case IDLE -> State.IDLE;
+                    case RUNNING -> State.RUNNING;
+                    case FINISHED -> State.FINISHED;
+                    case CANCELLED -> State.CANCELLED;
+                    case CANCELLED_RUNNING -> State.CANCELLED;
+                    default -> State.UNKNOWN;
+                };
+            } catch (Throwable ignored) {
+                return isCancelled() ? State.CANCELLED : State.UNKNOWN;
+            }
+        }
     }
 }

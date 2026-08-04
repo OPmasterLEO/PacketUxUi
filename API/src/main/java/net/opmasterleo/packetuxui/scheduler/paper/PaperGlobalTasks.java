@@ -36,8 +36,12 @@ public final class PaperGlobalTasks implements GlobalTasks {
     @Override
     public TaskHandle runLater(Runnable task, long delayTicks) {
         Objects.requireNonNull(task, "task");
+        long delay = ServerPlatform.delayTicks(delayTicks);
+        if (delay <= 0L) {
+            return runNextTick(task);
+        }
         return PaperTaskHandles.of(
-                Bukkit.getGlobalRegionScheduler().runDelayed(plugin, st -> task.run(), ServerPlatform.ticks(delayTicks))
+                Bukkit.getGlobalRegionScheduler().runDelayed(plugin, st -> task.run(), delay)
         );
     }
 
@@ -47,8 +51,8 @@ public final class PaperGlobalTasks implements GlobalTasks {
         return PaperTaskHandles.of(Bukkit.getGlobalRegionScheduler().runAtFixedRate(
                 plugin,
                 st -> task.run(),
-                ServerPlatform.ticks(initialDelayTicks),
-                ServerPlatform.ticks(periodTicks)
+                ServerPlatform.periodTicks(initialDelayTicks),
+                ServerPlatform.periodTicks(periodTicks)
         ));
     }
 }

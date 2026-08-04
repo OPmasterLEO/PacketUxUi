@@ -24,7 +24,7 @@ import net.opmasterleo.packetuxui.service.MenuService;
 
 public final class PacketUxUiAPI {
 
-    public static final String VERSION = "0.12.9";
+    public static final String VERSION = "0.12.10";
 
     private static final AtomicInteger RETAIN = new AtomicInteger();
     private static final Set<JavaPlugin> CLIENTS = new LinkedHashSet<>();
@@ -118,9 +118,7 @@ public final class PacketUxUiAPI {
         }
         net.opmasterleo.packetuxui.nms.map.BukkitKeyMaps.warmupDefaults();
         LifecycleListeners.register(plugin, service, pipelineManager, scheduler);
-        for (Player player : Bukkit.getOnlinePlayers()) {
-            pipelineManager.inject(player);
-        }
+        scheduler.runForEachOnlinePlayer(pipelineManager::inject);
         Bukkit.getServicesManager().register(
                 PacketUxUiHolder.class,
                 new PacketUxUiHolder(),
@@ -219,25 +217,31 @@ public final class PacketUxUiAPI {
     }
 
     private static void shutdown() {
-        for (Player player : Bukkit.getOnlinePlayers()) {
-            try {
-                service.closeMenu(player);
-            } catch (Throwable ignored) {
-            }
-            try {
-                pipelineManager.remove(player);
-            } catch (Throwable ignored) {
-            }
+        PlatformScheduler sched = scheduler;
+        MenuService svc = service;
+        PipelineManager pipe = pipelineManager;
+        if (sched != null && svc != null && pipe != null) {
+            // Entity-thread cleanup before cancelAll — Folia-safe; inline on Paper/Bukkit main.
+            sched.runForEachOnlinePlayer(player -> {
+                try {
+                    svc.closeMenu(player);
+                } catch (Throwable ignored) {
+                }
+                try {
+                    pipe.remove(player);
+                } catch (Throwable ignored) {
+                }
+            });
         }
         if (host != null) {
             Bukkit.getServicesManager().unregisterAll(host);
         }
-        if (service != null) {
-            service.events().clear();
+        if (svc != null) {
+            svc.events().clear();
         }
-        if (scheduler != null) {
+        if (sched != null) {
             try {
-                scheduler.shutdown();
+                sched.shutdown();
             } catch (Throwable ignored) {
             }
         }

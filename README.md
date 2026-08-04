@@ -19,7 +19,7 @@ repositories {
 }
 
 dependencies {
-    implementation("net.opmasterleo:packetuxui:0.12.9")
+    implementation("net.opmasterleo:packetuxui:0.12.10")
 }
 ```
 
@@ -101,7 +101,7 @@ gui.present(p, PacketMenus.build().title("Spawner").rows(3).editable()
 
 Virtual window ids use vanilla `nextContainerCounter()` (**1–100**). Pipeline injects before `packet_handler`. Modern 21.5+/26.x bind a real `ChestMenu` (9xN only) and own `stateId` via `incrementStateId`; top stacks are mirrored into the bound container.
 
-Threading: entity/region schedulers for player work (Paper + Folia). A dedicated **elastic menu worker pool** (CPU-sized, idle threads reclaim to 0 in 15s, leak-safe shutdown) runs `presentAsync` build/materialize/preload. Overrides: `-Dpacketuxui.menuWorkers.max`, `.core`, `.queue`. Builders must not touch world/entity state on that pool.
+Threading: full Folia/Paper scheduler coverage — **entity** (player menus), **region** (location/chunk/block), **global**, **async**, plus elastic **menu workers**. `presentAsync` builds on the menu pool then hops to the entity thread. Init/shutdown/pipeline inject hop per-player. Overrides: `-Dpacketuxui.menuWorkers.max|core|queue`. Never use global/async for player inventory on Folia.
 
 ### Protocol
 

@@ -160,7 +160,15 @@ public final class MenuService {
         if (!debugLogging) {
             return;
         }
-        String who = player == null ? "?" : player.getName();
+        String who;
+        if (player == null) {
+            who = "?";
+        } else if (scheduler.isOwnedByCurrentRegion(player)) {
+            who = player.getName();
+        } else {
+            // Netty / async — avoid Folia player name access off the entity thread.
+            who = player.getUniqueId().toString();
+        }
         String line = "[PacketUxUi/debug] " + who + ": " + message;
         try {
             org.bukkit.plugin.java.JavaPlugin host = net.opmasterleo.packetuxui.PacketUxUiAPI.host();

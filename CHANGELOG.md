@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.12.10
+
+### Full Folia/Paper scheduler surface + correct threads
+
+- Entity: `run` / `runNextTick` (Folia `EntityScheduler.run`) / `runLater` / `runRepeating` + player helpers
+- Region: location, chunk, and block — execute / next-tick / later / repeating
+- Global + Async unchanged; `cancelAll` now also cancels `RegionScheduler` tasks
+- Zero-delay schedules use next-tick / execute (no forced `max(1)` on delays)
+- `TaskHandle.state()` maps Paper `ScheduledTask` execution state
+- Pipeline inject/ensure/remove hop to the player entity thread when needed
+- Init/shutdown use `runForEachOnlinePlayer` (Folia-safe)
+- `runSync`/`runGlobal` documented as global-region only — menus stay on `runForPlayer`
+
+### Artifact
+`net.opmasterleo:packetuxui:0.12.10`
+
 ## 0.12.9
 
 ### Dedicated elastic menu worker pool (Paper / Folia / Spigot)

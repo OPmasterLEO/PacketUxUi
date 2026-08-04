@@ -15,6 +15,18 @@ import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
+/**
+ * Unified facade over Folia/Paper schedulers and Bukkit fallbacks:
+ * <ul>
+ *   <li>{@link #global()} — {@code GlobalRegionScheduler}</li>
+ *   <li>{@link #entity()} / {@link #runForPlayer} — {@code EntityScheduler}</li>
+ *   <li>{@link #region()} / {@link #runAt} — {@code RegionScheduler}</li>
+ *   <li>{@link #async()} — {@code AsyncScheduler}</li>
+ *   <li>{@link #menuWorkers()} — dedicated menu build pool</li>
+ * </ul>
+ * Player inventory and virtual menus must use entity/player hops — never {@link #runGlobal}
+ * or {@link #runAsync} for Bukkit player state on Folia.
+ */
 public final class PlatformScheduler {
 
     private final ServerPlatform platform;
@@ -124,6 +136,11 @@ public final class PlatformScheduler {
         }
     }
 
+    /** Alias: entity/player thread ownership (Folia region / Bukkit main). */
+    public boolean isEntityThread(Entity entity) {
+        return isOwnedByCurrentRegion(entity);
+    }
+
     public GlobalTasks global() {
         return global;
     }
@@ -160,6 +177,10 @@ public final class PlatformScheduler {
         return menuWorkers.supplyAsync(Objects.requireNonNull(supplier, "supplier"));
     }
 
+    /**
+     * Global-region / main-thread ASAP.
+     * On Folia this is <b>not</b> the player's entity thread — use {@link #runForPlayer} for menus.
+     */
     public void runSync(Runnable task) {
         global.run(task);
     }
@@ -200,6 +221,11 @@ public final class PlatformScheduler {
         entity.run(player, task, retired);
     }
 
+    /** Run on the player's entity thread if owned, else hop. */
+    public void ensurePlayer(Player player, Runnable task) {
+        runForPlayer(player, task);
+    }
+
     public void run(Entity target, Runnable task) {
         entity.run(target, task, null);
     }
@@ -208,8 +234,20 @@ public final class PlatformScheduler {
         entity.run(target, task, retired);
     }
 
+    public void ensureEntity(Entity target, Runnable task) {
+        entity.run(target, task, null);
+    }
+
     public TaskHandle runNextTick(Entity target, Runnable task) {
-        return entity.runLater(target, task, null, 1L);
+        return entity.runNextTick(target, task, null);
+    }
+
+    public TaskHandle runNextTick(Entity target, Runnable task, Runnable retired) {
+        return entity.runNextTick(target, task, retired);
+    }
+
+    public TaskHandle runNextTickForPlayer(Player player, Consumer<Player> task) {
+        return entity.runNextTickForPlayer(player, task);
     }
 
     public TaskHandle runLater(Entity target, Runnable task, long delayTicks) {
@@ -260,6 +298,25 @@ public final class PlatformScheduler {
         return entity.runLaterForPlayer(player, task, delayTicks);
     }
 
+    /** Hop each online player onto their entity thread (Folia-safe init/shutdown). */
+    public void runForEachOnlinePlayer(Consumer<Player> task) {
+        Objects.requireNonNull(task, "task");
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            runForPlayer(player, () -> task.accept(player));
+        }
+    }
+
+    public void runForEachOnlinePlayer(Consumer<Player> task, Consumer<Player> retired) {
+        Objects.requireNonNull(task, "task");
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            runForPlayer(
+                    player,
+                    () -> task.accept(player),
+                    retired == null ? null : () -> retired.accept(player)
+            );
+        }
+    }
+
     public void runAt(Location location, Runnable task) {
         region.runAt(location, task);
     }
@@ -272,8 +329,24 @@ public final class PlatformScheduler {
         region.runAt(block, task);
     }
 
+    public void ensureRegion(Location location, Runnable task) {
+        region.runAt(location, task);
+    }
+
+    public void ensureRegion(World world, int chunkX, int chunkZ, Runnable task) {
+        region.runAt(world, chunkX, chunkZ, task);
+    }
+
     public TaskHandle runAtNextTick(Location location, Runnable task) {
         return region.runAtNextTick(location, task);
+    }
+
+    public TaskHandle runAtNextTick(World world, int chunkX, int chunkZ, Runnable task) {
+        return region.runAtNextTick(world, chunkX, chunkZ, task);
+    }
+
+    public TaskHandle runAtNextTick(Block block, Runnable task) {
+        return region.runAtNextTick(block, task);
     }
 
     public TaskHandle runAtLater(Location location, Runnable task, long delayTicks) {
@@ -284,12 +357,20 @@ public final class PlatformScheduler {
         return region.runAtLater(world, chunkX, chunkZ, task, delayTicks);
     }
 
+    public TaskHandle runAtLater(Block block, Runnable task, long delayTicks) {
+        return region.runAtLater(block, task, delayTicks);
+    }
+
     public TaskHandle runAtRepeating(Location location, Runnable task, long periodTicks) {
         return region.runAtRepeating(location, task, periodTicks, periodTicks);
     }
 
     public TaskHandle runAtRepeating(Location location, Runnable task, long initialDelayTicks, long periodTicks) {
         return region.runAtRepeating(location, task, initialDelayTicks, periodTicks);
+    }
+
+    public TaskHandle runAtRepeating(Block block, Runnable task, long initialDelayTicks, long periodTicks) {
+        return region.runAtRepeating(block, task, initialDelayTicks, periodTicks);
     }
 
     public TaskHandle runAtRepeating(
@@ -328,6 +409,14 @@ public final class PlatformScheduler {
         if (platform.isPaper()) {
             try {
                 Bukkit.getGlobalRegionScheduler().cancelTasks(plugin);
+            } catch (Throwable ignored) {
+            }
+            // RegionScheduler.cancelTasks exists on newer Paper/Folia; not on all API jars.
+            try {
+                Object regionScheduler = Bukkit.getRegionScheduler();
+                regionScheduler.getClass()
+                        .getMethod("cancelTasks", org.bukkit.plugin.Plugin.class)
+                        .invoke(regionScheduler, plugin);
             } catch (Throwable ignored) {
             }
             try {

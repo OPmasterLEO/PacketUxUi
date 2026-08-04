@@ -36,8 +36,13 @@ public final class BukkitGlobalTasks implements GlobalTasks {
     @Override
     public TaskHandle runLater(Runnable task, long delayTicks) {
         Objects.requireNonNull(task, "task");
+        long delay = ServerPlatform.delayTicks(delayTicks);
+        if (delay <= 0L && Bukkit.isPrimaryThread()) {
+            task.run();
+            return TaskHandle.NOOP;
+        }
         return BukkitTaskHandles.of(
-                Bukkit.getScheduler().runTaskLater(plugin, task, ServerPlatform.ticks(delayTicks))
+                Bukkit.getScheduler().runTaskLater(plugin, task, delay <= 0L ? 1L : delay)
         );
     }
 
@@ -48,8 +53,8 @@ public final class BukkitGlobalTasks implements GlobalTasks {
                 Bukkit.getScheduler().runTaskTimer(
                         plugin,
                         task,
-                        ServerPlatform.ticks(initialDelayTicks),
-                        ServerPlatform.ticks(periodTicks)
+                        ServerPlatform.periodTicks(initialDelayTicks),
+                        ServerPlatform.periodTicks(periodTicks)
                 ),
                 true
         );

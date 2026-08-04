@@ -49,11 +49,24 @@ public final class PaperRegionTasks implements RegionTasks {
     }
 
     @Override
+    public TaskHandle runAtNextTick(World world, int chunkX, int chunkZ, Runnable task) {
+        Objects.requireNonNull(world, "world");
+        Objects.requireNonNull(task, "task");
+        return PaperTaskHandles.of(
+                Bukkit.getRegionScheduler().run(plugin, world, chunkX, chunkZ, st -> task.run())
+        );
+    }
+
+    @Override
     public TaskHandle runAtLater(Location location, Runnable task, long delayTicks) {
         Objects.requireNonNull(location, "location");
         Objects.requireNonNull(task, "task");
+        long delay = ServerPlatform.delayTicks(delayTicks);
+        if (delay <= 0L) {
+            return runAtNextTick(location, task);
+        }
         return PaperTaskHandles.of(Bukkit.getRegionScheduler().runDelayed(
-                plugin, location, st -> task.run(), ServerPlatform.ticks(delayTicks)
+                plugin, location, st -> task.run(), delay
         ));
     }
 
@@ -61,8 +74,12 @@ public final class PaperRegionTasks implements RegionTasks {
     public TaskHandle runAtLater(World world, int chunkX, int chunkZ, Runnable task, long delayTicks) {
         Objects.requireNonNull(world, "world");
         Objects.requireNonNull(task, "task");
+        long delay = ServerPlatform.delayTicks(delayTicks);
+        if (delay <= 0L) {
+            return runAtNextTick(world, chunkX, chunkZ, task);
+        }
         return PaperTaskHandles.of(Bukkit.getRegionScheduler().runDelayed(
-                plugin, world, chunkX, chunkZ, st -> task.run(), ServerPlatform.ticks(delayTicks)
+                plugin, world, chunkX, chunkZ, st -> task.run(), delay
         ));
     }
 
@@ -74,8 +91,8 @@ public final class PaperRegionTasks implements RegionTasks {
                 plugin,
                 location,
                 st -> task.run(),
-                ServerPlatform.ticks(initialDelayTicks),
-                ServerPlatform.ticks(periodTicks)
+                ServerPlatform.periodTicks(initialDelayTicks),
+                ServerPlatform.periodTicks(periodTicks)
         ));
     }
 
@@ -96,8 +113,8 @@ public final class PaperRegionTasks implements RegionTasks {
                 chunkX,
                 chunkZ,
                 st -> task.run(),
-                ServerPlatform.ticks(initialDelayTicks),
-                ServerPlatform.ticks(periodTicks)
+                ServerPlatform.periodTicks(initialDelayTicks),
+                ServerPlatform.periodTicks(periodTicks)
         ));
     }
 }

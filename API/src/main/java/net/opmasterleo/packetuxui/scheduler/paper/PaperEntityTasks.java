@@ -36,6 +36,20 @@ public final class PaperEntityTasks implements EntityTasks {
     }
 
     @Override
+    public TaskHandle runNextTick(Entity entity, Runnable task, Runnable retired) {
+        Objects.requireNonNull(task, "task");
+        if (entity == null || !entity.isValid()) {
+            if (retired != null) {
+                retired.run();
+            }
+            return TaskHandle.NOOP;
+        }
+        return PaperTaskHandles.of(
+                entity.getScheduler().run(plugin, st -> task.run(), retired)
+        );
+    }
+
+    @Override
     public TaskHandle runLater(Entity entity, Runnable task, Runnable retired, long delayTicks) {
         Objects.requireNonNull(task, "task");
         if (entity == null || !entity.isValid()) {
@@ -44,12 +58,19 @@ public final class PaperEntityTasks implements EntityTasks {
             }
             return TaskHandle.NOOP;
         }
-        if (delayTicks <= 0L && Bukkit.isOwnedByCurrentRegion(entity)) {
-            task.run();
-            return TaskHandle.NOOP;
+        long delay = ServerPlatform.delayTicks(delayTicks);
+        if (delay <= 0L) {
+            if (Bukkit.isOwnedByCurrentRegion(entity)) {
+                task.run();
+                return TaskHandle.NOOP;
+            }
+            // Zero delay off-region: next entity tick with a handle (Folia EntityScheduler.run).
+            return PaperTaskHandles.of(
+                    entity.getScheduler().run(plugin, st -> task.run(), retired)
+            );
         }
         return PaperTaskHandles.of(
-                entity.getScheduler().runDelayed(plugin, st -> task.run(), retired, ServerPlatform.ticks(delayTicks))
+                entity.getScheduler().runDelayed(plugin, st -> task.run(), retired, delay)
         );
     }
 
@@ -72,8 +93,8 @@ public final class PaperEntityTasks implements EntityTasks {
                 plugin,
                 st -> task.accept(entity),
                 retired,
-                ServerPlatform.ticks(initialDelayTicks),
-                ServerPlatform.ticks(periodTicks)
+                ServerPlatform.periodTicks(initialDelayTicks),
+                ServerPlatform.periodTicks(periodTicks)
         ));
     }
 }
