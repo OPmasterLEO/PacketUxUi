@@ -37,17 +37,17 @@ class PresentDecisionTest {
 
     @Test
     void sameTypeAndModeDiffs() {
-        Menu chest = menu(InventoryType.GENERIC_9X3, MenuMode.READ_ONLY);
+        Menu chest = menu(InventoryType.GENERIC9X3, MenuMode.READ_ONLY);
         MenuSession session = new MenuSession(chest, 1);
-        assertEquals(Action.DIFF, decide(session, menu(InventoryType.GENERIC_9X3, MenuMode.READ_ONLY)));
+        assertEquals(Action.DIFF, decide(session, menu(InventoryType.GENERIC9X3, MenuMode.READ_ONLY)));
     }
 
     @Test
     void differentTypeSilentSwapsEvenIfModeDiffers() {
-        Menu chest = menu(InventoryType.GENERIC_9X3, MenuMode.EDITABLE);
+        Menu chest = menu(InventoryType.GENERIC9X3, MenuMode.EDITABLE);
         MenuSession session = new MenuSession(chest, 1);
         assertEquals(Action.SWAP, decide(session, menu(InventoryType.HOPPER, MenuMode.READ_ONLY)));
-        assertEquals(Action.SWAP, decide(session, menu(InventoryType.GENERIC_9X6, MenuMode.EDITABLE)));
+        assertEquals(Action.SWAP, decide(session, menu(InventoryType.GENERIC9X6, MenuMode.EDITABLE)));
     }
 
     @Test

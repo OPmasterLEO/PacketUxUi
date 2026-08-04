@@ -34,7 +34,7 @@ repositories {
 }
 
 dependencies {
-    implementation "net.opmasterleo:packetuxui:0.13.9"
+    implementation "net.opmasterleo:packetuxui:0.13.10"
 }
 ```
 
@@ -51,7 +51,7 @@ dependencies {
 <dependency>
     <groupId>net.opmasterleo</groupId>
     <artifactId>packetuxui</artifactId>
-    <version>0.13.9</version>
+    <version>0.13.10</version>
 </dependency>
 ```
 
