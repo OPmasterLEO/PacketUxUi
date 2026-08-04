@@ -7,7 +7,7 @@ plugins {
 
 allprojects {
     group = "net.opmasterleo"
-    version = "0.12.2"
+    version = "0.12.3"
 
     repositories {
         mavenCentral()

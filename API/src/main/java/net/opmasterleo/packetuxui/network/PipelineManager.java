@@ -137,15 +137,17 @@ public final class PipelineManager {
             }
             MenuInboundHandler handler = new MenuInboundHandler(player, adapter, menuService, scheduler);
             boolean added = false;
-            for (String anchor : INJECT_AFTER) {
+            // Prefer immediately before packet_handler so vanilla never sees clicks
+            // (server-authoritative GUIs; PE wrappers still intercepted by class-name).
+            for (String anchor : INJECT_BEFORE) {
                 if (ChannelOps.get(channel, anchor) != null) {
-                    channel.pipeline().addAfter(anchor, handlerName, handler);
+                    channel.pipeline().addBefore(anchor, handlerName, handler);
                     added = true;
                     break;
                 }
             }
             if (!added) {
-                for (String anchor : INJECT_BEFORE) {
+                for (String anchor : adapter.pipeline().injectBeforeNames()) {
                     if (ChannelOps.get(channel, anchor) != null) {
                         channel.pipeline().addBefore(anchor, handlerName, handler);
                         added = true;
@@ -154,9 +156,9 @@ public final class PipelineManager {
                 }
             }
             if (!added) {
-                for (String anchor : adapter.pipeline().injectBeforeNames()) {
+                for (String anchor : INJECT_AFTER) {
                     if (ChannelOps.get(channel, anchor) != null) {
-                        channel.pipeline().addBefore(anchor, handlerName, handler);
+                        channel.pipeline().addAfter(anchor, handlerName, handler);
                         added = true;
                         break;
                     }

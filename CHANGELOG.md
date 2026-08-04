@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.12.3
+
+### Server-authoritative GUIs (free-move nuclear)
+
+Virtual menus must be owned by the server — same failure mode as client-handled GUIs.
+
+- Pipeline inject **before** `packet_handler` first (vanilla never sees session clicks)
+- PacketEvents wrappers: class-name + unwrap (`getNativePacket`) click/close detect
+- Bound `ChestMenu` slots: `mayPickup`/`mayPlace`/`remove` locked; empty `clicked()`
+- On every intercepted click: full `SetContent` from menu top + **cached** bottom (Netty-safe) + empty cursor
+- Never leak container click/close to vanilla while a PacketUxUi session is open
+
+### Artifact
+`net.opmasterleo:packetuxui:0.12.3`
+
 ## 0.12.2
 
 ### Bukkit-parity packet events

@@ -20,12 +20,14 @@ import net.minecraft.network.protocol.game.ClientboundOpenScreenPacket;
 import net.minecraft.network.protocol.game.ClientboundSetCursorItemPacket;
 import net.minecraft.network.protocol.game.ServerboundContainerClickPacket;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.Container;
 import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.ChestMenu;
 import net.minecraft.world.inventory.ClickType;
 import net.minecraft.world.inventory.MenuType;
+import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 import net.opmasterleo.packetuxui.nms.ClickPacket;
 import net.opmasterleo.packetuxui.nms.MenuPacketBridge;
@@ -294,16 +296,28 @@ public final class SharedMenuPacketBridge implements MenuPacketBridge {
         return null;
     }
 
+    /**
+     * Server-owned ChestMenu: slots cannot pickup/place via vanilla, so even if a
+     * click leaks to {@code packet_handler}, the server inventory does not move.
+     */
     private static final class PacketUxBoundMenu extends ChestMenu {
         private final SimpleContainer topContainer;
 
         PacketUxBoundMenu(MenuType<?> type, int windowId, Inventory inv, SimpleContainer container, int rows) {
             super(type, windowId, inv, container, rows);
             this.topContainer = container;
+            lockAllSlots();
         }
 
         SimpleContainer topContainer() {
             return topContainer;
+        }
+
+        private void lockAllSlots() {
+            for (int i = 0; i < this.slots.size(); i++) {
+                Slot old = this.slots.get(i);
+                this.slots.set(i, new LockedSlot(old.container, old.getContainerSlot(), old.x, old.y));
+            }
         }
 
         @Override
@@ -313,10 +327,37 @@ public final class SharedMenuPacketBridge implements MenuPacketBridge {
 
         @Override
         public void clicked(int slotId, int buttonId, ClickType clickType, net.minecraft.world.entity.player.Player viewer) {
+            setCarried(ItemStack.EMPTY);
         }
 
         @Override
         public ItemStack quickMoveStack(net.minecraft.world.entity.player.Player viewer, int index) {
+            return ItemStack.EMPTY;
+        }
+
+        @Override
+        public boolean canTakeItemForPickAll(ItemStack stack, Slot slot) {
+            return false;
+        }
+    }
+
+    private static final class LockedSlot extends Slot {
+        LockedSlot(Container container, int slot, int x, int y) {
+            super(container, slot, x, y);
+        }
+
+        @Override
+        public boolean mayPlace(ItemStack stack) {
+            return false;
+        }
+
+        @Override
+        public boolean mayPickup(net.minecraft.world.entity.player.Player player) {
+            return false;
+        }
+
+        @Override
+        public ItemStack remove(int amount) {
             return ItemStack.EMPTY;
         }
     }

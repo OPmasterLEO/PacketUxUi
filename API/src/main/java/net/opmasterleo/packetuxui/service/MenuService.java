@@ -56,6 +56,8 @@ public final class MenuService {
     private final ConcurrentHashMap<UUID, String> lastClickDecision = new ConcurrentHashMap<>();
     private final CopyOnWriteArrayList<Predicate<UxItem>> takeablePredicates = new CopyOnWriteArrayList<>();
     private final ConcurrentHashMap<UUID, Integer> nettyRoCorrectedForState = new ConcurrentHashMap<>();
+    /** Netty-safe bottom inventory snapshot (no Bukkit touch on event-loop). */
+    private final ConcurrentHashMap<UUID, List<UxItem>> bottomCache = new ConcurrentHashMap<>();
     private final AtomicLong transitionSequence = new AtomicLong();
     private final GuiEventManager events = new GuiEventManager();
     private volatile GuiScopeListener scopeListener;
@@ -216,6 +218,7 @@ public final class MenuService {
                     Math.max(1, copy.type().protocolTopSize() / 9)
             );
         }
+        refreshBottomCache(player);
         int stateId = protocolState(player, session, 0);
         adapter.packets().sendOpenWindow(player, windowId, copy.type().id(), copy.name());
         adapter.packets().sendWindowItems(player, windowId, stateId, fullContents(player, copy), null);
@@ -382,6 +385,7 @@ public final class MenuService {
         clearBottomHeld(player);
         clearAccumulatedDrag(player);
         nettyRoCorrectedForState.remove(id(player));
+        bottomCache.remove(id(player));
         debug(player, "CLOSE windowId=" + windowId + " sendPacket=" + sendClosePacket
                 + " reclaim=" + reclaim + " reason=" + reason);
         fireScope(player, false, session, top, reason, snapshot);
@@ -430,6 +434,7 @@ public final class MenuService {
     }
 
     private void applyMenuDifferential(Player player, MenuSession session, Menu next) {
+        refreshBottomCache(player);
         Menu current = session.menu();
         if (!current.name().equals(next.name())) {
             current.setName(next.name());
@@ -915,6 +920,7 @@ public final class MenuService {
         for (int i = 0; i < 9 && (27 + i) < bottom.size(); i++) {
             inv.setItem(i, toBukkitOrNull(bottom.get(27 + i)));
         }
+        refreshBottomCache(player);
     }
 
     private ItemStack toBukkitOrNull(UxItem item) {
@@ -1172,33 +1178,32 @@ public final class MenuService {
         }
     }
 
-    public void correctReadOnlyClick(Player player, ClickPacket packet) {
+    /**
+     * Immediate server→client authority (safe on Netty). Full window contents from
+     * menu top + cached bottom — stops Lunar/vanilla free-move prediction.
+     */
+    public void suppressClientPrediction(Player player, ClickPacket packet) {
         MenuSession session = sessions.get(id(player));
         if (session == null || session.phase() != SessionPhase.OPEN) {
             return;
         }
-        if (session.menu().mode() != MenuMode.READ_ONLY) {
-            return;
-        }
         int windowId = session.windowId();
-        int top = session.menu().type().protocolTopSize();
-        List<UxItem> items = session.menu().items();
-        int provisional = Math.max(0, packet.stateId()) + 1;
-        int slot = packet.slot();
-        if (slot >= 0 && slot < top) {
-            UxItem item = slot < items.size() ? items.get(slot) : UxItem.EMPTY;
-            adapter.packets().sendSetSlot(player, windowId, provisional, slot, item == null ? UxItem.EMPTY : item);
-        }
-        for (Integer changed : packet.changedSlotIds()) {
-            if (changed == null || changed == slot || changed < 0 || changed >= top) {
-                continue;
-            }
-            UxItem item = changed < items.size() ? items.get(changed) : UxItem.EMPTY;
-            adapter.packets().sendSetSlot(player, windowId, provisional, changed, item == null ? UxItem.EMPTY : item);
-        }
+        int clientState = packet == null ? 0 : Math.max(0, packet.stateId());
+        int provisional = Math.max(session.stateId(), clientState) + 1;
+        adapter.packets().sendWindowItems(player, windowId, provisional, nettySafeContents(player, session), null);
         adapter.packets().sendCursorItem(player, UxItem.EMPTY);
-        carriedItem.remove(id(player));
-        nettyRoCorrectedForState.put(id(player), packet.stateId());
+        if (session.menu().mode() != MenuMode.EDITABLE) {
+            carriedItem.remove(id(player));
+        }
+        if (packet != null) {
+            nettyRoCorrectedForState.put(id(player), packet.stateId());
+        }
+    }
+
+    /** @deprecated use {@link #suppressClientPrediction(Player, ClickPacket)} */
+    @Deprecated
+    public void correctReadOnlyClick(Player player, ClickPacket packet) {
+        suppressClientPrediction(player, packet);
     }
 
     /** Full resync for open session (window-id mismatch / safety). */
@@ -1207,9 +1212,33 @@ public final class MenuService {
         if (session == null || session.phase() != SessionPhase.OPEN) {
             return;
         }
+        refreshBottomCache(player);
         boolean clearCursor = session.menu().mode() != MenuMode.EDITABLE;
         resyncFull(player, session, session.stateId(), clearCursor);
         debug(player, "forceResyncOpen mode=" + session.menu().mode() + " windowId=" + session.windowId());
+    }
+
+    private void refreshBottomCache(Player player) {
+        bottomCache.put(id(player), List.copyOf(snapshotBottom(player)));
+    }
+
+    private List<UxItem> nettySafeContents(Player player, MenuSession session) {
+        int top = session.menu().type().protocolTopSize();
+        List<UxItem> contents = new ArrayList<>(top + 36);
+        List<UxItem> items = session.menu().items();
+        for (int i = 0; i < top; i++) {
+            UxItem item = i < items.size() ? items.get(i) : null;
+            contents.add(item == null ? UxItem.EMPTY : item);
+        }
+        List<UxItem> bottom = bottomCache.get(id(player));
+        if (bottom == null || bottom.size() != 36) {
+            for (int i = 0; i < 36; i++) {
+                contents.add(UxItem.EMPTY);
+            }
+        } else {
+            contents.addAll(bottom);
+        }
+        return contents;
     }
 
     private void ensurePipeline(Player player) {
