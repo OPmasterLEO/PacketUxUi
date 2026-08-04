@@ -153,7 +153,8 @@ public final class PacketGuiManager {
     }
 
     /**
-     * Build on an async thread, then {@link #present} on the player scheduler.
+     * Build on the dedicated menu worker pool, preload item bridges, then
+     * {@link #present} on the player/entity scheduler (Folia-safe).
      */
     public void presentAsync(Player player, Supplier<MenuBuild> builder) {
         presentAsync(player, builder, null);
@@ -161,20 +162,21 @@ public final class PacketGuiManager {
 
     public void presentAsync(Player player, Supplier<MenuBuild> builder, Consumer<Throwable> onError) {
         Objects.requireNonNull(builder, "builder");
-        scheduler.runAsync(() -> {
-            MenuBuild build;
+        scheduler.runMenuAsync(() -> {
+            Menu menu;
             try {
-                build = builder.get();
+                MenuBuild build = builder.get();
+                if (build == null) {
+                    return;
+                }
+                menu = build.materialize();
+                PacketUxUiAPI.getAdapter().items().preload(menu.items());
             } catch (Throwable error) {
                 if (onError != null) {
                     onError.accept(error);
                 }
                 return;
             }
-            if (build == null) {
-                return;
-            }
-            Menu menu = build.materialize();
             scheduler.runForPlayer(player, () -> {
                 if (player.isOnline()) {
                     present(player, menu);
@@ -186,19 +188,20 @@ public final class PacketGuiManager {
     public CompletableFuture<Void> presentAsyncFuture(Player player, Supplier<MenuBuild> builder) {
         CompletableFuture<Void> future = new CompletableFuture<>();
         Objects.requireNonNull(builder, "builder");
-        scheduler.runAsync(() -> {
-            MenuBuild build;
+        scheduler.runMenuAsync(() -> {
+            Menu menu;
             try {
-                build = builder.get();
+                MenuBuild build = builder.get();
+                if (build == null) {
+                    future.completeExceptionally(new IllegalStateException("builder returned null"));
+                    return;
+                }
+                menu = build.materialize();
+                PacketUxUiAPI.getAdapter().items().preload(menu.items());
             } catch (Throwable error) {
                 future.completeExceptionally(error);
                 return;
             }
-            if (build == null) {
-                future.completeExceptionally(new IllegalStateException("builder returned null"));
-                return;
-            }
-            Menu menu = build.materialize();
             scheduler.runForPlayer(player, () -> {
                 if (!player.isOnline()) {
                     future.completeExceptionally(new IllegalStateException("player offline"));

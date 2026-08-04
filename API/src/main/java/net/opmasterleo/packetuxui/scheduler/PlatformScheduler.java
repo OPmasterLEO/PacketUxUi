@@ -1,8 +1,11 @@
 package net.opmasterleo.packetuxui.scheduler;
 
 import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
@@ -19,6 +22,7 @@ public final class PlatformScheduler {
     private final EntityTasks entity;
     private final RegionTasks region;
     private final AsyncTasks async;
+    private final MenuWorkerPool menuWorkers;
 
     public PlatformScheduler(JavaPlugin plugin) {
         this(ServerPlatform.detect(Objects.requireNonNull(plugin, "plugin")));
@@ -38,6 +42,7 @@ public final class PlatformScheduler {
             this.region = RegionTasks.bukkit(this.global);
             this.async = AsyncTasks.bukkit(plugin);
         }
+        this.menuWorkers = MenuWorkerPool.create(plugin);
     }
 
     public JavaPlugin plugin() {
@@ -133,6 +138,29 @@ public final class PlatformScheduler {
 
     public AsyncTasks async() {
         return async;
+    }
+
+    /**
+     * Dedicated bounded pool for menu build/materialize/preload (Paper, Folia, Spigot).
+     * Do not touch Bukkit player/world state here — hop with {@link #runForPlayer}.
+     */
+    public MenuWorkerPool menuWorkers() {
+        return menuWorkers;
+    }
+
+    public Executor menuExecutor() {
+        return menuWorkers.executor();
+    }
+
+    public void runMenuAsync(Runnable task) {
+        menuWorkers.execute(task);
+    }
+
+    public <T> CompletableFuture<T> supplyMenuAsync(Supplier<T> supplier) {
+        return CompletableFuture.supplyAsync(
+                Objects.requireNonNull(supplier, "supplier"),
+                menuWorkers.executor()
+        );
     }
 
     public void runSync(Runnable task) {
@@ -311,5 +339,11 @@ public final class PlatformScheduler {
             }
         }
         Bukkit.getScheduler().cancelTasks(plugin);
+    }
+
+    /** Cancel platform tasks and shut down the dedicated menu worker pool. */
+    public void shutdown() {
+        cancelAll();
+        menuWorkers.shutdown();
     }
 }

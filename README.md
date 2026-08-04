@@ -19,7 +19,7 @@ repositories {
 }
 
 dependencies {
-    implementation("net.opmasterleo:packetuxui:0.12.8")
+    implementation("net.opmasterleo:packetuxui:0.12.9")
 }
 ```
 
@@ -74,7 +74,7 @@ gui.closeThen(player, () -> signGui.open(player));
 | `reopen`                                                     | Force close+open                                                            |
 | `close`                                                      | Empty cursor, close packet, unbind, clear session |
 | `closeThen`                                                  | `close` + 1 tick, then runnable                   |
-| `presentAsync`                                               | Build off-thread, then `present`                  |
+| `presentAsync`                                               | Build on dedicated menu pool + preload, then `present` on entity thread |
 | `patchSlots` / `patchSlotAtomic` / `refresh` / `updateTitle` | In-place mutators                                 |
 
 
@@ -100,6 +100,8 @@ gui.present(p, PacketMenus.build().title("Spawner").rows(3).editable()
 ```
 
 Virtual window ids use vanilla `nextContainerCounter()` (**1–100**). Pipeline injects before `packet_handler`. Modern 21.5+/26.x bind a real `ChestMenu` (9xN only) and own `stateId` via `incrementStateId`; top stacks are mirrored into the bound container.
+
+Threading: entity/region schedulers for player work (Paper + Folia). A dedicated **menu worker pool** (2–8 daemon threads) runs `presentAsync` build/materialize/preload — not the shared Bukkit/Paper async scheduler. Builders must not touch world/entity state on that pool.
 
 ### Protocol
 

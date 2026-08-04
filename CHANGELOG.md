@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.12.9
+
+### Dedicated menu worker pool (Paper / Folia / Spigot)
+
+- `MenuWorkerPool`: bounded fixed daemon pool (2..8 threads) for menu build/materialize/preload
+- `PlatformScheduler.runMenuAsync` / `menuExecutor` / `supplyMenuAsync` — isolated from shared Bukkit/Paper async
+- `presentAsync` / `presentAsyncFuture` use the menu pool, then hop to entity/player scheduler
+- Item bridge preload runs on the worker before present (less work on the region/tick thread)
+- Pool shut down on API terminate; Folia-safe as long as builders do not touch world/entity state
+
+### Artifact
+`net.opmasterleo:packetuxui:0.12.9`
+
 ## 0.12.8
 
 ### Silent size replace (27↔54 without flash)

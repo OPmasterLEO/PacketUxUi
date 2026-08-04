@@ -24,7 +24,7 @@ import net.opmasterleo.packetuxui.service.MenuService;
 
 public final class PacketUxUiAPI {
 
-    public static final String VERSION = "0.12.8";
+    public static final String VERSION = "0.12.9";
 
     private static final AtomicInteger RETAIN = new AtomicInteger();
     private static final Set<JavaPlugin> CLIENTS = new LinkedHashSet<>();
@@ -136,6 +136,7 @@ public final class PacketUxUiAPI {
                         + ", protocol " + adapter.minProtocol() + ".." + adapter.maxProtocol()
                         + ", scheduler " + scheduler.kind()
                         + (scheduler.isFolia() ? "/folia" : "")
+                        + ", menuWorkers=" + scheduler.menuWorkers().threadCount()
                         + ", debug=" + service.debugLogging()
                         + ")"
         );
@@ -231,6 +232,12 @@ public final class PacketUxUiAPI {
         }
         if (service != null) {
             service.events().clear();
+        }
+        if (scheduler != null) {
+            try {
+                scheduler.shutdown();
+            } catch (Throwable ignored) {
+            }
         }
         initialized = false;
         RETAIN.set(0);
