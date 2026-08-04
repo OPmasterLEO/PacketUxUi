@@ -52,7 +52,12 @@ jobs:
         run: chmod +x gradlew && ./gradlew clean shadowJar -x test --no-daemon
 
       - name: Publish release to Reposilite
-        run: ./gradlew publish -x test --no-daemon
+        run: |
+          if [ -z "${REPOSILITE_USER}" ] || [ -z "${REPOSILITE_TOKEN}" ]; then
+            echo "Missing REPOSILITE_USER / REPOSILITE_TOKEN secrets (token name + secret)."
+            exit 1
+          fi
+          ./gradlew publish -x test --no-daemon
         env:
           REPOSILITE_USER: ${{ secrets.REPOSILITE_USER }}
           REPOSILITE_TOKEN: ${{ secrets.REPOSILITE_TOKEN }}

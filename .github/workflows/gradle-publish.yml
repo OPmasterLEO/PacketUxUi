@@ -35,7 +35,12 @@ jobs:
 
       - name: Publish snapshot to Reposilite
         if: github.event_name == 'push'
-        run: ./gradlew publish -x test -Preposilite.repo=snapshots --no-daemon
+        run: |
+          if [ -z "${REPOSILITE_USER}" ] || [ -z "${REPOSILITE_TOKEN}" ]; then
+            echo "Missing REPOSILITE_USER / REPOSILITE_TOKEN secrets (token name + secret)."
+            exit 1
+          fi
+          ./gradlew publishSnapshot -x test --no-daemon
         env:
           REPOSILITE_USER: ${{ secrets.REPOSILITE_USER }}
           REPOSILITE_TOKEN: ${{ secrets.REPOSILITE_TOKEN }}

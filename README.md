@@ -72,6 +72,13 @@ tasks.shadowJar {
 }
 ```
 
+**Publish (maintainers only)**
+
+```bash
+./gradlew publish          # → releases
+./gradlew publishSnapshot  # → snapshots
+```
+
 ---
 
 ## Quick start
