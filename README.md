@@ -21,7 +21,7 @@ repositories {
 }
 
 dependencies {
-    implementation("net.opmasterleo:packetuxui:0.13.12")
+    implementation("net.opmasterleo:packetuxui:0.13.13")
 }
 ```
 
@@ -34,7 +34,7 @@ repositories {
 }
 
 dependencies {
-    implementation "net.opmasterleo:packetuxui:0.13.12"
+    implementation "net.opmasterleo:packetuxui:0.13.13"
 }
 ```
 
@@ -51,7 +51,7 @@ dependencies {
 <dependency>
     <groupId>net.opmasterleo</groupId>
     <artifactId>packetuxui</artifactId>
-    <version>0.13.12</version>
+    <version>0.13.13</version>
 </dependency>
 ```
 
@@ -221,6 +221,12 @@ PacketMenus.onInventoryOpen(event -> {
     // event.player(), event.menu(), event.reason() // OPEN | TYPE_SWAP
 });
 
+// InventoryCloseEvent analogue
+PacketMenus.onInventoryClose(event -> {
+    // event.reason() // PLAYER, API, REPLACE, QUIT, ...
+    // event.snapshot() // top items + cursor at close (may be null)
+});
+
 // InventoryClickEvent analogue
 PacketMenus.onInventoryClick(event -> {
     if (event.action() == GuiClickAction.MOVE_TO_OTHER_INVENTORY) {
@@ -238,7 +244,7 @@ PacketMenus.onInventoryDrag(event -> {
 });
 ```
 
-Useful pieces: `Slots.index` / `border` / `rectangle`, `MenuPackets`, `GuiClickEvent` (`action`, `slotType`, `currentItem`, `cursor`), `onDrag`, `onInventoryOpen` / `onInventoryClick` / `onInventoryDrag`.
+Useful pieces: `Slots.index` / `border` / `rectangle`, `MenuPackets`, `GuiClickEvent` (`action`, `slotType`, `currentItem`, `cursor`), `onDrag`, `onInventoryOpen` / `onInventoryClose` / `onInventoryClick` / `onInventoryDrag`.
 
 Items from Bukkit (`fromBukkit` / fillers) keep full NBT (enchants, lore, potions, components). Builder items use name / lore / enchant / CMD / skull texture fields.
 

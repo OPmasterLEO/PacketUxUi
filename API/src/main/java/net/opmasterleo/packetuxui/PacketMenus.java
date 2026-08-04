@@ -4,6 +4,7 @@ import org.bukkit.entity.Player;
 
 import net.kyori.adventure.text.Component;
 import net.opmasterleo.packetuxui.event.GuiClickListener;
+import net.opmasterleo.packetuxui.event.GuiCloseListener;
 import net.opmasterleo.packetuxui.event.GuiDragListener;
 import net.opmasterleo.packetuxui.event.GuiEventManager;
 import net.opmasterleo.packetuxui.event.GuiListener;
@@ -51,6 +52,18 @@ public final class PacketMenus {
 
     public static void unregisterInventoryOpen(GuiOpenListener listener) {
         events().unregisterOpen(listener);
+    }
+
+    /**
+     * Efficient InventoryCloseEvent analogue — direct call, no Bukkit bus.
+     * Includes {@link net.opmasterleo.packetuxui.event.GuiCloseReason} + optional snapshot.
+     */
+    public static void onInventoryClose(GuiCloseListener listener) {
+        events().registerClose(listener);
+    }
+
+    public static void unregisterInventoryClose(GuiCloseListener listener) {
+        events().unregisterClose(listener);
     }
 
     public static void onInventoryClick(GuiClickListener listener) {

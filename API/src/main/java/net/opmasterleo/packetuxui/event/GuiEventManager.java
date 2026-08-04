@@ -8,27 +8,31 @@ import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * Listener bus with cached ordered snapshots — no sort/alloc on the hot path.
- * Dedicated open/click/drag lists keep unrelated hooks from forcing event allocation.
+ * Dedicated open/close/click/drag lists keep unrelated hooks from forcing event allocation.
  */
 public final class GuiEventManager {
 
     private static final Comparator<GuiListener> BY_PRIORITY = new PriorityComparator();
     private static final GuiListener[] EMPTY = new GuiListener[0];
     private static final GuiOpenListener[] EMPTY_OPEN = new GuiOpenListener[0];
+    private static final GuiCloseListener[] EMPTY_CLOSE = new GuiCloseListener[0];
     private static final GuiClickListener[] EMPTY_CLICK = new GuiClickListener[0];
     private static final GuiDragListener[] EMPTY_DRAG = new GuiDragListener[0];
 
     private final CopyOnWriteArrayList<GuiListener> listeners = new CopyOnWriteArrayList<>();
     private final CopyOnWriteArrayList<GuiOpenListener> openListeners = new CopyOnWriteArrayList<>();
+    private final CopyOnWriteArrayList<GuiCloseListener> closeListeners = new CopyOnWriteArrayList<>();
     private final CopyOnWriteArrayList<GuiClickListener> clickListeners = new CopyOnWriteArrayList<>();
     private final CopyOnWriteArrayList<GuiDragListener> dragListeners = new CopyOnWriteArrayList<>();
 
     private volatile GuiListener[] ordered = EMPTY;
     private volatile GuiListener[] orderedOpen = EMPTY;
+    private volatile GuiListener[] orderedClose = EMPTY;
     private volatile GuiListener[] orderedClick = EMPTY;
     private volatile GuiListener[] orderedClickPost = EMPTY;
     private volatile GuiListener[] orderedDrag = EMPTY;
     private volatile GuiOpenListener[] openOnly = EMPTY_OPEN;
+    private volatile GuiCloseListener[] closeOnly = EMPTY_CLOSE;
     private volatile GuiClickListener[] clickOnly = EMPTY_CLICK;
     private volatile GuiDragListener[] dragOnly = EMPTY_DRAG;
 
@@ -55,6 +59,19 @@ public final class GuiEventManager {
     public void unregisterOpen(GuiOpenListener listener) {
         if (listener != null && openListeners.remove(listener)) {
             rebuildOpenOnly();
+        }
+    }
+
+    public void registerClose(GuiCloseListener listener) {
+        Objects.requireNonNull(listener, "listener");
+        if (closeListeners.addIfAbsent(listener)) {
+            rebuildCloseOnly();
+        }
+    }
+
+    public void unregisterClose(GuiCloseListener listener) {
+        if (listener != null && closeListeners.remove(listener)) {
+            rebuildCloseOnly();
         }
     }
 
@@ -87,14 +104,17 @@ public final class GuiEventManager {
     public void clear() {
         listeners.clear();
         openListeners.clear();
+        closeListeners.clear();
         clickListeners.clear();
         dragListeners.clear();
         ordered = EMPTY;
         orderedOpen = EMPTY;
+        orderedClose = EMPTY;
         orderedClick = EMPTY;
         orderedClickPost = EMPTY;
         orderedDrag = EMPTY;
         openOnly = EMPTY_OPEN;
+        closeOnly = EMPTY_CLOSE;
         clickOnly = EMPTY_CLICK;
         dragOnly = EMPTY_DRAG;
     }
@@ -105,6 +125,10 @@ public final class GuiEventManager {
 
     public boolean hasOpenListeners() {
         return openOnly.length > 0 || orderedOpen.length > 0;
+    }
+
+    public boolean hasCloseListeners() {
+        return closeOnly.length > 0 || orderedClose.length > 0;
     }
 
     public boolean hasClickListeners() {
@@ -144,11 +168,18 @@ public final class GuiEventManager {
     }
 
     public void fireClose(GuiCloseEvent event) {
-        GuiListener[] snap = ordered;
-        if (snap.length == 0) {
+        GuiCloseListener[] closes = closeOnly;
+        GuiListener[] guiCloses = orderedClose;
+        if (closes.length == 0 && guiCloses.length == 0) {
             return;
         }
-        for (GuiListener listener : snap) {
+        for (GuiCloseListener listener : closes) {
+            try {
+                listener.onInventoryClose(event);
+            } catch (Throwable ignored) {
+            }
+        }
+        for (GuiListener listener : guiCloses) {
             try {
                 listener.onClose(event);
             } catch (Throwable ignored) {
@@ -213,6 +244,7 @@ public final class GuiEventManager {
         if (listeners.isEmpty()) {
             ordered = EMPTY;
             orderedOpen = EMPTY;
+            orderedClose = EMPTY;
             orderedClick = EMPTY;
             orderedClickPost = EMPTY;
             orderedDrag = EMPTY;
@@ -222,6 +254,7 @@ public final class GuiEventManager {
         copy.sort(BY_PRIORITY);
         ordered = copy.toArray(EMPTY);
         orderedOpen = filterOverrides(copy, "onOpen", GuiOpenEvent.class);
+        orderedClose = filterOverrides(copy, "onClose", GuiCloseEvent.class);
         orderedClick = filterOverrides(copy, "onClick", GuiClickEvent.class);
         orderedClickPost = filterOverrides(copy, "onClickPost", GuiClickPostEvent.class);
         orderedDrag = filterOverrides(copy, "onDrag", GuiDragEvent.class);
@@ -229,6 +262,10 @@ public final class GuiEventManager {
 
     private void rebuildOpenOnly() {
         openOnly = openListeners.isEmpty() ? EMPTY_OPEN : openListeners.toArray(EMPTY_OPEN);
+    }
+
+    private void rebuildCloseOnly() {
+        closeOnly = closeListeners.isEmpty() ? EMPTY_CLOSE : closeListeners.toArray(EMPTY_CLOSE);
     }
 
     private void rebuildClickOnly() {

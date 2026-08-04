@@ -14,7 +14,7 @@ public interface GuiListener {
     default void onOpen(GuiOpenEvent event) {
     }
 
-    /** {@code InventoryCloseEvent} analogue. */
+    /** {@code InventoryCloseEvent} analogue — or use {@link net.opmasterleo.packetuxui.PacketMenus#onInventoryClose}. */
     default void onClose(GuiCloseEvent event) {
     }
 

@@ -29,6 +29,21 @@ class GuiClickDragListenerTest {
         assertTrue(manager.hasOpenListeners());
         assertFalse(manager.hasClickListeners());
         assertFalse(manager.hasDragListeners());
+        assertFalse(manager.hasCloseListeners());
+    }
+
+    @Test
+    void dedicatedCloseHookFires() {
+        GuiEventManager manager = new GuiEventManager();
+        AtomicBoolean seen = new AtomicBoolean();
+        manager.registerClose(event -> {
+            seen.set(true);
+            assertEquals(GuiCloseReason.PLAYER, event.reason());
+        });
+        assertTrue(manager.hasCloseListeners());
+        Menu menu = new Menu(Component.text("t"), InventoryType.GENERIC9X1, Map.of(), null, MenuMode.READ_ONLY);
+        manager.fireClose(new GuiCloseEvent(null, menu, 1, 9, 0, GuiCloseReason.PLAYER, null));
+        assertTrue(seen.get());
     }
 
     @Test

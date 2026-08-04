@@ -758,7 +758,7 @@ public final class MenuService {
             if (open) {
                 fireOpenEvent(player, session, GuiOpenReason.OPEN);
             } else {
-                if (!events.hasListeners()) {
+                if (!events.hasCloseListeners()) {
                     return;
                 }
                 events.fireClose(new GuiCloseEvent(

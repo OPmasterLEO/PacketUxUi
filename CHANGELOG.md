@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.13.13
+
+### Efficient InventoryClose analogue
+
+- `PacketMenus.onInventoryClose(GuiCloseListener)` — direct close hook, no Bukkit bus
+- Split from other hooks (`hasCloseListeners()`); includes `GuiCloseReason` + optional `CloseSnapshot`
+
+### Artifact
+`net.opmasterleo:packetuxui:0.13.13`
+
 ## 0.13.12
 
 ### Efficient InventoryClick / InventoryDrag analogues
