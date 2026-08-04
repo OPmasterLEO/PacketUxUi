@@ -19,7 +19,7 @@ repositories {
 }
 
 dependencies {
-    implementation("net.opmasterleo:packetuxui:0.13.4")
+    implementation("net.opmasterleo:packetuxui:0.13.5")
 }
 ```
 
@@ -70,12 +70,17 @@ gui.present(player, smallerOrLargerMenu);
 // Force hard close+open only when needed
 gui.reopen(player, menu);
 
-// Written book text GUI (page turns client-side; ClickEvents on page text for actions)
+// Written book text GUI — stack lines, no \n needed
 PacketMenus.book()
     .title("<gold>Rules")
     .author("Server")
-    .page("<white>Line 1\nLine 2")
-    .page(Component.text("Page 2"))
+    .newPage()
+        .line("<gold>Welcome!")
+        .blank()
+        .line("<white>Be nice")
+        .line("<gray>No cheating")
+    .done()
+    .pageLines("<bold>Page 2", "", "<white>More text")
     .open(player);
 
 // Close then SignGUI / chat / anything else

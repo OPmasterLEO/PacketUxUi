@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.13.5
+
+### Book page line builder
+
+No more stuffing a whole page into one string with `\n`:
+
+```java
+PacketMenus.book()
+    .title("<gold>Rules")
+    .author("Server")
+    .newPage()
+        .line("<gold>Welcome!")
+        .blank()
+        .line("<white>Be nice")
+        .line("<gray>No cheating")
+    .done()
+    .pageLines("<bold>Page 2", "", "<white>More text")
+    .open(player);
+```
+
+Also: `page(p -> p.line(...).blank()...)`, `paragraph(...)`, `lines(...)`.
+
+### Artifact
+`net.opmasterleo:packetuxui:0.13.5`
+
 ## 0.13.4
 
 ### Written book GUI (text viewer)

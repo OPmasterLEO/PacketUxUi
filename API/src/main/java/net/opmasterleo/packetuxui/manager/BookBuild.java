@@ -15,13 +15,20 @@ import net.opmasterleo.packetuxui.service.BookView;
 /**
  * Fluent builder for a written-book text GUI ({@link BookView}).
  * <p>
- * Example:
+ * Prefer {@link #newPage()} / {@link #page(Consumer)} so each line is its own call:
  * <pre>{@code
  * PacketMenus.book()
  *     .title("<gold>Rules")
  *     .author("Server")
- *     .page("<white>Welcome!\n\n<gray>Page 1")
- *     .page(Component.text("Page 2"))
+ *     .newPage()
+ *         .line("<gold>Welcome!")
+ *         .blank()
+ *         .line("<white>Be nice")
+ *         .line("<gray>No cheating")
+ *     .done()
+ *     .newPage()
+ *         .lines("<bold>Page 2", "", "<white>More text")
+ *     .done()
  *     .open(player);
  * }</pre>
  */
@@ -54,13 +61,45 @@ public final class BookBuild {
         return author(StringUtils.toComponent(miniMessageOrLegacy == null ? "" : miniMessageOrLegacy));
     }
 
+    /**
+     * Start a multi-line page. Call {@link BookPageBuild#line(String)} / {@link BookPageBuild#blank()}
+     * then {@link BookPageBuild#done()}.
+     */
+    public BookPageBuild newPage() {
+        return new BookPageBuild(this);
+    }
+
+    /**
+     * Configure one page via callback (auto-{@code done()}).
+     */
+    public BookBuild page(Consumer<BookPageBuild> configure) {
+        Objects.requireNonNull(configure, "configure");
+        BookPageBuild page = new BookPageBuild(this);
+        configure.accept(page);
+        return addBuiltPage(page.materialize());
+    }
+
+    /** Raw page component (single block — use {@link #newPage()} for stacked lines). */
     public BookBuild page(Component page) {
         pages.add(page == null ? Component.empty() : page);
         return this;
     }
 
+    /** Single MiniMessage page string (may still contain {@code <newline>} if you want). */
     public BookBuild page(String miniMessageOrLegacy) {
         return page(StringUtils.toComponent(miniMessageOrLegacy == null ? "" : miniMessageOrLegacy));
+    }
+
+    /**
+     * One page from stacked MiniMessage lines (empty strings → blank lines).
+     * Same as {@code newPage().lines(...).done()}.
+     */
+    public BookBuild pageLines(String... miniMessageLines) {
+        return newPage().lines(miniMessageLines).done();
+    }
+
+    public BookBuild pageLines(Component... lines) {
+        return newPage().lines(lines).done();
     }
 
     public BookBuild pages(Collection<Component> pages) {
@@ -90,6 +129,11 @@ public final class BookBuild {
      */
     public BookBuild onClose(Consumer<Player> onClose) {
         this.onClose = onClose;
+        return this;
+    }
+
+    BookBuild addBuiltPage(Component page) {
+        pages.add(page == null ? Component.empty() : page);
         return this;
     }
 
