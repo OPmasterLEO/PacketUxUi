@@ -32,6 +32,7 @@ import net.opmasterleo.packetuxui.event.GuiDragEvent;
 import net.opmasterleo.packetuxui.event.GuiDragPhase;
 import net.opmasterleo.packetuxui.event.GuiEventManager;
 import net.opmasterleo.packetuxui.event.GuiOpenEvent;
+import net.opmasterleo.packetuxui.event.GuiOpenReason;
 import net.opmasterleo.packetuxui.nms.ClickPacket;
 import net.opmasterleo.packetuxui.nms.LiveLimits;
 import net.opmasterleo.packetuxui.nms.NmsAdapter;
@@ -411,6 +412,8 @@ public final class MenuService {
                     + " bound=" + bound
                     + " cursorKept=" + stayEditable);
         }
+        // OpenScreen shown — InventoryOpen analogue only (no close / no scope flip).
+        fireOpenEvent(player, existing, GuiOpenReason.TYPE_SWAP);
     }
 
     /** Bind + OpenScreen + contents for a freshly allocated or reused window id. */
@@ -716,6 +719,23 @@ public final class MenuService {
         }
     }
 
+    private void fireOpenEvent(Player player, MenuSession session, GuiOpenReason reason) {
+        if (session == null || !events.hasOpenListeners()) {
+            return;
+        }
+        try {
+            events.fireOpen(new GuiOpenEvent(
+                    player,
+                    session.menu(),
+                    session.windowId(),
+                    session.topSlotCount(),
+                    session.stateId(),
+                    reason
+            ));
+        } catch (Throwable ignored) {
+        }
+    }
+
     private void fireScope(
             Player player,
             boolean open,
@@ -736,14 +756,11 @@ public final class MenuService {
         }
         try {
             if (open) {
-                events.fireOpen(new GuiOpenEvent(
-                        player,
-                        session.menu(),
-                        session.windowId(),
-                        topSlotCount,
-                        session.stateId()
-                ));
+                fireOpenEvent(player, session, GuiOpenReason.OPEN);
             } else {
+                if (!events.hasListeners()) {
+                    return;
+                }
                 events.fireClose(new GuiCloseEvent(
                         player,
                         session.menu(),

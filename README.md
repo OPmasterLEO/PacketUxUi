@@ -21,7 +21,7 @@ repositories {
 }
 
 dependencies {
-    implementation("net.opmasterleo:packetuxui:0.13.10")
+    implementation("net.opmasterleo:packetuxui:0.13.11")
 }
 ```
 
@@ -34,7 +34,7 @@ repositories {
 }
 
 dependencies {
-    implementation "net.opmasterleo:packetuxui:0.13.10"
+    implementation "net.opmasterleo:packetuxui:0.13.11"
 }
 ```
 
@@ -51,7 +51,7 @@ dependencies {
 <dependency>
     <groupId>net.opmasterleo</groupId>
     <artifactId>packetuxui</artifactId>
-    <version>0.13.10</version>
+    <version>0.13.11</version>
 </dependency>
 ```
 
@@ -215,9 +215,14 @@ PacketMenus.registerListener(new GuiListener() {
         }
     }
 });
+
+// Efficient InventoryOpenEvent analogue (no Bukkit bus; also fires on type-swap)
+PacketMenus.onInventoryOpen(event -> {
+    // event.player(), event.menu(), event.reason() // OPEN | TYPE_SWAP
+});
 ```
 
-Useful pieces: `Slots.index` / `border` / `rectangle`, `MenuPackets`, `GuiClickEvent` (`action`, `slotType`, `currentItem`, `cursor`), `onDrag`.
+Useful pieces: `Slots.index` / `border` / `rectangle`, `MenuPackets`, `GuiClickEvent` (`action`, `slotType`, `currentItem`, `cursor`), `onDrag`, `onInventoryOpen`.
 
 Items from Bukkit (`fromBukkit` / fillers) keep full NBT (enchants, lore, potions, components). Builder items use name / lore / enchant / CMD / skull texture fields.
 

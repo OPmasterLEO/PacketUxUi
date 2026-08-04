@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.13.11
+
+### Efficient InventoryOpen analogue
+
+- `PacketMenus.onInventoryOpen(GuiOpenListener)` — direct open hook, no Bukkit `HandlerList` / plugin tree
+- Zero alloc when nothing is registered (`hasOpenListeners()` gate)
+- Click-only `GuiListener`s do not subscribe to opens
+- Fires on fresh open and silent type-swap (`GuiOpenReason.OPEN` / `TYPE_SWAP`)
+- Still available via `GuiListener.onOpen`
+
+### Artifact
+`net.opmasterleo:packetuxui:0.13.11`
+
 ## 0.13.10
 
 ### Fix: silent type swap (no close+open)

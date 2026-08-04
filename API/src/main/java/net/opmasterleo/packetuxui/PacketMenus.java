@@ -5,6 +5,7 @@ import org.bukkit.entity.Player;
 import net.kyori.adventure.text.Component;
 import net.opmasterleo.packetuxui.event.GuiEventManager;
 import net.opmasterleo.packetuxui.event.GuiListener;
+import net.opmasterleo.packetuxui.event.GuiOpenListener;
 import net.opmasterleo.packetuxui.manager.BookBuild;
 import net.opmasterleo.packetuxui.manager.MenuBuild;
 import net.opmasterleo.packetuxui.manager.PacketGuiManager;
@@ -40,6 +41,19 @@ public final class PacketMenus {
 
     public static void unregisterListener(GuiListener listener) {
         events().unregister(listener);
+    }
+
+    /**
+     * Efficient InventoryOpenEvent analogue — direct call, no Bukkit bus.
+     * Zero alloc/cost on open when nothing is registered.
+     * Also fires on silent type-swaps ({@link net.opmasterleo.packetuxui.event.GuiOpenReason#TYPE_SWAP}).
+     */
+    public static void onInventoryOpen(GuiOpenListener listener) {
+        events().registerOpen(listener);
+    }
+
+    public static void unregisterInventoryOpen(GuiOpenListener listener) {
+        events().unregisterOpen(listener);
     }
 
     public static PacketGuiManager gui() {

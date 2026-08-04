@@ -10,7 +10,7 @@ public interface GuiListener {
         return GuiListenerPriority.NORMAL;
     }
 
-    /** {@code InventoryOpenEvent} analogue. */
+    /** {@code InventoryOpenEvent} analogue — or use {@link net.opmasterleo.packetuxui.PacketMenus#onInventoryOpen}. */
     default void onOpen(GuiOpenEvent event) {
     }
 
