@@ -343,7 +343,12 @@ public final class PacketGuiManager {
                 + ", windowId=" + d.windowId()
                 + ", title=" + d.title()
                 + ", transitionActive=" + d.transitionActive()
-                + ", lastClickDecision=" + d.lastClickDecision();
+                + ", lastClickDecision=" + d.lastClickDecision()
+                + ", pipelineHandlers=" + PacketUxUiAPI.getPipelineHandlers(player);
+    }
+
+    public java.util.List<String> pipelineHandlers(Player player) {
+        return PacketUxUiAPI.getPipelineHandlers(player);
     }
 
     public void onClose(Player player, Consumer<Player> hook) {

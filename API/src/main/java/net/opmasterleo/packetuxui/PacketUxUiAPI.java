@@ -66,6 +66,14 @@ public final class PacketUxUiAPI {
         return scheduler;
     }
 
+    public static java.util.List<String> getPipelineHandlers(Player player) {
+        checkInitialized();
+        if (player == null || pipelineManager == null) {
+            return java.util.List.of();
+        }
+        return pipelineManager.pipelineHandlers(player);
+    }
+
     public static Optional<String> nmsBucket() {
         return initialized && adapter != null
                 ? Optional.of(adapter.bucketId())

@@ -1,5 +1,7 @@
 package net.opmasterleo.packetuxui.network;
 
+import java.util.List;
+
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -10,11 +12,12 @@ import net.opmasterleo.packetuxui.service.MenuService;
 
 public final class PipelineManager {
 
-    public static final String HANDLER_NAME = "packetuxui_inbound";
+    public static final String HANDLER_NAME_PREFIX = "packetuxui_inbound_";
 
     private final NmsAdapter adapter;
     private final MenuService menuService;
     private final PlatformScheduler scheduler;
+    private final String handlerName;
 
     public PipelineManager(
             JavaPlugin plugin,
@@ -25,6 +28,7 @@ public final class PipelineManager {
         this.adapter = adapter;
         this.menuService = menuService;
         this.scheduler = scheduler;
+        this.handlerName = HANDLER_NAME_PREFIX + sanitize(plugin.getName());
     }
 
     public void inject(Player player) {
@@ -32,22 +36,22 @@ public final class PipelineManager {
         if (channel == null) {
             return;
         }
-        channel.eventLoop().execute(() -> {
+        ChannelOps.runInEventLoop(channel, () -> {
             try {
-                if (channel.pipeline().get(HANDLER_NAME) != null) {
-                    channel.pipeline().remove(HANDLER_NAME);
+                if (ChannelOps.get(channel, handlerName) != null) {
+                    channel.pipeline().remove(handlerName);
                 }
                 MenuInboundHandler handler = new MenuInboundHandler(player, adapter, menuService, scheduler);
                 boolean added = false;
                 for (String anchor : adapter.pipeline().injectBeforeNames()) {
-                    if (channel.pipeline().get(anchor) != null) {
-                        channel.pipeline().addBefore(anchor, HANDLER_NAME, handler);
+                    if (ChannelOps.get(channel, anchor) != null) {
+                        channel.pipeline().addBefore(anchor, handlerName, handler);
                         added = true;
                         break;
                     }
                 }
                 if (!added) {
-                    channel.pipeline().addFirst(HANDLER_NAME, handler);
+                    channel.pipeline().addFirst(handlerName, handler);
                 }
             } catch (Throwable ignored) {
             }
@@ -59,13 +63,29 @@ public final class PipelineManager {
         if (channel == null) {
             return;
         }
-        channel.eventLoop().execute(() -> {
+        ChannelOps.runInEventLoop(channel, () -> {
             try {
-                if (channel.pipeline().get(HANDLER_NAME) != null) {
-                    channel.pipeline().remove(HANDLER_NAME);
+                if (ChannelOps.get(channel, handlerName) != null) {
+                    channel.pipeline().remove(handlerName);
                 }
             } catch (Throwable ignored) {
             }
         });
+    }
+
+    public List<String> pipelineHandlers(Player player) {
+        Channel channel = adapter.pipeline().channel(player);
+        return ChannelOps.pipelineNames(channel);
+    }
+
+    public String handlerName() {
+        return handlerName;
+    }
+
+    private static String sanitize(String value) {
+        if (value == null || value.isBlank()) {
+            return "default";
+        }
+        return value.toLowerCase(java.util.Locale.ROOT).replaceAll("[^a-z0-9_\\-]", "_");
     }
 }
