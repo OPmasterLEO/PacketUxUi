@@ -2,8 +2,11 @@ package net.opmasterleo.packetuxui.event;
 
 import java.util.Set;
 
+import org.bukkit.Material;
 import org.bukkit.entity.Player;
+import org.bukkit.inventory.ItemStack;
 
+import net.opmasterleo.packetuxui.PacketUxUiAPI;
 import net.opmasterleo.packetuxui.nms.ClickPacket;
 import net.opmasterleo.packetuxui.nms.item.UxItem;
 import net.opmasterleo.packetuxui.service.Menu;
@@ -13,6 +16,7 @@ import net.opmasterleo.packetuxui.types.ClickData;
 /**
  * Packet analogue of Bukkit {@code InventoryDragEvent}, split by phase
  * (START / ADD / END) as the client sends QUICK_CRAFT packets.
+ * Prefer {@link net.opmasterleo.packetuxui.PacketMenus#onInventoryDrag} for a dedicated hook.
  */
 public final class GuiDragEvent extends GuiEvent {
 
@@ -70,6 +74,18 @@ public final class GuiDragEvent extends GuiEvent {
 
     public UxItem cursor() {
         return cursor;
+    }
+
+    /** Bukkit {@link ItemStack} for {@link #cursor()}. Prefer {@link #cursor()} on hot paths. */
+    public ItemStack cursorStack() {
+        if (cursor == null || cursor.isEmpty()) {
+            return new ItemStack(Material.AIR);
+        }
+        try {
+            return PacketUxUiAPI.getAdapter().items().toBukkit(cursor);
+        } catch (Throwable ignored) {
+            return new ItemStack(Material.AIR);
+        }
     }
 
     public boolean isCancelled() {

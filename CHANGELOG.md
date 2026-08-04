@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.13.12
+
+### Efficient InventoryClick / InventoryDrag analogues
+
+- `PacketMenus.onInventoryClick(GuiClickListener)` / `onInventoryDrag(GuiDragListener)` — direct hooks, no Bukkit bus
+- Open/click/drag interest is split: registering open-only no longer allocates click events (and vice versa)
+- `GuiClickEvent.currentStack()` / `cursorStack()` (and drag `cursorStack()`) for Bukkit `ItemStack` when needed; prefer `UxItem` on hot paths
+- No `EquipmentSlot` API — packet menus only expose container / player / hotbar / outside (`GuiSlotType`); armor equipment is outside this window model
+
+### Artifact
+`net.opmasterleo:packetuxui:0.13.12`
+
 ## 0.13.11
 
 ### Efficient InventoryOpen analogue

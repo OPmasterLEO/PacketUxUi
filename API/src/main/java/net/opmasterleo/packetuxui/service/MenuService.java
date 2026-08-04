@@ -878,8 +878,8 @@ public final class MenuService {
 
         ClickData clickData = getClickType(packet);
         UxItem carried = activeCursor(player);
-        boolean listen = events.hasListeners();
-        if (listen) {
+        boolean listenClick = events.hasClickListeners();
+        if (listenClick) {
             GuiClickEvent pre = new GuiClickEvent(
                     player,
                     session.menu(),
@@ -909,7 +909,7 @@ public final class MenuService {
                 case DRAG_END -> GuiDragPhase.END;
                 default -> GuiDragPhase.ADD;
             };
-            if (listen) {
+            if (events.hasDragListeners()) {
                 Set<Integer> dragSlots = new HashSet<>(4);
                 if (packet.slot() >= 0) {
                     dragSlots.add(packet.slot());
@@ -1007,7 +1007,7 @@ public final class MenuService {
             UxItem carried,
             String decision
     ) {
-        if (!events.hasListeners()) {
+        if (!events.hasClickPostListeners()) {
             return;
         }
         try {

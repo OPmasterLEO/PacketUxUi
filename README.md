@@ -21,7 +21,7 @@ repositories {
 }
 
 dependencies {
-    implementation("net.opmasterleo:packetuxui:0.13.11")
+    implementation("net.opmasterleo:packetuxui:0.13.12")
 }
 ```
 
@@ -34,7 +34,7 @@ repositories {
 }
 
 dependencies {
-    implementation "net.opmasterleo:packetuxui:0.13.11"
+    implementation "net.opmasterleo:packetuxui:0.13.12"
 }
 ```
 
@@ -51,7 +51,7 @@ dependencies {
 <dependency>
     <groupId>net.opmasterleo</groupId>
     <artifactId>packetuxui</artifactId>
-    <version>0.13.11</version>
+    <version>0.13.12</version>
 </dependency>
 ```
 
@@ -220,9 +220,25 @@ PacketMenus.registerListener(new GuiListener() {
 PacketMenus.onInventoryOpen(event -> {
     // event.player(), event.menu(), event.reason() // OPEN | TYPE_SWAP
 });
+
+// InventoryClickEvent analogue
+PacketMenus.onInventoryClick(event -> {
+    if (event.action() == GuiClickAction.MOVE_TO_OTHER_INVENTORY) {
+        event.setCancelled(true);
+    }
+    // event.currentItem() / event.cursor() — UxItem (fast)
+    // event.currentStack() / event.cursorStack() — Bukkit ItemStack when needed
+});
+
+// InventoryDragEvent analogue (START / ADD / END)
+PacketMenus.onInventoryDrag(event -> {
+    if (event.phase() == GuiDragPhase.END) {
+        // event.slots(), event.cursor()
+    }
+});
 ```
 
-Useful pieces: `Slots.index` / `border` / `rectangle`, `MenuPackets`, `GuiClickEvent` (`action`, `slotType`, `currentItem`, `cursor`), `onDrag`, `onInventoryOpen`.
+Useful pieces: `Slots.index` / `border` / `rectangle`, `MenuPackets`, `GuiClickEvent` (`action`, `slotType`, `currentItem`, `cursor`), `onDrag`, `onInventoryOpen` / `onInventoryClick` / `onInventoryDrag`.
 
 Items from Bukkit (`fromBukkit` / fillers) keep full NBT (enchants, lore, potions, components). Builder items use name / lore / enchant / CMD / skull texture fields.
 

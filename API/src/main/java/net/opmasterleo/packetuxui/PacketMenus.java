@@ -3,6 +3,8 @@ package net.opmasterleo.packetuxui;
 import org.bukkit.entity.Player;
 
 import net.kyori.adventure.text.Component;
+import net.opmasterleo.packetuxui.event.GuiClickListener;
+import net.opmasterleo.packetuxui.event.GuiDragListener;
 import net.opmasterleo.packetuxui.event.GuiEventManager;
 import net.opmasterleo.packetuxui.event.GuiListener;
 import net.opmasterleo.packetuxui.event.GuiOpenListener;
@@ -43,17 +45,28 @@ public final class PacketMenus {
         events().unregister(listener);
     }
 
-    /**
-     * Efficient InventoryOpenEvent analogue — direct call, no Bukkit bus.
-     * Zero alloc/cost on open when nothing is registered.
-     * Also fires on silent type-swaps ({@link net.opmasterleo.packetuxui.event.GuiOpenReason#TYPE_SWAP}).
-     */
     public static void onInventoryOpen(GuiOpenListener listener) {
         events().registerOpen(listener);
     }
 
     public static void unregisterInventoryOpen(GuiOpenListener listener) {
         events().unregisterOpen(listener);
+    }
+
+    public static void onInventoryClick(GuiClickListener listener) {
+        events().registerClick(listener);
+    }
+
+    public static void unregisterInventoryClick(GuiClickListener listener) {
+        events().unregisterClick(listener);
+    }
+
+    public static void onInventoryDrag(GuiDragListener listener) {
+        events().registerDrag(listener);
+    }
+
+    public static void unregisterInventoryDrag(GuiDragListener listener) {
+        events().unregisterDrag(listener);
     }
 
     public static PacketGuiManager gui() {

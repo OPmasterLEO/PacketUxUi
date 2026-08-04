@@ -1,7 +1,10 @@
 package net.opmasterleo.packetuxui.event;
 
+import org.bukkit.Material;
 import org.bukkit.entity.Player;
+import org.bukkit.inventory.ItemStack;
 
+import net.opmasterleo.packetuxui.PacketUxUiAPI;
 import net.opmasterleo.packetuxui.nms.ClickPacket;
 import net.opmasterleo.packetuxui.nms.item.UxItem;
 import net.opmasterleo.packetuxui.service.Menu;
@@ -12,6 +15,7 @@ import net.opmasterleo.packetuxui.types.ClickType;
 /**
  * Packet analogue of Bukkit {@code InventoryClickEvent}.
  * Cancel to skip PacketUxUi handlers and resync the client.
+ * Prefer {@link net.opmasterleo.packetuxui.PacketMenus#onInventoryClick} for a dedicated hook.
  */
 public final class GuiClickEvent extends GuiEvent {
 
@@ -127,6 +131,22 @@ public final class GuiClickEvent extends GuiEvent {
         return cursor;
     }
 
+    /**
+     * Bukkit {@link ItemStack} for {@link #currentItem()} (uses native clone when present).
+     * Prefer {@link #currentItem()} on hot paths.
+     */
+    public ItemStack currentStack() {
+        return toBukkit(currentItem);
+    }
+
+    /**
+     * Bukkit {@link ItemStack} for {@link #cursor()}.
+     * Prefer {@link #cursor()} on hot paths.
+     */
+    public ItemStack cursorStack() {
+        return toBukkit(cursor);
+    }
+
     /** @deprecated use {@link #cursor()} */
     @Deprecated
     public UxItem carried() {
@@ -139,5 +159,16 @@ public final class GuiClickEvent extends GuiEvent {
 
     public void setCancelled(boolean cancelled) {
         this.cancelled = cancelled;
+    }
+
+    private static ItemStack toBukkit(UxItem item) {
+        if (item == null || item.isEmpty()) {
+            return new ItemStack(Material.AIR);
+        }
+        try {
+            return PacketUxUiAPI.getAdapter().items().toBukkit(item);
+        } catch (Throwable ignored) {
+            return new ItemStack(Material.AIR);
+        }
     }
 }

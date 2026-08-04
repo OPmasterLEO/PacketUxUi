@@ -18,14 +18,14 @@ public interface GuiListener {
     default void onClose(GuiCloseEvent event) {
     }
 
-    /** {@code InventoryClickEvent} analogue — cancel to block handling. */
+    /** {@code InventoryClickEvent} analogue — cancel to block handling. Or {@link net.opmasterleo.packetuxui.PacketMenus#onInventoryClick}. */
     default void onClick(GuiClickEvent event) {
     }
 
     default void onClickPost(GuiClickPostEvent event) {
     }
 
-    /** {@code InventoryDragEvent} analogue (START/ADD/END). Cancel to reject. */
+    /** {@code InventoryDragEvent} analogue (START/ADD/END). Cancel to reject. Or {@link net.opmasterleo.packetuxui.PacketMenus#onInventoryDrag}. */
     default void onDrag(GuiDragEvent event) {
     }
 }
