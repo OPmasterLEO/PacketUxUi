@@ -16,11 +16,14 @@ import net.minecraft.network.HashedStack;
 import net.minecraft.network.protocol.game.ClientboundContainerSetContentPacket;
 import net.minecraft.network.protocol.game.ClientboundContainerSetSlotPacket;
 import net.minecraft.network.protocol.game.ClientboundContainerClosePacket;
+import net.minecraft.network.protocol.game.ClientboundOpenBookPacket;
 import net.minecraft.network.protocol.game.ClientboundOpenScreenPacket;
 import net.minecraft.network.protocol.game.ClientboundSetCursorItemPacket;
+import net.minecraft.network.protocol.game.ClientboundSetPlayerInventoryPacket;
 import net.minecraft.network.protocol.game.ServerboundContainerClickPacket;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.Container;
+import net.minecraft.world.InteractionHand;
 import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.AbstractContainerMenu;
@@ -156,6 +159,37 @@ public final class SharedMenuPacketBridge implements MenuPacketBridge {
             return;
         }
         sp.connection.send(new ClientboundContainerClosePacket(windowId));
+    }
+
+    @Override
+    public boolean openWrittenBook(
+            Player player,
+            Component title,
+            Component author,
+            List<Component> pages
+    ) {
+        ServerPlayer sp = nms(player);
+        if (sp == null) {
+            return false;
+        }
+        org.bukkit.inventory.ItemStack bukkitBook =
+                new org.bukkit.inventory.ItemStack(org.bukkit.Material.WRITTEN_BOOK);
+        org.bukkit.inventory.meta.BookMeta meta =
+                (org.bukkit.inventory.meta.BookMeta) bukkitBook.getItemMeta();
+        if (meta == null) {
+            return false;
+        }
+        meta.title(title == null ? Component.empty() : title);
+        meta.author(author == null ? Component.empty() : author);
+        meta.pages(pages == null ? List.of(Component.empty()) : pages);
+        bukkitBook.setItemMeta(meta);
+        ItemStack bookItem = org.bukkit.craftbukkit.inventory.CraftItemStack.asNMSCopy(bukkitBook);
+        int slot = sp.getInventory().getSelectedSlot();
+        ItemStack selected = sp.getInventory().getSelectedItem();
+        sp.connection.send(new ClientboundSetPlayerInventoryPacket(slot, bookItem));
+        sp.connection.send(new ClientboundOpenBookPacket(InteractionHand.MAIN_HAND));
+        sp.connection.send(new ClientboundSetPlayerInventoryPacket(slot, selected));
+        return true;
     }
 
     @Override

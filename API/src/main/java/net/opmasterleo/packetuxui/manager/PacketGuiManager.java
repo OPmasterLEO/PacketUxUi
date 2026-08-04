@@ -17,6 +17,7 @@ import net.kyori.adventure.text.Component;
 import net.opmasterleo.packetuxui.PacketUxUiAPI;
 import net.opmasterleo.packetuxui.nms.item.UxItem;
 import net.opmasterleo.packetuxui.scheduler.PlatformScheduler;
+import net.opmasterleo.packetuxui.service.BookView;
 import net.opmasterleo.packetuxui.service.GuiScopeListener;
 import net.opmasterleo.packetuxui.service.Menu;
 import net.opmasterleo.packetuxui.service.MenuService;
@@ -106,6 +107,19 @@ public final class PacketGuiManager {
 
     public void reopen(Player player, MenuBuild build) {
         reopen(player, build.materialize());
+    }
+
+    /** Open a written-book text GUI (see {@link BookView} limits). */
+    public void openBook(Player player, BookView view) {
+        service.openBook(player, view);
+    }
+
+    public void openBook(Player player, BookBuild build) {
+        openBook(player, build.build());
+    }
+
+    public boolean hasBookOpen(Player player) {
+        return service.hasBookOpen(player);
     }
 
     public void patchSlots(Player player, Map<Integer, ItemStack> slots) {

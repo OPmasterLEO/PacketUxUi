@@ -5,6 +5,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -65,6 +66,10 @@ public final class MenuService {
     private final java.util.Set<UUID> closingPlayers = java.util.concurrent.ConcurrentHashMap.newKeySet();
     /** Open requested while {@link #closingPlayers} — applied after close finally. */
     private final ConcurrentHashMap<UUID, Menu> pendingPresent = new ConcurrentHashMap<>();
+    /** Soft book-viewer tracking (client book screen has no container close packet). */
+    private final java.util.Set<UUID> bookViewers = java.util.concurrent.ConcurrentHashMap.newKeySet();
+    private final ConcurrentHashMap<UUID, java.util.function.Consumer<Player>> bookOnClose =
+            new ConcurrentHashMap<>();
     private final AtomicLong transitionSequence = new AtomicLong();
     private final GuiEventManager events = new GuiEventManager();
     private volatile GuiScopeListener scopeListener;
@@ -246,6 +251,7 @@ public final class MenuService {
             clearPlayerTracking(player, true);
             transitionTokens.remove(pid);
             pendingPresent.remove(pid);
+            endBookView(player, false);
         } finally {
             closingPlayers.remove(pid);
         }
@@ -265,6 +271,7 @@ public final class MenuService {
             transitionTokens.remove(pid);
             pendingPresent.remove(pid);
             closingPlayers.remove(pid);
+            endBookView(player, true);
             if (sessions.containsKey(pid)) {
                 clearPlayerTracking(player, true);
             }
@@ -378,6 +385,7 @@ public final class MenuService {
 
     /** Bind + OpenScreen + contents for a freshly allocated or reused window id. */
     private void installOpen(Player player, Menu menu) {
+        endBookView(player, true);
         Menu copy = menu.copy();
         int windowId = windowIds.allocate(player, new AllocateWindowId(this, player));
         MenuSession session = new MenuSession(copy, windowId);
@@ -471,6 +479,59 @@ public final class MenuService {
 
     public void closeMenu(Player player) {
         scheduler.runForPlayer(player, new CloseMenuTask(this, player));
+    }
+
+    /**
+     * Open a written-book text GUI. Closes any packet inventory menu first.
+     * See {@link BookView} for vanilla limits and close-hook semantics.
+     */
+    public void openBook(Player player, BookView view) {
+        Objects.requireNonNull(player, "player");
+        Objects.requireNonNull(view, "view");
+        scheduler.runForPlayer(player, new OpenBookTask(this, player, view));
+    }
+
+    public boolean hasBookOpen(UUID playerId) {
+        return bookViewers.contains(playerId);
+    }
+
+    public boolean hasBookOpen(Player player) {
+        return player != null && hasBookOpen(player.getUniqueId());
+    }
+
+    void openBookSync(Player player, BookView view) {
+        closeCurrent(player, true, true, GuiCloseReason.REPLACE, true);
+        endBookView(player, true);
+        boolean opened = BookOpener.open(player, view, adapter.packets());
+        if (!opened) {
+            debug(player, "BOOK_OPEN failed (no Audience.openBook / NMS / ItemStack fallback)");
+            return;
+        }
+        UUID pid = id(player);
+        bookViewers.add(pid);
+        if (view.onClose() != null) {
+            bookOnClose.put(pid, view.onClose());
+        } else {
+            bookOnClose.remove(pid);
+        }
+        if (debugLogging) {
+            debug(player, "BOOK_OPEN pages=" + view.pages().size());
+        }
+    }
+
+    private void endBookView(Player player, boolean fireClose) {
+        UUID pid = id(player);
+        if (!bookViewers.remove(pid)) {
+            bookOnClose.remove(pid);
+            return;
+        }
+        java.util.function.Consumer<Player> hook = bookOnClose.remove(pid);
+        if (fireClose && hook != null) {
+            try {
+                hook.accept(player);
+            } catch (Throwable ignored) {
+            }
+        }
     }
 
     private void closeCurrent(Player player, boolean sendClosePacket, boolean reclaim) {
@@ -2286,6 +2347,24 @@ public final class MenuService {
         @Override
         public void run() {
             owner.closeCurrent(player, true, true, GuiCloseReason.API);
+            owner.endBookView(player, true);
+        }
+    }
+
+    private static final class OpenBookTask implements Runnable {
+        private final MenuService owner;
+        private final Player player;
+        private final BookView view;
+
+        private OpenBookTask(MenuService owner, Player player, BookView view) {
+            this.owner = owner;
+            this.player = player;
+            this.view = view;
+        }
+
+        @Override
+        public void run() {
+            owner.openBookSync(player, view);
         }
     }
 

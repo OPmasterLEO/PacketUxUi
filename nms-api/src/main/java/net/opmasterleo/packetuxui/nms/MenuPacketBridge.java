@@ -70,4 +70,19 @@ public interface MenuPacketBridge {
     default boolean sendBoundAuthority(Player player, int stateId, boolean clearCursor) {
         return false;
     }
+
+    /**
+     * Open a written-book viewer via packets (hand swap + OpenBook + restore).
+     * Used when Adventure {@code Audience.openBook} is unavailable (non-Paper).
+     *
+     * @return {@code true} if the book screen was sent
+     */
+    default boolean openWrittenBook(
+            Player player,
+            Component title,
+            Component author,
+            List<Component> pages
+    ) {
+        return false;
+    }
 }

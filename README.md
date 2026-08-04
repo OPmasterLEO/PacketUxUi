@@ -19,7 +19,7 @@ repositories {
 }
 
 dependencies {
-    implementation("net.opmasterleo:packetuxui:0.13.3")
+    implementation("net.opmasterleo:packetuxui:0.13.4")
 }
 ```
 
@@ -70,6 +70,14 @@ gui.present(player, smallerOrLargerMenu);
 // Force hard close+open only when needed
 gui.reopen(player, menu);
 
+// Written book text GUI (page turns client-side; ClickEvents on page text for actions)
+PacketMenus.book()
+    .title("<gold>Rules")
+    .author("Server")
+    .page("<white>Line 1\nLine 2")
+    .page(Component.text("Page 2"))
+    .open(player);
+
 // Close then SignGUI / chat / anything else
 gui.closeThen(player, () -> signGui.open(player));
 ```
@@ -78,6 +86,7 @@ gui.closeThen(player, () -> signGui.open(player));
 | API                                                          | Role                                                                         |
 | ------------------------------------------------------------ | ---------------------------------------------------------------------------- |
 | `present`                                                    | Diff if same type; **silent type swap** (OpenScreen only) if same mode different type; else open |
+| `book` / `openBook`                                          | Written-book text viewer (max 100 pages; no slots; Adventure click events) |
 | `reopen`                                                     | Force close+open                                                             |
 | `close`                                                      | Empty cursor, close packet, unbind, clear session                            |
 | `closeThen`                                                  | `close` + 1 tick, then runnable                                              |

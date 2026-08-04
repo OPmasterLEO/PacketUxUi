@@ -5,6 +5,7 @@ import org.bukkit.entity.Player;
 import net.kyori.adventure.text.Component;
 import net.opmasterleo.packetuxui.event.GuiEventManager;
 import net.opmasterleo.packetuxui.event.GuiListener;
+import net.opmasterleo.packetuxui.manager.BookBuild;
 import net.opmasterleo.packetuxui.manager.MenuBuild;
 import net.opmasterleo.packetuxui.manager.PacketGuiManager;
 import net.opmasterleo.packetuxui.nms.item.UxHeadItemBuilder;
@@ -49,6 +50,10 @@ public final class PacketMenus {
         return MenuBuild.create();
     }
 
+    public static BookBuild book() {
+        return BookBuild.create();
+    }
+
     public static MenuBuilder menu(Component title, InventoryType type) {
         return PacketUxUiAPI.menu(title, type);
     }
@@ -91,6 +96,10 @@ public final class PacketMenus {
 
     public static void present(Player player, Menu menu) {
         service().present(player, menu);
+    }
+
+    public static void openBook(Player player, net.opmasterleo.packetuxui.service.BookView view) {
+        gui().openBook(player, view);
     }
 
     public static void reopen(Player player, Menu menu) {

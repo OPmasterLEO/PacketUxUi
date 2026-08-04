@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.13.4
+
+### Written book GUI (text viewer)
+
+Open a vanilla written-book screen for multi-page text (rules, lore, clickable links):
+
+```java
+PacketMenus.book()
+    .title("<gold>Rules")
+    .author("Server")
+    .page("<white>Welcome!\n\nUse Adventure <aqua>ClickEvent</aqua>s for actions.")
+    .page(Component.text("Page 2"))
+    .open(player);
+```
+
+**Limits / notes**
+- Max **100** pages; keep each page short (~1023 chars / ~14 lines)
+- Page turns are client-side; no inventory slots or PacketUxUi buttons
+- Use Adventure click events on page text (`run_command`, `change_page`, `open_url`, …)
+- Closes any open packet inventory menu first; does not grant a real book item (Paper packet hand-swap)
+- `onClose` is best-effort (displaced by another GUI / `close` / quit) — Esc alone may not fire it
+- Prefer Paper/Folia (`Audience.openBook`); NMS hand-swap on 26.x; ItemStack `openBook` fallback when present
+
+### Artifact
+`net.opmasterleo:packetuxui:0.13.4`
+
 ## 0.13.3
 
 ### Session / GUI tracking harden (double-click stuck state)
