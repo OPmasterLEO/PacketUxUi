@@ -21,7 +21,7 @@ repositories {
 }
 
 dependencies {
-    implementation("net.opmasterleo:packetuxui:0.13.13")
+    implementation("net.opmasterleo:packetuxui:0.13.14")
 }
 ```
 
@@ -34,7 +34,7 @@ repositories {
 }
 
 dependencies {
-    implementation "net.opmasterleo:packetuxui:0.13.13"
+    implementation "net.opmasterleo:packetuxui:0.13.14"
 }
 ```
 
@@ -51,7 +51,7 @@ dependencies {
 <dependency>
     <groupId>net.opmasterleo</groupId>
     <artifactId>packetuxui</artifactId>
-    <version>0.13.13</version>
+    <version>0.13.14</version>
 </dependency>
 ```
 
@@ -165,6 +165,35 @@ PacketMenus.book()
 ```
 
 Adventure click events work on page text. Turning pages is client-side.
+
+---
+
+## Signs
+
+Vanilla sign editor for text input. No block is placed; other players never see it.
+
+```java
+PacketMenus.sign()
+    .line(0, "")
+    .line(1, "<gray>^^^^^^^^")
+    .line(2, "<gold>Type above")
+    .type(Material.OAK_SIGN)
+    .color(DyeColor.BLACK)
+    .glow(false)
+    .onFinish((player, result) -> {
+        String input = result.plain(0);
+        if (input.isEmpty()) {
+            return SignAction.reopen("", "<gray>^^^^^^^^", "<gold>Type above");
+        }
+        player.sendMessage("Got: " + input);
+        return SignAction.close();
+    })
+    .open(player);
+```
+
+`onComplete((player, result) -> ...)` always closes. `SignAction.closeThen(runnable)` runs after the fake sign is restored (use this to open another GUI). Default location is three blocks behind the player — override with `location(...)`.
+
+Pre-written lines are editable (vanilla sign editor). Color (1.15+) and glow (1.17+) are ignored on older servers. Wait a few seconds after join before opening — chunk send can wipe the fake sign.
 
 ---
 

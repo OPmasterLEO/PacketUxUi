@@ -9,6 +9,7 @@ import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
 import net.minecraft.network.HashedStack;
 import net.minecraft.network.protocol.game.ServerboundContainerClickPacket;
 import net.minecraft.network.protocol.game.ServerboundContainerClosePacket;
+import net.minecraft.network.protocol.game.ServerboundSignUpdatePacket;
 import net.minecraft.world.inventory.ContainerInput;
 import net.opmasterleo.packetuxui.nms.ClickPacket;
 import net.opmasterleo.packetuxui.nms.PacketClassifier;
@@ -71,6 +72,9 @@ public final class SharedPacketClassifier implements PacketClassifier {
         }
         if (packet instanceof ServerboundContainerClosePacket) {
             return Kind.CLOSE;
+        }
+        if (packet instanceof ServerboundSignUpdatePacket) {
+            return Kind.SIGN_UPDATE;
         }
         return Kind.OTHER;
     }

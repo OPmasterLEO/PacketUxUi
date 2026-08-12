@@ -57,6 +57,16 @@ public final class CommandListener {
                             .handler(new DescHandler(description))
             );
         }
+
+        commandManager.command(
+                openMenuBuilder.literal("sign")
+                        .handler(new OpenSignHandler())
+        );
+        commandManager.command(
+                openMenuBuilder.literal("sign")
+                        .literal("desc")
+                        .handler(new DescHandler("Packet sign editor input."))
+        );
     }
 
     private record MenuEntry(Menu menu, String description) {
@@ -87,6 +97,31 @@ public final class CommandListener {
         @Override
         public void execute(CommandContext<PlayerSource> context) {
             context.sender().source().sendMessage(description);
+        }
+    }
+
+    private static final class OpenSignHandler implements org.incendo.cloud.execution.CommandExecutionHandler<PlayerSource> {
+        @Override
+        public void execute(CommandContext<PlayerSource> context) {
+            org.bukkit.entity.Player player = context.sender().source();
+            net.opmasterleo.packetuxui.PacketMenus.sign()
+                    .line(0, "")
+                    .line(1, "<gray>^^^^^^^^")
+                    .line(2, "<gold>Type above")
+                    .onFinish((p, result) -> {
+                        String text = result.plain(0);
+                        if (text.isEmpty()) {
+                            p.sendMessage("Type something on the first line.");
+                            return net.opmasterleo.packetuxui.service.SignAction.reopen(
+                                    "",
+                                    "<gray>^^^^^^^^",
+                                    "<gold>Type above"
+                            );
+                        }
+                        p.sendMessage("You wrote: " + text);
+                        return net.opmasterleo.packetuxui.service.SignAction.close();
+                    })
+                    .open(player);
         }
     }
 }

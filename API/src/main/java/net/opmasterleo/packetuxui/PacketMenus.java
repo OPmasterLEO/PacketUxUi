@@ -12,6 +12,7 @@ import net.opmasterleo.packetuxui.event.GuiOpenListener;
 import net.opmasterleo.packetuxui.manager.BookBuild;
 import net.opmasterleo.packetuxui.manager.MenuBuild;
 import net.opmasterleo.packetuxui.manager.PacketGuiManager;
+import net.opmasterleo.packetuxui.manager.SignBuild;
 import net.opmasterleo.packetuxui.nms.item.UxHeadItemBuilder;
 import net.opmasterleo.packetuxui.nms.item.UxItem;
 import net.opmasterleo.packetuxui.nms.item.UxItemBuilder;
@@ -94,6 +95,10 @@ public final class PacketMenus {
         return BookBuild.create();
     }
 
+    public static SignBuild sign() {
+        return SignBuild.create();
+    }
+
     public static MenuBuilder menu(Component title, InventoryType type) {
         return PacketUxUiAPI.menu(title, type);
     }
@@ -140,6 +145,10 @@ public final class PacketMenus {
 
     public static void openBook(Player player, net.opmasterleo.packetuxui.service.BookView view) {
         gui().openBook(player, view);
+    }
+
+    public static void openSign(Player player, net.opmasterleo.packetuxui.service.SignView view) {
+        gui().openSign(player, view);
     }
 
     public static void reopen(Player player, Menu menu) {

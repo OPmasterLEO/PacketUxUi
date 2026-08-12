@@ -17,24 +17,47 @@ data class SharedParts(
     val classifier: String,
     val menu: String,
     val limits: String? = null,
+    val sign: String,
 )
 
+fun signVariant(): String {
+    if (era.startsWith("modern")) {
+        return "modern"
+    }
+    if (era == "mid" && nmsVersion.startsWith("v1_20")) {
+        return "mid20"
+    }
+    if (era == "mid") {
+        return "mid17"
+    }
+    if (era == "legacy13" && nmsVersion.startsWith("v1_13_R2")) {
+        return "legacy13r2"
+    }
+    if (era == "legacy15" || era == "legacy16") {
+        return "legacy15"
+    }
+    if (era == "legacy82" || era == "legacy") {
+        return "legacy8"
+    }
+    return era
+}
+
 val parts: SharedParts = when (era) {
-    "legacy8" -> SharedParts("legacy", "legacy", "legacy8", "legacy8", "legacy8")
-    "legacy82" -> SharedParts("legacy", "legacy", "legacy82", "legacy8", "legacy_r3")
-    "legacy" -> SharedParts("legacy", "legacy", "legacy", "legacy8", "legacy_r3")
-    "legacy9" -> SharedParts("legacy", "legacy", "legacy", "legacy9", "legacy9")
-    "legacy11" -> SharedParts("legacy", "legacy", "legacy", "legacy9", "legacy11")
-    "legacy13" -> SharedParts("legacy", "legacy", "legacy", "legacy13", "legacy11")
-    "legacy14" -> SharedParts("legacy", "legacy", "legacy", "legacy13", "legacy14")
-    "legacy15" -> SharedParts("legacy", "legacy", "legacy", "legacy13", "legacy15")
-    "legacy16" -> SharedParts("legacy", "legacy", "legacy", "legacy13", "legacy16")
-    "mid17" -> SharedParts("mid", "mid17", "mid17", "mid17", "mid17")
-    "mid" -> SharedParts("mid", "mid", "mid", "mid", "mid")
-    "modern" -> SharedParts("mid", "modern", "modern", "mid", "modern")
-    "modern21_2" -> SharedParts("modern21", "modern", "modern", "mid", "modern21_2", "modern21")
-    "modern21_5" -> SharedParts("modern21", "modern21_5", "modern", "modern21_5", "modern21_5", "modern21")
-    "modern26" -> SharedParts("modern21", "modern21_5", "modern", "modern26", "modern26", "modern21")
+    "legacy8" -> SharedParts("legacy", "legacy", "legacy8", "legacy8", "legacy8", sign = signVariant())
+    "legacy82" -> SharedParts("legacy", "legacy", "legacy82", "legacy8", "legacy_r3", sign = signVariant())
+    "legacy" -> SharedParts("legacy", "legacy", "legacy", "legacy8", "legacy_r3", sign = signVariant())
+    "legacy9" -> SharedParts("legacy", "legacy", "legacy", "legacy9", "legacy9", sign = signVariant())
+    "legacy11" -> SharedParts("legacy", "legacy", "legacy", "legacy9", "legacy11", sign = signVariant())
+    "legacy13" -> SharedParts("legacy", "legacy", "legacy", "legacy13", "legacy11", sign = signVariant())
+    "legacy14" -> SharedParts("legacy", "legacy", "legacy", "legacy13", "legacy14", sign = signVariant())
+    "legacy15" -> SharedParts("legacy", "legacy", "legacy", "legacy13", "legacy15", sign = signVariant())
+    "legacy16" -> SharedParts("legacy", "legacy", "legacy", "legacy13", "legacy16", sign = signVariant())
+    "mid17" -> SharedParts("mid", "mid17", "mid17", "mid17", "mid17", sign = signVariant())
+    "mid" -> SharedParts("mid", "mid", "mid", "mid", "mid", sign = signVariant())
+    "modern" -> SharedParts("mid", "modern", "modern", "mid", "modern", sign = signVariant())
+    "modern21_2" -> SharedParts("modern21", "modern", "modern", "mid", "modern21_2", "modern21", signVariant())
+    "modern21_5" -> SharedParts("modern21", "modern21_5", "modern", "modern21_5", "modern21_5", "modern21", signVariant())
+    "modern26" -> SharedParts("modern21", "modern21_5", "modern", "modern26", "modern26", "modern21", signVariant())
     else -> throw GradleException("Unknown nmsEra=$era")
 }
 
@@ -46,6 +69,7 @@ val sharedVariantDirs: List<File> = buildList {
     add(File(root, "classifier/${parts.classifier}"))
     add(File(root, "menu/${parts.menu}"))
     parts.limits?.let { add(File(root, "limits/$it")) }
+    add(File(root, "sign/${parts.sign}"))
 }
 
 val prepareSharedSources = tasks.register("prepareSharedSources") {
@@ -54,7 +78,7 @@ val prepareSharedSources = tasks.register("prepareSharedSources") {
     inputs.property("era", era)
     inputs.property(
         "parts",
-        "${parts.adapter}/${parts.item}/${parts.pipeline}/${parts.classifier}/${parts.menu}/${parts.limits}"
+        "${parts.adapter}/${parts.item}/${parts.pipeline}/${parts.classifier}/${parts.menu}/${parts.limits}/${parts.sign}"
     )
     outputs.dir(sharedOut)
     doLast {
