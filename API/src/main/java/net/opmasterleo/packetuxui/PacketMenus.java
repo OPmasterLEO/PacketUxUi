@@ -54,10 +54,6 @@ public final class PacketMenus {
         events().unregisterOpen(listener);
     }
 
-    /**
-     * Efficient InventoryCloseEvent analogue — direct call, no Bukkit bus.
-     * Includes {@link net.opmasterleo.packetuxui.event.GuiCloseReason} + optional snapshot.
-     */
     public static void onInventoryClose(GuiCloseListener listener) {
         events().registerClose(listener);
     }
