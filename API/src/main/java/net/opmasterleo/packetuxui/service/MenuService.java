@@ -78,6 +78,7 @@ public final class MenuService {
     private final java.util.Set<UUID> bookViewers = java.util.concurrent.ConcurrentHashMap.newKeySet();
     private final ConcurrentHashMap<UUID, java.util.function.Consumer<Player>> bookOnClose =
             new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<UUID, SignSession> signSessions = new ConcurrentHashMap<>();
     private final AtomicLong transitionSequence = new AtomicLong();
     private final GuiEventManager events = new GuiEventManager();
     private volatile GuiScopeListener scopeListener;
@@ -281,6 +282,7 @@ public final class MenuService {
             transitionTokens.remove(pid);
             pendingPresent.remove(pid);
             endBookView(player, false);
+            endSignView(player, true);
         } finally {
             closingPlayers.remove(pid);
         }
@@ -301,6 +303,7 @@ public final class MenuService {
             pendingPresent.remove(pid);
             closingPlayers.remove(pid);
             endBookView(player, true);
+            endSignView(player, true);
             if (sessions.containsKey(pid)) {
                 clearPlayerTracking(player, true);
             }
@@ -419,6 +422,7 @@ public final class MenuService {
     /** Bind + OpenScreen + contents for a freshly allocated or reused window id. */
     private void installOpen(Player player, Menu menu) {
         endBookView(player, true);
+        endSignView(player, true);
         Menu copy = menu.copy();
         int windowId = windowIds.allocate(player, new AllocateWindowId(this, player));
         MenuSession session = new MenuSession(copy, windowId);
@@ -535,6 +539,7 @@ public final class MenuService {
     void openBookSync(Player player, BookView view) {
         closeCurrent(player, true, true, GuiCloseReason.REPLACE, true);
         endBookView(player, true);
+        endSignView(player, true);
         boolean opened = BookOpener.open(player, view, adapter.packets());
         if (!opened) {
             debug(player, "BOOK_OPEN failed (no Audience.openBook / NMS / ItemStack fallback)");
@@ -565,6 +570,143 @@ public final class MenuService {
             } catch (Throwable ignored) {
             }
         }
+    }
+
+    public void openSign(Player player, SignView view) {
+        Objects.requireNonNull(player, "player");
+        Objects.requireNonNull(view, "view");
+        scheduler.runForPlayer(player, new OpenSignTask(this, player, view));
+    }
+
+    public boolean hasSignOpen(UUID playerId) {
+        return playerId != null && signSessions.containsKey(playerId);
+    }
+
+    public boolean hasSignOpen(Player player) {
+        return player != null && hasSignOpen(player.getUniqueId());
+    }
+
+    public boolean isOurSign(UUID playerId, net.opmasterleo.packetuxui.nms.SignUpdate update) {
+        if (playerId == null || update == null) {
+            return false;
+        }
+        SignSession session = signSessions.get(playerId);
+        return session != null && update.matches(session.x, session.y, session.z);
+    }
+
+    public void handleSignUpdate(Player player, net.opmasterleo.packetuxui.nms.SignUpdate update) {
+        if (player == null || update == null) {
+            return;
+        }
+        UUID pid = id(player);
+        SignSession session = signSessions.get(pid);
+        if (session == null || !update.matches(session.x, session.y, session.z)) {
+            return;
+        }
+        SignResult result = new SignResult(update.lines());
+        SignFinishHandler handler = session.view.handler();
+        SignAction action;
+        try {
+            action = handler == null ? SignAction.close() : handler.onFinish(player, result);
+        } catch (Throwable error) {
+            if (debugLogging) {
+                debug(player, "SIGN_FINISH failed: " + error.getClass().getSimpleName());
+            }
+            endSignView(player, true);
+            return;
+        }
+        if (action == null || action.kind() == SignAction.Kind.CLOSE) {
+            endSignView(player, true);
+            Runnable after = action == null ? null : action.after();
+            if (after != null) {
+                scheduler.runLaterForPlayer(player, new SignAfterTask(after), 1L);
+            }
+            return;
+        }
+        Component[] nextLines = action.lines();
+        if (nextLines != null) {
+            session.view = session.view.withLines(nextLines);
+        }
+        scheduler.runLaterForPlayer(player, new RefreshSignTask(this, player), 1L);
+        if (debugLogging) {
+            debug(player, "SIGN_REOPEN pos=" + session.x + "," + session.y + "," + session.z);
+        }
+    }
+
+    void openSignSync(Player player, SignView view) {
+        closeCurrent(player, true, true, GuiCloseReason.REPLACE, true);
+        endBookView(player, true);
+        endSignView(player, true);
+        ensurePipeline(player);
+        org.bukkit.Location loc = view.location();
+        if (loc == null || loc.getWorld() == null) {
+            loc = defaultSignLocation(player);
+        }
+        int x = loc.getBlockX();
+        int y = loc.getBlockY();
+        int z = loc.getBlockZ();
+        net.opmasterleo.packetuxui.nms.SignOpenRequest request = new net.opmasterleo.packetuxui.nms.SignOpenRequest(
+                x,
+                y,
+                z,
+                view.lines(),
+                view.legacyLines(),
+                view.dyeColor(),
+                view.glow(),
+                view.materialName()
+        );
+        boolean opened = adapter.signs().open(player, request);
+        if (!opened) {
+            debug(player, "SIGN_OPEN failed (NMS sign editor unsupported)");
+            return;
+        }
+        signSessions.put(id(player), new SignSession(x, y, z, view));
+        if (debugLogging) {
+            debug(player, "SIGN_OPEN pos=" + x + "," + y + "," + z + " type=" + view.materialName());
+        }
+    }
+
+    private void refreshSignSync(Player player) {
+        SignSession session = signSessions.get(id(player));
+        if (session == null || !player.isOnline()) {
+            return;
+        }
+        SignView view = session.view;
+        net.opmasterleo.packetuxui.nms.SignOpenRequest request = new net.opmasterleo.packetuxui.nms.SignOpenRequest(
+                session.x,
+                session.y,
+                session.z,
+                view.lines(),
+                view.legacyLines(),
+                view.dyeColor(),
+                view.glow(),
+                view.materialName()
+        );
+        if (!adapter.signs().refresh(player, request)) {
+            endSignView(player, true);
+        }
+    }
+
+    private void endSignView(Player player, boolean restoreBlock) {
+        UUID pid = id(player);
+        SignSession session = signSessions.remove(pid);
+        if (session == null) {
+            return;
+        }
+        if (restoreBlock) {
+            try {
+                adapter.signs().close(player, session.x, session.y, session.z);
+            } catch (Throwable ignored) {
+            }
+        }
+        if (debugLogging) {
+            debug(player, "SIGN_CLOSE pos=" + session.x + "," + session.y + "," + session.z);
+        }
+    }
+
+    private static org.bukkit.Location defaultSignLocation(Player player) {
+        org.bukkit.Location loc = player.getEyeLocation();
+        return loc.clone().add(loc.getDirection().multiply(-3));
     }
 
     private void closeCurrent(Player player, boolean sendClosePacket, boolean reclaim) {
@@ -2409,6 +2551,7 @@ public final class MenuService {
         public void run() {
             owner.closeCurrent(player, true, true, GuiCloseReason.API);
             owner.endBookView(player, true);
+            owner.endSignView(player, true);
         }
     }
 
@@ -2426,6 +2569,70 @@ public final class MenuService {
         @Override
         public void run() {
             owner.openBookSync(player, view);
+        }
+    }
+
+    private static final class OpenSignTask implements Runnable {
+        private final MenuService owner;
+        private final Player player;
+        private final SignView view;
+
+        private OpenSignTask(MenuService owner, Player player, SignView view) {
+            this.owner = owner;
+            this.player = player;
+            this.view = view;
+        }
+
+        @Override
+        public void run() {
+            owner.openSignSync(player, view);
+        }
+    }
+
+    private static final class RefreshSignTask implements java.util.function.Consumer<Player> {
+        private final MenuService owner;
+        private final Player expected;
+
+        private RefreshSignTask(MenuService owner, Player expected) {
+            this.owner = owner;
+            this.expected = expected;
+        }
+
+        @Override
+        public void accept(Player player) {
+            if (player == expected) {
+                owner.refreshSignSync(player);
+            }
+        }
+    }
+
+    private static final class SignAfterTask implements java.util.function.Consumer<Player> {
+        private final Runnable after;
+
+        private SignAfterTask(Runnable after) {
+            this.after = after;
+        }
+
+        @Override
+        public void accept(Player player) {
+            try {
+                after.run();
+            } catch (Throwable ignored) {
+            }
+        }
+    }
+
+    private static final class SignSession {
+        private final int x;
+        private final int y;
+        private final int z;
+        private SignView view;
+
+        private SignSession(int x, int y, int z, SignView view) {
+            this.x = x;
+            this.y = y;
+            this.z = z;
+            this.view = view;
         }
     }
 

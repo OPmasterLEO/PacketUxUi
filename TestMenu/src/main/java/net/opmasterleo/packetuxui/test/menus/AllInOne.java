@@ -145,7 +145,29 @@ public final class AllInOne {
 
         @Override
         public void accept(ExecuteComponent it) {
-            it.player().sendMessage(StringUtils.toComponent("<aqua>You clicked on the Cool Sign!"));
+            Player player = it.player();
+            net.opmasterleo.packetuxui.PacketMenus.closeThen(player, () ->
+                    net.opmasterleo.packetuxui.PacketMenus.sign()
+                            .line(0, "")
+                            .line(1, "<gray>^^^^^^^^")
+                            .line(2, "<gold>Type above")
+                            .line(3, "<dark_gray>Sign input")
+                            .onFinish((p, result) -> {
+                                String text = result.plain(0);
+                                if (text.isEmpty()) {
+                                    p.sendMessage(StringUtils.toComponent("<red>Type something on the first line."));
+                                    return net.opmasterleo.packetuxui.service.SignAction.reopen(
+                                            "",
+                                            "<gray>^^^^^^^^",
+                                            "<gold>Type above",
+                                            "<dark_gray>Sign input"
+                                    );
+                                }
+                                p.sendMessage(StringUtils.toComponent("<green>You wrote: <white>" + text));
+                                return net.opmasterleo.packetuxui.service.SignAction.close();
+                            })
+                            .open(player)
+            );
         }
     }
 

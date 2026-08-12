@@ -118,6 +118,18 @@ public final class PacketGuiManager {
         openBook(player, build.build());
     }
 
+    public void openSign(Player player, net.opmasterleo.packetuxui.service.SignView view) {
+        service.openSign(player, view);
+    }
+
+    public void openSign(Player player, SignBuild build) {
+        openSign(player, build.build());
+    }
+
+    public boolean hasSignOpen(Player player) {
+        return service.hasSignOpen(player);
+    }
+
     public boolean hasBookOpen(Player player) {
         return service.hasBookOpen(player);
     }

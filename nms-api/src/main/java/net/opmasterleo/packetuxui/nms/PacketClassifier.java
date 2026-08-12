@@ -5,7 +5,8 @@ public interface PacketClassifier {
     enum Kind {
         OTHER,
         CLICK,
-        CLOSE
+        CLOSE,
+        SIGN_UPDATE
     }
 
     Kind kindOf(Object packet);
