@@ -598,29 +598,18 @@ public final class MenuService {
         if (player == null || update == null) {
             return;
         }
-        UUID pid = id(player);
-        SignSession session = signSessions.get(pid);
+        SignSession session = signSessions.get(id(player));
         if (session == null || !update.matches(session.x, session.y, session.z)) {
             return;
         }
-        SignResult result = new SignResult(update.lines());
-        SignFinishHandler handler = session.view.handler();
-        SignAction action;
-        try {
-            action = handler == null ? SignAction.close() : handler.onFinish(player, result);
-        } catch (Throwable error) {
-            if (debugLogging) {
-                debug(player, "SIGN_FINISH failed: " + error.getClass().getSimpleName());
-            }
-            endSignView(player, true);
-            return;
-        }
+        applySignFinish(player, session, new SignResult(update.lines()));
+    }
+
+    private void applySignFinish(Player player, SignSession session, SignResult result) {
+        SignAction action = invokeSignHandler(player, session.view.handler(), result);
         if (action == null || action.kind() == SignAction.Kind.CLOSE) {
             endSignView(player, true);
-            Runnable after = action == null ? null : action.after();
-            if (after != null) {
-                scheduler.runLaterForPlayer(player, new SignAfterTask(after), 1L);
-            }
+            runSignAfter(player, action);
             return;
         }
         Component[] nextLines = action.lines();
@@ -630,6 +619,27 @@ public final class MenuService {
         scheduler.runLaterForPlayer(player, new RefreshSignTask(this, player), 1L);
         if (debugLogging) {
             debug(player, "SIGN_REOPEN pos=" + session.x + "," + session.y + "," + session.z);
+        }
+    }
+
+    private SignAction invokeSignHandler(Player player, SignFinishHandler handler, SignResult result) {
+        if (handler == null) {
+            return SignAction.close();
+        }
+        try {
+            return handler.onFinish(player, result);
+        } catch (Throwable error) {
+            if (debugLogging) {
+                debug(player, "SIGN_FINISH failed: " + error.getClass().getSimpleName());
+            }
+            return SignAction.close();
+        }
+    }
+
+    private void runSignAfter(Player player, SignAction action) {
+        Runnable after = action == null ? null : action.after();
+        if (after != null) {
+            scheduler.runLaterForPlayer(player, new SignAfterTask(after), 1L);
         }
     }
 
@@ -645,17 +655,7 @@ public final class MenuService {
         int x = loc.getBlockX();
         int y = loc.getBlockY();
         int z = loc.getBlockZ();
-        net.opmasterleo.packetuxui.nms.SignOpenRequest request = new net.opmasterleo.packetuxui.nms.SignOpenRequest(
-                x,
-                y,
-                z,
-                view.lines(),
-                view.legacyLines(),
-                view.dyeColor(),
-                view.glow(),
-                view.materialName()
-        );
-        boolean opened = adapter.signs().open(player, request);
+        boolean opened = adapter.signs().open(player, toSignRequest(x, y, z, view));
         if (!opened) {
             debug(player, "SIGN_OPEN failed (NMS sign editor unsupported)");
             return;
@@ -671,20 +671,27 @@ public final class MenuService {
         if (session == null || !player.isOnline()) {
             return;
         }
-        SignView view = session.view;
-        net.opmasterleo.packetuxui.nms.SignOpenRequest request = new net.opmasterleo.packetuxui.nms.SignOpenRequest(
-                session.x,
-                session.y,
-                session.z,
+        if (!adapter.signs().refresh(player, toSignRequest(session.x, session.y, session.z, session.view))) {
+            endSignView(player, true);
+        }
+    }
+
+    private static net.opmasterleo.packetuxui.nms.SignOpenRequest toSignRequest(
+            int x,
+            int y,
+            int z,
+            SignView view
+    ) {
+        return new net.opmasterleo.packetuxui.nms.SignOpenRequest(
+                x,
+                y,
+                z,
                 view.lines(),
                 view.legacyLines(),
                 view.dyeColor(),
                 view.glow(),
                 view.materialName()
         );
-        if (!adapter.signs().refresh(player, request)) {
-            endSignView(player, true);
-        }
     }
 
     private void endSignView(Player player, boolean restoreBlock) {

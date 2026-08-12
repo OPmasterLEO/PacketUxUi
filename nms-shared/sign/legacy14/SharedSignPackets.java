@@ -1,8 +1,5 @@
 package net.opmasterleo.packetuxui.nms.shared;
 
-import java.lang.reflect.Field;
-import java.lang.reflect.Method;
-
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.craftbukkit.NMS.entity.CraftPlayer;
@@ -11,7 +8,6 @@ import org.bukkit.entity.Player;
 import net.minecraft.server.NMS.BlockPosition;
 import net.minecraft.server.NMS.ChatComponentText;
 import net.minecraft.server.NMS.EntityPlayer;
-import net.minecraft.server.NMS.EnumColor;
 import net.minecraft.server.NMS.PacketPlayInUpdateSign;
 import net.minecraft.server.NMS.PacketPlayOutOpenSignEditor;
 import net.minecraft.server.NMS.TileEntitySign;
@@ -37,7 +33,6 @@ public final class SharedSignPackets implements SignPacketBridge {
         BlockPosition pos = new BlockPosition(request.x(), request.y(), request.z());
         TileEntitySign sign = new TileEntitySign();
         sign.setPosition(pos);
-        applyColor(sign, request.dyeColor());
         String[] lines = request.legacyLines();
         for (int i = 0; i < 4; i++) {
             sign.a(i, new ChatComponentText(lines[i]));
@@ -63,30 +58,6 @@ public final class SharedSignPackets implements SignPacketBridge {
         }
         BlockPosition pos = update.b();
         return new SignUpdate(pos.getX(), pos.getY(), pos.getZ(), update.c(), true);
-    }
-
-    private static void applyColor(TileEntitySign sign, String colorName) {
-        EnumColor color;
-        try {
-            color = EnumColor.valueOf(colorName);
-        } catch (IllegalArgumentException ignored) {
-            color = EnumColor.BLACK;
-        }
-        try {
-            Method setColor = TileEntitySign.class.getMethod("setColor", EnumColor.class);
-            setColor.invoke(sign, color);
-            return;
-        } catch (ReflectiveOperationException ignored) {
-        }
-        for (String fieldName : new String[] {"color", "l"}) {
-            try {
-                Field field = TileEntitySign.class.getDeclaredField(fieldName);
-                field.setAccessible(true);
-                field.set(sign, color);
-                return;
-            } catch (ReflectiveOperationException ignored) {
-            }
-        }
     }
 
     private static Material material(String name) {

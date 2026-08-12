@@ -27,7 +27,7 @@ PacketMenus.sign()
 - Fake sign 3 blocks behind the player (or `location(...)`); restored on close/quit
 - Inbound `SignUpdate` is intercepted on the existing Netty pipeline and dropped (vanilla never edits a real block)
 - `SignAction.close()` / `closeThen(Runnable)` / `reopen()` / `reopen(lines...)`
-- MiniMessage, `§`, and `&` lines; dye color (1.14+) and glow (1.17+)
+- MiniMessage, `§`, and `&` lines; dye color (1.15+) and glow (1.17+)
 - Closes any open packet inventory / book first
 
 ### Artifact

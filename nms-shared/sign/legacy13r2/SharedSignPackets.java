@@ -35,7 +35,7 @@ public final class SharedSignPackets implements SignPacketBridge {
         sign.setPosition(pos);
         String[] lines = request.legacyLines();
         for (int i = 0; i < 4; i++) {
-            sign.lines[i] = new ChatComponentText(lines[i]);
+            sign.a(i, new ChatComponentText(lines[i]));
         }
         if (placeBlock) {
             player.sendBlockChange(loc, material(request.materialName()).createBlockData());

@@ -20,17 +20,26 @@ data class SharedParts(
     val sign: String,
 )
 
-fun signVariant(): String = when {
-    era == "legacy8" || era == "legacy82" || era == "legacy" -> "legacy8"
-    era == "legacy9" -> "legacy9"
-    era == "legacy11" -> "legacy11"
-    era == "legacy13" -> "legacy13"
-    era == "legacy14" || era == "legacy15" || era == "legacy16" -> "legacy14"
-    era == "mid17" -> "mid17"
-    era == "mid" && nmsVersion.startsWith("v1_20") -> "mid20"
-    era == "mid" -> "mid17"
-    era.startsWith("modern") -> "modern"
-    else -> throw GradleException("Unknown sign variant for nmsEra=$era nmsVersion=$nmsVersion")
+fun signVariant(): String {
+    if (era.startsWith("modern")) {
+        return "modern"
+    }
+    if (era == "mid" && nmsVersion.startsWith("v1_20")) {
+        return "mid20"
+    }
+    if (era == "mid") {
+        return "mid17"
+    }
+    if (era == "legacy13" && nmsVersion.startsWith("v1_13_R2")) {
+        return "legacy13r2"
+    }
+    if (era == "legacy15" || era == "legacy16") {
+        return "legacy15"
+    }
+    if (era == "legacy82" || era == "legacy") {
+        return "legacy8"
+    }
+    return era
 }
 
 val parts: SharedParts = when (era) {

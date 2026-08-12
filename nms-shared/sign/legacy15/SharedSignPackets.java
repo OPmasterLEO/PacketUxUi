@@ -8,6 +8,7 @@ import org.bukkit.entity.Player;
 import net.minecraft.server.NMS.BlockPosition;
 import net.minecraft.server.NMS.ChatComponentText;
 import net.minecraft.server.NMS.EntityPlayer;
+import net.minecraft.server.NMS.EnumColor;
 import net.minecraft.server.NMS.PacketPlayInUpdateSign;
 import net.minecraft.server.NMS.PacketPlayOutOpenSignEditor;
 import net.minecraft.server.NMS.TileEntitySign;
@@ -33,9 +34,10 @@ public final class SharedSignPackets implements SignPacketBridge {
         BlockPosition pos = new BlockPosition(request.x(), request.y(), request.z());
         TileEntitySign sign = new TileEntitySign();
         sign.setPosition(pos);
+        sign.setColor(dye(request.dyeColor()));
         String[] lines = request.legacyLines();
         for (int i = 0; i < 4; i++) {
-            sign.lines[i] = new ChatComponentText(lines[i]);
+            sign.a(i, new ChatComponentText(lines[i]));
         }
         if (placeBlock) {
             player.sendBlockChange(loc, material(request.materialName()).createBlockData());
@@ -60,16 +62,24 @@ public final class SharedSignPackets implements SignPacketBridge {
         return new SignUpdate(pos.getX(), pos.getY(), pos.getZ(), update.c(), true);
     }
 
+    private static EnumColor dye(String colorName) {
+        try {
+            return EnumColor.valueOf(colorName);
+        } catch (IllegalArgumentException ignored) {
+            return EnumColor.BLACK;
+        }
+    }
+
     private static Material material(String name) {
         Material type = name == null ? null : Material.getMaterial(name);
         if (type != null) {
             return type;
         }
-        type = Material.getMaterial("WALL_SIGN");
+        type = Material.getMaterial("OAK_WALL_SIGN");
         if (type != null) {
             return type;
         }
-        type = Material.getMaterial("SIGN");
+        type = Material.getMaterial("WALL_SIGN");
         return type != null ? type : Material.AIR;
     }
 }

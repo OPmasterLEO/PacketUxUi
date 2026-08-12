@@ -193,7 +193,7 @@ PacketMenus.sign()
 
 `onComplete((player, result) -> ...)` always closes. `SignAction.closeThen(runnable)` runs after the fake sign is restored (use this to open another GUI). Default location is three blocks behind the player — override with `location(...)`.
 
-Pre-written lines are editable (vanilla sign editor). Color (1.14+) and glow (1.17+) are ignored on older servers. Wait a few seconds after join before opening — chunk send can wipe the fake sign.
+Pre-written lines are editable (vanilla sign editor). Color (1.15+) and glow (1.17+) are ignored on older servers. Wait a few seconds after join before opening — chunk send can wipe the fake sign.
 
 ---
 
