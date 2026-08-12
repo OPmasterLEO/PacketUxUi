@@ -9,6 +9,7 @@ import java.util.function.Supplier;
 import org.bukkit.craftbukkit.libs.it.unimi.dsi.fastutil.ints.Int2ObjectMap;
 import net.minecraft.network.protocol.game.ServerboundContainerClickPacket;
 import net.minecraft.network.protocol.game.ServerboundContainerClosePacket;
+import net.minecraft.network.protocol.game.ServerboundSignUpdatePacket;
 import net.minecraft.world.inventory.ClickType;
 import net.minecraft.world.item.ItemStack;
 import net.opmasterleo.packetuxui.nms.ClickPacket;
@@ -31,6 +32,9 @@ public final class SharedPacketClassifier implements PacketClassifier {
         }
         if (packet instanceof ServerboundContainerClosePacket) {
             return Kind.CLOSE;
+        }
+        if (packet instanceof ServerboundSignUpdatePacket) {
+            return Kind.SIGN_UPDATE;
         }
         return Kind.OTHER;
     }

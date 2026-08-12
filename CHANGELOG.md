@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.13.14
+
+### Sign editor GUI
+
+Open a vanilla sign editor for text input (no real sign placed):
+
+```java
+PacketMenus.sign()
+    .line(0, "")
+    .line(1, "<gray>^^^^^^^^")
+    .line(2, "<gold>Type above")
+    .color(DyeColor.YELLOW)
+    .glow(false)
+    .onFinish((player, result) -> {
+        String name = result.plain(0);
+        if (name.isEmpty()) {
+            return SignAction.reopen("", "<gray>^^^^^^^^", "<gold>Type above");
+        }
+        player.sendMessage("Hello " + name);
+        return SignAction.close();
+    })
+    .open(player);
+```
+
+- Fake sign 3 blocks behind the player (or `location(...)`); restored on close/quit
+- Inbound `SignUpdate` is intercepted on the existing Netty pipeline and dropped (vanilla never edits a real block)
+- `SignAction.close()` / `closeThen(Runnable)` / `reopen()` / `reopen(lines...)`
+- MiniMessage, `§`, and `&` lines; dye color (1.15+) and glow (1.17+)
+- Closes any open packet inventory / book first
+
+### Artifact
+`net.opmasterleo:packetuxui:0.13.14`
+
 ## 0.13.13
 
 ### Efficient InventoryClose analogue

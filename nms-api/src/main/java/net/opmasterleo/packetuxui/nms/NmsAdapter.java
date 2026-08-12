@@ -20,4 +20,8 @@ public interface NmsAdapter {
     default ServerLimits limits() {
         return ServerLimits.FALLBACK;
     }
+
+    default SignPacketBridge signs() {
+        return SignPacketBridge.UNSUPPORTED;
+    }
 }

@@ -3,6 +3,7 @@ package net.opmasterleo.packetuxui.nms.shared;
 import java.util.Collections;
 
 import net.minecraft.server.NMS.PacketPlayInCloseWindow;
+import net.minecraft.server.NMS.PacketPlayInUpdateSign;
 import net.minecraft.server.NMS.PacketPlayInWindowClick;
 import net.opmasterleo.packetuxui.nms.ClickPacket;
 import net.opmasterleo.packetuxui.nms.PacketClassifier;
@@ -24,6 +25,9 @@ public final class SharedPacketClassifier implements PacketClassifier {
         }
         if (packet instanceof PacketPlayInCloseWindow) {
             return Kind.CLOSE;
+        }
+        if (packet instanceof PacketPlayInUpdateSign) {
+            return Kind.SIGN_UPDATE;
         }
         return Kind.OTHER;
     }

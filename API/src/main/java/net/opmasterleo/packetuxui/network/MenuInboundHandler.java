@@ -101,6 +101,21 @@ public final class MenuInboundHandler extends ChannelInboundHandlerAdapter {
                 scheduler.runForPlayer(player, new IncomingClickTask(player, menuService, click));
             }
             case OTHER -> ctx.fireChannelRead(msg);
+            case SIGN_UPDATE -> {
+                if (!menuService.hasSignOpen(playerId)) {
+                    ctx.fireChannelRead(msg);
+                    return;
+                }
+                net.opmasterleo.packetuxui.nms.SignUpdate update = adapter.signs().readUpdate(msg);
+                if (update != null && menuService.isOurSign(playerId, update)) {
+                    if (menuService.debugLogging()) {
+                        menuService.debug(player, "SIGN_UPDATE pos=" + update.x() + "," + update.y() + "," + update.z());
+                    }
+                    scheduler.runForPlayer(player, new IncomingSignTask(player, menuService, update));
+                    return;
+                }
+                ctx.fireChannelRead(msg);
+            }
         }
     }
 
@@ -148,6 +163,27 @@ public final class MenuInboundHandler extends ChannelInboundHandlerAdapter {
         @Override
         public void run() {
             menuService.handleIncomingClick(player, click);
+        }
+    }
+
+    private static final class IncomingSignTask implements Runnable {
+        private final Player player;
+        private final MenuService menuService;
+        private final net.opmasterleo.packetuxui.nms.SignUpdate update;
+
+        private IncomingSignTask(
+                Player player,
+                MenuService menuService,
+                net.opmasterleo.packetuxui.nms.SignUpdate update
+        ) {
+            this.player = player;
+            this.menuService = menuService;
+            this.update = update;
+        }
+
+        @Override
+        public void run() {
+            menuService.handleSignUpdate(player, update);
         }
     }
 }
