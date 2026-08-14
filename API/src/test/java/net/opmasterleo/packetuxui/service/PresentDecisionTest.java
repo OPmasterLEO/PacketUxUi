@@ -10,7 +10,8 @@ import net.kyori.adventure.text.Component;
 import net.opmasterleo.packetuxui.types.InventoryType;
 
 /**
- * Pure decision logic for present(): same type+mode diffs; otherwise silent swap while open.
+ * Pure decision logic for the shared {@code presentSync} core (drives both {@code open} and
+ * {@code present}): same type+mode diffs; otherwise silent swap while open.
  */
 class PresentDecisionTest {
 

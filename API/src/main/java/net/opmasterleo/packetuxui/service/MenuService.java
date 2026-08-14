@@ -315,11 +315,57 @@ public final class MenuService {
         return session == null ? SessionPhase.IDLE : session.phase();
     }
 
+    /**
+     * Open a menu for a player. If the player already has a PacketUxUi menu open, this rebuilds
+     * it in place — differential SetSlots for the same type/mode, OpenScreen-only swap for a
+     * type/size/mode change (chest ↔ hopper, 27 ↔ 54, …) — with no CloseWindow and no buffering.
+     * Only when nothing is open does it allocate a fresh window and open from scratch.
+     * Use {@link #reopen} to force a hard close-then-open.
+     */
     public void openMenu(Player player, Menu menu) {
         scheduler.runForPlayer(player, new OpenMenuTask(this, player, menu));
     }
 
     public void openMenuSync(Player player, Menu menu) {
+        presentSync(player, menu);
+    }
+
+    /**
+     * Seamless menu rebuild on the caller's thread. When a virtual session is already OPEN:
+     * <ul>
+     *   <li>same type + mode → differential {@code SetSlot}s (no close, no teardown)</li>
+     *   <li>any type/size/mode change (chest ↔ hopper, 27 ↔ 54, READ_ONLY ↔ EDITABLE, …)
+     *       → OpenScreen-only swap, same window id, no CloseWindow, no onClose/GuiCloseEvent</li>
+     * </ul>
+     * No session (or a session in a transient phase) falls back to close-then-open.
+     * Shared core of both {@link #openMenuSync} and {@link #present}.
+     */
+    private void presentSync(Player player, Menu menu) {
+        UUID pid = id(player);
+        if (closingPlayers.contains(pid)) {
+            pendingPresent.put(pid, menu);
+            return;
+        }
+        MenuSession existing = sessions.get(pid);
+        if (existing != null && existing.phase() == SessionPhase.OPEN) {
+            if (existing.menu().mode() == menu.mode()
+                    && existing.menu().type() == menu.type()) {
+                applyMenuDifferential(player, existing, menu);
+            } else {
+                replaceMenuInPlace(player, existing, menu);
+            }
+            return;
+        }
+        closeCurrent(player, true, true, GuiCloseReason.REPLACE, true);
+        if (closingPlayers.contains(pid)) {
+            pendingPresent.put(pid, menu);
+            return;
+        }
+        installOpen(player, menu);
+    }
+
+    /** Close-then-open even when a session is already open (fresh window id, close events). */
+    private void forceOpenSync(Player player, Menu menu) {
         UUID pid = id(player);
         if (closingPlayers.contains(pid)) {
             pendingPresent.put(pid, menu);
@@ -333,6 +379,10 @@ public final class MenuService {
         installOpen(player, menu);
     }
 
+    /**
+     * Same seamless rebuild as {@link #openMenu} (shared {@code presentSync} core).
+     * Alias kept for callers that explicitly want "swap the open menu".
+     */
     public void present(Player player, Menu menu) {
         scheduler.runForPlayer(player, new PresentTask(this, player, menu));
     }
@@ -347,8 +397,17 @@ public final class MenuService {
         int windowId = existing.windowId();
         boolean stayEditable = existing.menu().mode() == MenuMode.EDITABLE
                 && copy.mode() == MenuMode.EDITABLE;
-        UxItem cursor = stayEditable ? activeCursor(player) : UxItem.EMPTY;
+        UxItem held = activeCursor(player);
+        UxItem cursor = stayEditable ? held : UxItem.EMPTY;
         if (!stayEditable) {
+            // Never drop a virtual cursor silently on a mode/type swap — return it first.
+            if (held != null && !held.isEmpty()) {
+                try {
+                    CursorReclaim.reclaim(player, adapter.items(), held);
+                } catch (Throwable ignored) {
+                }
+                refreshBottomCache(player);
+            }
             carriedItem.remove(id(player));
             clearBottomHeld(player);
         }
@@ -464,9 +523,13 @@ public final class MenuService {
         ensurePipeline(player);
     }
 
-    /** Force close+open even when type/mode match (SignGUI handoff prep, etc.). */
+    /**
+     * Force close+open even when type/mode match (SignGUI handoff prep, etc.).
+     * {@link #open} / {@link #present} rebuild an open session in place instead;
+     * use this when a hard reset (new window id, onClose, GuiCloseEvent) is required.
+     */
     public void reopen(Player player, Menu menu) {
-        openMenu(player, menu);
+        scheduler.runForPlayer(player, new ReopenTask(this, player, menu));
     }
 
     /**
@@ -926,19 +989,21 @@ public final class MenuService {
 
     private void applyMenuDifferential(Player player, MenuSession session, Menu next) {
         Menu current = session.menu();
-        boolean titleChanged = !current.name().equals(next.name());
+        // Copy so presenting the very same Menu instance cannot clear live buttons/items mid-diff.
+        Menu nextCopy = next.copy();
+        boolean titleChanged = !current.name().equals(nextCopy.name());
         if (titleChanged) {
-            current.setName(next.name());
-            session.setTitle(next.name());
-            adapter.packets().sendOpenWindow(player, session.windowId(), next.type().id(), next.name());
+            current.setName(nextCopy.name());
+            session.setTitle(nextCopy.name());
+            adapter.packets().sendOpenWindow(player, session.windowId(), nextCopy.type().id(), nextCopy.name());
         }
         current.buttons().clear();
-        current.buttons().putAll(next.buttons());
+        current.buttons().putAll(nextCopy.buttons());
         List<UxItem> before = current.items();
-        List<UxItem> after = next.items();
+        List<UxItem> after = nextCopy.items();
         current.setItems(after);
         adapter.items().preload(after);
-        int size = next.type().size();
+        int size = nextCopy.type().size();
         int dirtyCount = 0;
         // Prefer SetSlot for sparse updates; avoid HashMap alloc when possible.
         int[] dirtySlots = null;
@@ -2400,25 +2465,24 @@ public final class MenuService {
 
         @Override
         public void run() {
-            UUID pid = id(player);
-            if (owner.closingPlayers.contains(pid)) {
-                owner.pendingPresent.put(pid, menu);
-                return;
-            }
-            MenuSession existing = owner.sessions.get(pid);
-            if (existing != null && existing.phase() == SessionPhase.OPEN) {
-                // Same type+mode → differential SetSlots (no close, no onClose refund).
-                if (existing.menu().mode() == menu.mode()
-                        && existing.menu().type() == menu.type()) {
-                    owner.applyMenuDifferential(player, existing, menu);
-                    return;
-                }
-                // Any other change while open (type, size, mode) → OpenScreen only, no CloseWindow.
-                owner.replaceMenuInPlace(player, existing, menu);
-                return;
-            }
-            owner.ensurePipeline(player);
-            owner.openMenuSync(player, menu);
+            owner.presentSync(player, menu);
+        }
+    }
+
+    private static final class ReopenTask implements Runnable {
+        private final MenuService owner;
+        private final Player player;
+        private final Menu menu;
+
+        private ReopenTask(MenuService owner, Player player, Menu menu) {
+            this.owner = owner;
+            this.player = player;
+            this.menu = menu;
+        }
+
+        @Override
+        public void run() {
+            owner.forceOpenSync(player, menu);
         }
     }
 

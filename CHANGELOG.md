@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.13.15
+
+### Seamless GUI rebuild on type switch (chest ↔ hopper, 27 ↔ 54, …)
+
+`open` / `present` no longer close and reopen the window when the player already has a PacketUxUi menu open. The open session is rebuilt in place:
+
+- Same type + mode → differential `SetSlot` updates (no teardown)
+- Any type/size/mode change → OpenScreen-only swap, same window id, no `CloseWindow`, no flicker / buffering
+
+`reopen(...)` still forces a hard close-then-open when a fresh window or close events are required. Also fixes a virtual-cursor item loss when swapping out of `EDITABLE` mode (held items are reclaimed to the inventory instead of dropped).
+
+### Artifact
+`net.opmasterleo:packetuxui:0.13.15`
+
 ## 0.13.14
 
 ### Sign editor GUI
