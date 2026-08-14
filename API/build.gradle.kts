@@ -11,13 +11,14 @@ java {
 }
 
 dependencies {
+    val paperApiVersion: String by project
     api(project(":nms-api"))
-    compileOnly("io.papermc.paper:paper-api:1.21.4-R0.1-SNAPSHOT")
+    compileOnly("io.papermc.paper:paper-api:$paperApiVersion")
     compileOnly("io.netty:netty-transport:4.1.115.Final")
     compileOnly("io.netty:netty-handler:4.1.115.Final")
     testImplementation("org.junit.jupiter:junit-jupiter:5.11.4")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
-    testImplementation("io.papermc.paper:paper-api:1.21.4-R0.1-SNAPSHOT")
+    testImplementation("io.papermc.paper:paper-api:$paperApiVersion")
 }
 
 tasks.test {

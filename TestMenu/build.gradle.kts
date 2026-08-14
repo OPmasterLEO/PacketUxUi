@@ -7,7 +7,8 @@ plugins {
 apply(from = rootProject.file("gradle/nms-buckets.gradle.kts"))
 
 dependencies {
-    compileOnly("io.papermc.paper:paper-api:1.21.4-R0.1-SNAPSHOT")
+    val paperApiVersion: String by project
+    compileOnly("io.papermc.paper:paper-api:$paperApiVersion")
     compileOnly(project(":API"))
     implementation(rootProject)
     implementation("org.incendo:cloud-paper:2.0.0-beta.10")

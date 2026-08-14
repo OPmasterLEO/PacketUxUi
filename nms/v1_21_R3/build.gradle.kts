@@ -10,7 +10,7 @@ extra["nmsEra"] = "modern21_2"
 dependencies {
     compileOnly(project(":nms-api"))
     compileOnly("it.unimi.dsi:fastutil:8.5.15")
-    paperweight.paperDevBundle("1.21.4-R0.1-SNAPSHOT")
+    paperweight.paperDevBundle(property("paperApiVersion") as String)
 }
 
 paperweight.reobfArtifactConfiguration = ReobfArtifactConfiguration.MOJANG_PRODUCTION

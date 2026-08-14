@@ -5,9 +5,13 @@ plugins {
     id("io.papermc.paperweight.userdev") apply false
 }
 
+val pluginVersion: String by project
+val paperApiVersion: String by project
+val versionOverride = rootProject.providers.gradleProperty("version").orNull
+
 allprojects {
     group = "net.opmasterleo"
-    version = "0.13.14"
+    version = versionOverride ?: pluginVersion
 
     repositories {
         mavenCentral()
@@ -44,7 +48,7 @@ dependencies {
     nmsBuckets.forEach { bucket ->
         implementation(project(":nms:$bucket"))
     }
-    compileOnly("io.papermc.paper:paper-api:1.21.4-R0.1-SNAPSHOT")
+    compileOnly("io.papermc.paper:paper-api:$paperApiVersion")
 }
 
 java {

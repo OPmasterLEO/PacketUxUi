@@ -10,6 +10,7 @@ java {
 }
 
 dependencies {
-    compileOnly("io.papermc.paper:paper-api:1.21.4-R0.1-SNAPSHOT")
+    val paperApiVersion: String by project
+    compileOnly("io.papermc.paper:paper-api:$paperApiVersion")
     compileOnly("io.netty:netty-transport:4.1.115.Final")
 }

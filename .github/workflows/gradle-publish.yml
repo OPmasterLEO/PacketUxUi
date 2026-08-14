@@ -23,8 +23,16 @@ jobs:
             25
           cache: "gradle"
 
+      - name: Resolve version with commit id
+        id: version
+        run: |
+          BASE_VERSION="$(./gradlew -q printVersion --no-daemon)"
+          COMMIT_SHORT="${GITHUB_SHA::8}"
+          echo "full=${BASE_VERSION}-${COMMIT_SHORT}" >> "$GITHUB_OUTPUT"
+          echo "Resolved version=${BASE_VERSION}-${COMMIT_SHORT}"
+
       - name: Build with Gradle
-        run: chmod +x gradlew && ./gradlew shadowJar -x test --no-daemon
+        run: chmod +x gradlew && ./gradlew shadowJar -x test --no-daemon -Pversion="${{ steps.version.outputs.full }}"
 
       - name: Upload PacketUxUi jar
         uses: actions/upload-artifact@v7
@@ -40,7 +48,7 @@ jobs:
             echo "Missing REPOSILITE_USER / REPOSILITE_TOKEN secrets (token name + secret)."
             exit 1
           fi
-          ./gradlew publishSnapshot -x test --no-daemon
+          ./gradlew publishSnapshot -x test --no-daemon -Pversion="${{ steps.version.outputs.full }}"
         env:
           REPOSILITE_USER: ${{ secrets.REPOSILITE_USER }}
           REPOSILITE_TOKEN: ${{ secrets.REPOSILITE_TOKEN }}
