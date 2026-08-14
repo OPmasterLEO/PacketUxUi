@@ -95,14 +95,7 @@ public final class SignBuild {
     }
 
     public SignBuild onComplete(java.util.function.BiConsumer<Player, SignResult> consumer) {
-        if (consumer == null) {
-            this.handler = null;
-            return this;
-        }
-        this.handler = (player, result) -> {
-            consumer.accept(player, result);
-            return SignAction.close();
-        };
+        this.handler = consumer == null ? null : new ConsumerAdapter(consumer);
         return this;
     }
 
@@ -117,6 +110,21 @@ public final class SignBuild {
     private static void checkIndex(int index) {
         if (index < 0 || index > 3) {
             throw new IndexOutOfBoundsException("sign line index must be 0..3");
+        }
+    }
+
+    private static final class ConsumerAdapter implements SignFinishHandler {
+
+        private final java.util.function.BiConsumer<Player, SignResult> consumer;
+
+        ConsumerAdapter(java.util.function.BiConsumer<Player, SignResult> consumer) {
+            this.consumer = consumer;
+        }
+
+        @Override
+        public SignAction onFinish(Player player, SignResult result) {
+            consumer.accept(player, result);
+            return SignAction.close();
         }
     }
 }

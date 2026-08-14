@@ -39,7 +39,6 @@ import net.opmasterleo.packetuxui.nms.NmsAdapter;
 import net.opmasterleo.packetuxui.nms.WindowClickType;
 import net.opmasterleo.packetuxui.nms.item.UxItem;
 import net.opmasterleo.packetuxui.scheduler.PlatformScheduler;
-import net.opmasterleo.packetuxui.types.ButtonType;
 import net.opmasterleo.packetuxui.types.ClickData;
 import net.opmasterleo.packetuxui.types.ClickType;
 import net.opmasterleo.packetuxui.types.ExecuteComponent;
@@ -2280,7 +2279,7 @@ public final class MenuService {
             case SWAP -> {
                 int button = packet.button();
                 if (button >= 0 && button <= 8) {
-                    yield new ClickData(ButtonType.VALUES[9 + button], ClickType.PICKUP);
+                    yield ClickData.HOTBAR_SWAP[button];
                 }
                 if (button == 40) {
                     yield ClickData.F_PICKUP;

@@ -23,6 +23,18 @@ public final class ClickData {
     public static final ClickData LEFT_DRAG_END = new ClickData(ButtonType.LEFT, ClickType.DRAG_END);
     public static final ClickData RIGHT_DRAG_END = new ClickData(ButtonType.RIGHT, ClickType.DRAG_END);
     public static final ClickData MIDDLE_DRAG_END = new ClickData(ButtonType.MIDDLE, ClickType.DRAG_END);
+    /** Precomputed hotbar-swap clicks (SWAP button 0..8) — no per-click allocation. */
+    public static final ClickData[] HOTBAR_SWAP = {
+            new ClickData(ButtonType.NUM_1, ClickType.PICKUP),
+            new ClickData(ButtonType.NUM_2, ClickType.PICKUP),
+            new ClickData(ButtonType.NUM_3, ClickType.PICKUP),
+            new ClickData(ButtonType.NUM_4, ClickType.PICKUP),
+            new ClickData(ButtonType.NUM_5, ClickType.PICKUP),
+            new ClickData(ButtonType.NUM_6, ClickType.PICKUP),
+            new ClickData(ButtonType.NUM_7, ClickType.PICKUP),
+            new ClickData(ButtonType.NUM_8, ClickType.PICKUP),
+            new ClickData(ButtonType.NUM_9, ClickType.PICKUP)
+    };
 
     private final ButtonType buttonType;
     private final ClickType clickType;
